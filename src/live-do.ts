@@ -72,6 +72,7 @@ export class LiveObject extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
+    this.wsSet.add(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 

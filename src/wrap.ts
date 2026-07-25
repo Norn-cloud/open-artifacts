@@ -1054,7 +1054,15 @@ const LIVE_SCRIPT = `
   var pickBtn=document.getElementById('oa-live-pick-toggle');
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
+  var liveToggle=document.querySelector('.oa-live-toggle');
   if(!root||!gbar||!abar||!pickBtn||!exitBtn||!frame) return;
+
+  if(liveToggle){
+    liveToggle.addEventListener('click', function(){
+      root.removeAttribute('hidden');
+      liveToggle.setAttribute('aria-expanded','true');
+    });
+  }
 
   var ws=null, wsReady=false, sessionId=null, state='IDLE';
   var pickedCtx=null, action='', freeform='', count=3;
@@ -1139,7 +1147,7 @@ const LIVE_SCRIPT = `
     if(!on){ setState('CONFIGURING'); toFrame({type:'oa:live:pick:arm'}); }
     else{ setState('IDLE'); toFrame({type:'oa:live:pick:disarm'}); }
   };
-  exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; };
+  exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false'); };
 
   function reset(){ state='IDLE'; pickedCtx=null; visibleVariant=0; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
 
