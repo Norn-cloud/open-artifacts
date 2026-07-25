@@ -1134,6 +1134,7 @@ const LIVE_SCRIPT = `
   // --- host<->frame bridge ---
   window.addEventListener('message', function(e){
     if(!e.data||typeof e.data.type!=='string') return;
+    if(e.source!==frame.contentWindow) return;
     var d=e.data;
     if(d.type==='oa:element:picked'){ pickedCtx=d.element; setState('CONFIGURING'); }
     else if(d.type==='oa:live:variants:arrived'){ arrived=d.count||arrived; if(state==='GENERATING'&&d.count>=expected) setState('CYCLING'); }
