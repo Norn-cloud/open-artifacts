@@ -1493,7 +1493,7 @@ async function commandWhoami(flags) {
   console.log(login);
 }
 
-// Live variant editing (SaaS instance with LIVE_DO bound).
+// Live editing (SaaS instance with LIVE_DO bound).
 //
 // Two modes, both harness-agnostic (one JSON line on stdout, then exit):
 //
@@ -1501,12 +1501,12 @@ async function commandWhoami(flags) {
 //   node artifact.mjs live <id> --reply <eid> done --version <n>
 //                                                 # reply: ack + broadcast
 //
-// The agent loop: poll -> receive {type:'generate', element, action, count, ...}
-// -> edit the artifact source to add a display:contents variant wrapper with
-// N variants -> `update` to republish -> `--reply <eid> done --version <n>`
-// -> the Worker broadcasts 'done' to the browser, which enters Cycling.
-// On 'accept': update to keep only the chosen variant (drop the wrapper), reply
-// done. On 'discard': update to restore the original, reply done.
+// The agent loop: poll -> receive {type:'generate', items:[{element, prompt}], ...}
+// -> for each item, edit the artifact source to apply its prompt to its element
+// (match by id -> class -> tag -> outerHTML; no variant wrapper — Live is
+// one-shot edit-and-reload) -> `update` to republish -> `--reply <eid> done
+// --version <n>` -> the Worker broadcasts 'done' to the browser, which reloads
+// the frame. Session ends.
 async function commandLive(rest, flags) {
   const config = loadConfig(flags);
   const id = rest[0];
@@ -1541,23 +1541,106 @@ async function commandLive(rest, flags) {
     return;
   }
 
-  // Poll mode: long-poll one event, print JSON, exit.
+  // Poll mode: long-poll one event, print JSON, exit. --watch loops.
   const typesRaw = flags.types;
   const timeoutMs = Number(process.env.OPEN_ARTIFACTS_LIVE_TIMEOUT_MS);
   const timeout =
     Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 270_000;
-  const params = new URLSearchParams({ timeout: String(timeout) });
-  if (typesRaw) params.set("types", typesRaw);
-  const { status: httpStatus, json } = await request(
-    "GET",
-    `${base}/poll?${params}`,
-    undefined,
-    sk,
-  );
-  if (httpStatus !== 200) {
-    fail(`live poll failed (${httpStatus}): ${json.error ?? "unknown"}`);
+  // Inline fetch wrapper that does NOT process.exit on network error — watch
+  // mode must survive transient failures and retry. (`request()` below calls
+  // fail()/process.exit on fetch throw, which would kill the watcher.)
+  const headers = {
+    "content-type": "application/json",
+    authorization: `Bearer ${sk}`,
+  };
+  const fetchJson = async (method, url, body) => {
+    let response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (cause) {
+      throw new Error(`cannot reach ${url}: ${cause.message}`);
+    }
+    const text = await response.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { error: text.slice(0, 200) };
+    }
+    return { status: response.status, json };
+  };
+  const pollOnce = async () => {
+    const params = new URLSearchParams({ timeout: String(timeout) });
+    if (typesRaw) params.set("types", typesRaw);
+    const { status: httpStatus, json } = await fetchJson(
+      "GET",
+      `${base}/poll?${params}`,
+    );
+    if (httpStatus !== 200) {
+      throw new Error(
+        `live poll failed (${httpStatus}): ${json.error ?? "unknown"}`,
+      );
+    }
+    return json;
+  };
+  const reply = async (eid, type, version) => {
+    const { status: httpStatus, json } = await fetchJson(
+      "POST",
+      `${base}/reply`,
+      { id: eid, type, version },
+    );
+    if (httpStatus !== 200) {
+      throw new Error(
+        `live reply failed (${httpStatus}): ${json.error ?? "unknown"}`,
+      );
+    }
+    return json;
+  };
+
+  if (!flags.watch) {
+    // One-shot: print one event and exit.
+    console.log(JSON.stringify(await pollOnce()));
+    return;
   }
-  console.log(JSON.stringify(json));
+
+  // Watch mode: stay online for the whole Live session. On each event,
+  // immediately reply `ack` so the host shows "agent is editing", print the
+  // event JSON for the agent to act on, then keep polling for the next event
+  // (a second `live` poll returns `done` after the agent republishes, or
+  // `exit` when the browser closes the session). Exits on `exit` or Ctrl-C.
+  console.error("[live watch] online; waiting for events (Ctrl-C to stop)");
+  while (true) {
+    let evt;
+    try {
+      evt = await pollOnce();
+    } catch (e) {
+      // Transient poll error — back off and retry.
+      console.error(`[live watch] ${e.message}; retrying in 2s`);
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    console.log(JSON.stringify(evt));
+    if (evt.type === "exit") {
+      console.error("[live watch] session ended");
+      break;
+    }
+    if (evt.type === "generate") {
+      try {
+        await reply(evt.id, "ack");
+      } catch (e) {
+        console.error(`[live watch] ack failed: ${e.message}`);
+      }
+    }
+    // The agent (the parent process consuming our stdout) now edits source,
+    // republishes, and the host reloads. A subsequent poll here will block
+    // until the next event (another generate, or exit). We do NOT auto-reply
+    // `done` — that's the agent's job after it republishes; the agent calls
+    // `live <id> --reply <eid> done --version <n>` itself.
+  }
 }
 
 const HELP = `usage: artifact.mjs <command> [options]
@@ -1587,8 +1670,10 @@ commands:
                        credentials.json (requires a SaaS instance)
   logout               remove the stored API key from credentials.json
   whoami               print the authenticated SaaS user for the current API key
-  live <id>            live variant editing: poll one event (stdout JSON, exit),
+  live <id>            live editing: poll one event (stdout JSON, exit),
                        or --reply <eid> <status> --version <n> to ack
+  live <id> --watch    stay online for the session: poll, auto-ack each
+                       generate, print each event on stdout, exit on "exit"
 
 options:
   --output <path>      (build) explicit preview/export output path
@@ -1630,6 +1715,7 @@ async function main() {
       reply: { type: "string" },
       types: { type: "string" },
       version: { type: "string" },
+      watch: { type: "boolean" },
       help: { type: "boolean" },
     },
   });
