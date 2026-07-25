@@ -14,7 +14,8 @@ import { DurableObject } from "cloudflare:workers";
 //   LiveObject     ── ws.send(done/accept/discard) ──▶ Browser (broadcasts)
 //
 // Minimal subset (no carbonize/journal/scaffold): in-memory state is fine. On
-// hibernation the ws set survives (Cloudflare keeps the connections); the
+// hibernation broadcast() uses ctx.getWebSockets() (runtime-tracked, survives);
+// the
 // pendingEvents queue and poll waiters reset, which is acceptable — the agent
 // re-polls and the browser re-sends if no ack arrives. Critical accept/discard
 // are idempotent on the agent side (re-update is a no-op once applied).
@@ -57,7 +58,6 @@ const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 
 export class LiveObject extends DurableObject {
   // In-memory; resets on hibernation. Acceptable for the minimal loop.
-  private wsSet = new Set<WebSocket>();
   private pending: QueueEntry[] = [];
   private waiters: PollWaiter[] = [];
   private nextSeq = 1;
@@ -72,7 +72,6 @@ export class LiveObject extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    this.wsSet.add(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -104,7 +103,6 @@ export class LiveObject extends DurableObject {
     reason: string,
     _wasClean: boolean,
   ) {
-    this.wsSet.delete(ws);
     // With web_socket_auto_reply_to_close (compat date >= 2026-04-07) the
     // runtime auto-replies; close() is safe and a no-op there.
     try {
@@ -200,11 +198,13 @@ export class LiveObject extends DurableObject {
 
   private broadcast(msg: LiveEvent) {
     const data = JSON.stringify(msg);
-    for (const ws of this.wsSet) {
+    // ctx.getWebSockets() is runtime-tracked and survives hibernation (an
+    // in-memory Set would reset and miss post-hibernate connections).
+    for (const ws of this.ctx.getWebSockets()) {
       try {
         ws.send(data);
       } catch {
-        this.wsSet.delete(ws);
+        // send failed; the runtime prunes dead sockets from getWebSockets()
       }
     }
   }
