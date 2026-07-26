@@ -44,6 +44,12 @@ export type Bindings = Env & {
   // (see src/live-do.ts). When unset, the /api/artifacts/:id/live* routes 404
   // and the host chrome renders no Live button — today's viewer is unchanged.
   LIVE_DO?: DurableObjectNamespace;
+  // Handoff recording. Optional: a deploy opts in by setting this to "1". When
+  // unset, the /api/artifacts/:id/handoffs* routes 404 and the host chrome
+  // renders no Handoff button - the viewer is unchanged. No DO binding needed
+  // (recording is host-side getUserMedia + R2 media/events); the flag only
+  // gates the surface, mirroring OPEN_ARTIFACTS_WEB_FONTS.
+  OPEN_ARTIFACTS_HANDOFF?: string;
 };
 export type AppContext = {
   Bindings: Bindings;
@@ -96,17 +102,37 @@ export const ogImageUrl = (c: Context<AppContext>, id: string): string =>
 export const liveWsUrl = (c: Context<AppContext>, id: string): string =>
   `${baseUrl(c).replace(/^http/, "ws")}/api/artifacts/${id}/live`;
 
+// Handoff recording is opt-in per deploy (OPEN_ARTIFACTS_HANDOFF=1). The host
+// chrome inlines these same-origin URLs so the play UI can fetch media/events
+// (connect-src 'self') and object-URL them into a <video> overlay.
+export const handoffEnabled = (c: Context<AppContext>): boolean =>
+  c.env.OPEN_ARTIFACTS_HANDOFF === "1";
+
+export const handoffMediaUrl = (
+  c: Context<AppContext>,
+  id: string,
+  hid: string,
+): string => `${baseUrl(c)}/api/artifacts/${id}/handoffs/${hid}/media`;
+
+export const handoffEventsUrl = (
+  c: Context<AppContext>,
+  id: string,
+  hid: string,
+): string => `${baseUrl(c)}/api/artifacts/${id}/handoffs/${hid}/events`;
+
 function bearerToken(c: Context<AppContext>): string | null {
   const header = c.req.header("authorization");
   const match = header?.match(/^Bearer\s+(.+)$/i);
   return match ? match[1] : null;
 }
 
+export { bearerToken };
+
 type AuthResult =
   | { ok: true; record: ArtifactRecord }
   | { ok: false; response: Response };
 
-async function authorizeWrite(
+export async function authorizeWrite(
   c: Context<AppContext>,
   store: ArtifactStore,
   id: string,

@@ -3,6 +3,7 @@ import {
   type AppContext,
   api,
   artifactUrl,
+  handoffEnabled,
   liveWsUrl,
   ogImageUrl,
   parseVersionParam,
@@ -12,6 +13,7 @@ import type { Authorizer } from "./authorizer";
 import { defaultAuthorizer } from "./authorizer";
 import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
+import { handoffApi } from "./handoff-api";
 import { brandFor, brandHomepage, hasBrandConfig } from "./home";
 import { liveApi } from "./live-api";
 import { renderOgCardPng } from "./og";
@@ -97,6 +99,9 @@ export function createApp(
   // Live edit routes (WS upgrade + agent poll/reply). 404 when the
   // deploy did not bind LIVE_DO; otherwise self-contained under /api/artifacts/:id/live*.
   app.route("/api", liveApi);
+  // Handoff recording routes (list/create/media/events/delete). 404 when the
+  // deploy did not set OPEN_ARTIFACTS_HANDOFF=1; otherwise under /api/artifacts/:id/handoffs*.
+  app.route("/api", handoffApi);
   app.route("/api", api);
 
   app.get("/", async (c) => {
@@ -153,6 +158,40 @@ export function createApp(
         "content-type": "text/javascript; charset=utf-8",
         "cache-control":
           "public, max-age=3600, must-revalidate, stale-while-revalidate=86400",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  });
+
+  // Self-hosted MediaPipe Selfie Segmentation assets for the handoff webcam
+  // portrait-blur (scripts/vendor-mediapipe.mjs -> public/vendor/mediapipe/*).
+  // Served same-origin so the host CSP (script-src 'self', connect-src 'self')
+  // covers the JS + WASM loads with no CDN allowlist. The .wasm needs
+  // application/wasm + nosniff or the browser refuses to instantiate it.
+  app.get("/vendor/mediapipe/*", async (c) => {
+    const path = new URL(c.req.url).pathname;
+    const asset = await c.env.ASSETS.fetch(
+      new Request(`${new URL(c.req.url).origin}${path}`),
+    );
+    if (!asset.ok) {
+      return new Response("not found", { status: 404 });
+    }
+    const mime = path.endsWith(".wasm")
+      ? "application/wasm"
+      : path.endsWith(".js")
+        ? "text/javascript; charset=utf-8"
+        : path.endsWith(".data")
+          ? "application/octet-stream"
+          : path.endsWith(".tflite")
+            ? "application/octet-stream"
+            : path.endsWith(".binarypb")
+              ? "application/octet-stream"
+              : "application/octet-stream";
+    return new Response(asset.body, {
+      headers: {
+        "content-type": mime,
+        "cache-control":
+          "public, max-age=86400, must-revalidate, stale-while-revalidate=604800",
         "x-content-type-options": "nosniff",
       },
     });
@@ -241,6 +280,8 @@ export function createApp(
       visibility: record.visibility,
       liveEnabled: c.env.LIVE_DO !== undefined,
       liveWsUrl: liveWsUrl(c, record.id),
+      handoffEnabled: handoffEnabled(c),
+      handoffs: handoffEnabled(c) ? await store.listHandoffs(record.id) : [],
     });
     return new Response(page, { headers: hostHeaders(nonce) });
   });
@@ -273,6 +314,7 @@ export function createApp(
       format: record.format,
       content: content.body,
       nonce,
+      handoffEnabled: handoffEnabled(c),
     });
     return new Response(page, {
       headers: userContentHeaders({

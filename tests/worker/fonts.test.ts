@@ -136,8 +136,12 @@ describe("web-font surface — opt-in flag is set in wrangler.jsonc", () => {
     expect(csp).toContain("connect-src 'self'");
     // Opt-in script-src: nonce-only with 'self' (same-origin /vendor/...
     // runtime bundles), no external host, no 'unsafe-inline', no
-    // 'strict-dynamic' (issue #11 — rework to self-hosted mermaid).
+    // 'strict-dynamic' (issue #11 — rework to self-hosted mermaid). The host
+    // page also carries 'wasm-unsafe-eval' so the handoff webcam's MediaPipe
+    // can compile its WASM (compile/run only — no JS-string eval); the
+    // sandboxed artifact frame does NOT carry it.
     expect(csp).toMatch(/script-src 'self' 'nonce-[^']+'/);
+    expect(csp).toContain("'wasm-unsafe-eval'");
     expect(csp).not.toContain("cdn.jsdelivr.net");
     expect(csp).not.toContain("'strict-dynamic'");
     expect(csp).not.toContain("'unsafe-inline' cdn.jsdelivr.net");

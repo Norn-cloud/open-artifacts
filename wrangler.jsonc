@@ -14,7 +14,11 @@
   // cache fonts. Runtime libraries (mermaid) are self-hosted at /vendor/* and
   // always served; this flag only lifts the opaque-origin sandbox for fonts.
   // Self-hosters who don't want the opaque-origin protection lifted omit it.
-  "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1" },
+  // OPEN_ARTIFACTS_HANDOFF=1 opts this deploy into the handoff recording
+  // surface: the host-chrome Record/Play dock, the /api/artifacts/:id/handoffs*
+  // routes, and the frame record/play shims. Self-hosters who don't want the
+  // camera/mic surface omit it; the viewer stays unchanged.
+  "vars": { "OPEN_ARTIFACTS_WEB_FONTS": "1", "OPEN_ARTIFACTS_HANDOFF": "1" },
   "d1_databases": [
     {
       "binding": "DB",
