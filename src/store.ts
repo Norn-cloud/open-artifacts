@@ -366,6 +366,14 @@ const defaultOwnership = (): OwnershipGrant => ({
 
 const contentKey = (id: string, version: number) => `content/${id}/${version}`;
 
+// Derive a stable, deterministic handoff id from the artifact id so re-records
+// overwrite the same D1 row + R2 keys (one-per-artifact, race-free). The "h"
+// prefix keeps the handoff id visually distinct from the artifact id while
+// staying in the same URL-safe alphabet. Two concurrent POSTs to the same
+// artifact resolve to the same id and the ON CONFLICT DO UPDATE makes the last
+// COMMIT win - no list/delete/create window, no orphaned media.
+const handoffIdFor = (artifactId: string): string => `h${artifactId}`;
+
 interface Envelope extends EncryptionParams {
   v: 1;
   alg: "AES-GCM";
@@ -784,7 +792,12 @@ export class D1R2Store implements ArtifactStore {
     deleteTokenHash: string | null,
   ): Promise<HandoffMeta> {
     await ensureSchema(this.db);
-    const id = generateId();
+    // One handoff per artifact: derive a stable id from the artifactId so a
+    // re-record UPSERTs the same D1 row and overwrites the same R2 keys in
+    // place - no list/delete/create window, no race, no orphaned media under
+    // a discarded id. Concurrent POSTs converge on the same id and the last
+    // COMMIT wins (INSERT ... ON CONFLICT DO UPDATE), exactly one row survives.
+    const id = handoffIdFor(artifactId);
     const now = new Date().toISOString();
     const mediaKey = `handoff/${artifactId}/${id}/media`;
     const eventsKey = `handoff/${artifactId}/${id}/events`;
@@ -806,7 +819,19 @@ export class D1R2Store implements ArtifactStore {
       await this.db
         .prepare(
           `INSERT INTO handoffs (id, artifact_id, version, duration_ms, media_type, media_size, events_size, has_video, has_audio, has_blur, author, delete_token_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             version = excluded.version,
+             duration_ms = excluded.duration_ms,
+             media_type = excluded.media_type,
+             media_size = excluded.media_size,
+             events_size = excluded.events_size,
+             has_video = excluded.has_video,
+             has_audio = excluded.has_audio,
+             has_blur = excluded.has_blur,
+             author = excluded.author,
+             delete_token_hash = excluded.delete_token_hash,
+             created_at = excluded.created_at`,
         )
         .bind(
           id,

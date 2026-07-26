@@ -154,16 +154,10 @@ handoffApi.post("/artifacts/:id/handoffs", async (c) => {
       ? media.type
       : "application/octet-stream";
 
-  // One-handoff-per-artifact: a new recording overwrites the previous. Delete
-  // any existing handoff before creating the new one so R2 media/events and the
-  // D1 row are swept atomically with the replace (a crash mid-create can still
-  // leave a partial, but the old one is gone and the new one is unreachable
-  // until its D1 row lands). listHandoffs returns the single current one.
-  const existing = await store.listHandoffs(auth.record.id);
-  for (const h of existing) {
-    await store.deleteHandoff(auth.record.id, h.id);
-  }
-
+  // One-handoff-per-artifact is enforced at the store layer: createHandoff
+  // derives a stable id from the artifact id and UPSERTs in place, so a
+  // re-record overwrites the same D1 row + R2 keys (no list/delete window, no
+  // race between concurrent POSTs).
   const deleteToken = generateWriteToken();
   const handoff = await store.createHandoff(
     auth.record.id,

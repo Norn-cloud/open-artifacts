@@ -166,16 +166,33 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
 });
 
 describe("one handoff per artifact (overwrite)", () => {
-  it("a second POST replaces the first", async () => {
+  it("a second POST overwrites the first in place - same id, no orphan", async () => {
     const { id, writeToken } = await createArtifact(ON);
-    const first = await fetchWith(handoffPostRequest(id, writeToken), ON);
+    const first = await fetchWith(
+      handoffPostRequest(id, writeToken, {
+        bytes: "first-media",
+        type: "video/webm",
+      }),
+      ON,
+    );
     const firstBody = (await first.json()) as { id: string };
-    const second = await fetchWith(handoffPostRequest(id, writeToken), ON);
+    expect(first.status).toBe(201);
+
+    const second = await fetchWith(
+      handoffPostRequest(id, writeToken, {
+        bytes: "second-media",
+        type: "video/webm",
+      }),
+      ON,
+    );
     const secondBody = (await second.json()) as { id: string };
     expect(second.status).toBe(201);
-    expect(secondBody.id).not.toBe(firstBody.id);
 
-    // The list returns only the second handoff.
+    // The id is derived from the artifact id, so a re-record reuses it -
+    // no race window, no orphaned R2 under a discarded id.
+    expect(secondBody.id).toBe(firstBody.id);
+
+    // Exactly one row, at the same id.
     const listRes = await fetchWith(
       new Request(`${BASE}/api/artifacts/${id}/handoffs`),
       ON,
@@ -184,12 +201,18 @@ describe("one handoff per artifact (overwrite)", () => {
     expect(list.handoffs).toHaveLength(1);
     expect(list.handoffs[0]?.id).toBe(secondBody.id);
 
-    // The first handoff's media and events are gone.
-    const oldMedia = await fetchWith(
-      new Request(`${BASE}/api/artifacts/${id}/handoffs/${firstBody.id}/media`),
+    // The media at that id is now the SECOND blob (overwritten in place,
+    // not orphaned). The first media is gone at the same key.
+    const mediaRes = await fetchWith(
+      new Request(
+        `${BASE}/api/artifacts/${id}/handoffs/${secondBody.id}/media`,
+      ),
       ON,
     );
-    expect(oldMedia.status).toBe(404);
+    expect(mediaRes.status).toBe(200);
+    expect(new TextDecoder().decode(await mediaRes.arrayBuffer())).toBe(
+      "second-media",
+    );
   });
 });
 
