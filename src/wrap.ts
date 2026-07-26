@@ -532,6 +532,7 @@ function headerHtml(
   ${comments}
   ${live}
   ${handoff}
+  <span id="oa-account-slot" class="oa-account-slot" aria-label="Account"></span>
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -762,6 +763,64 @@ const LIVE_CSS = `
 // of starting beneath it.
 const HOST_FRAME_CSS = `
 #oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0}
+`;
+
+// Account chip in the service header: name-initial avatar + dropdown (dashboard
+// / sign out), or a "Sign in" link when no session. Driven by a same-origin
+// fetch('/api/me') so it works on any host that exposes a /api/me returning
+// {user:{name}} (coda0). A self-host with no /api/me gets a non-200 and the chip
+// stays empty - today's chrome unchanged. No external avatar image (name
+// initial only) so the host CSP img-src stays data: blob: - no CDN widening.
+const ACCOUNT_CSS = `
+.oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
+.oa-account-slot:empty{display:none}
+.oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;opacity:.9;transition:opacity .15s,border-color .15s,background .15s}
+.oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-account-btn:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-account-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+.oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
+.oa-account-name{max-width:8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 6px 20px -4px color-mix(in oklab,var(--oa-fg),transparent 80%);z-index:2147483646}
+.oa-account-menu[hidden]{display:none}
+.oa-account-menu a,.oa-account-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.78rem;cursor:pointer;text-decoration:none}
+.oa-account-menu a:focus-visible,.oa-account-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-account-menu a:hover,.oa-account-menu button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
+.oa-account-signin{display:inline-flex;align-items:center;height:28px;padding:0 .7rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:600;line-height:1;cursor:pointer;text-decoration:none;transition:background .15s,transform .06s}
+.oa-account-signin:active{transform:translateY(1px)}
+.oa-account-signin:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-account-signin:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
+`;
+
+// Fetches /api/me (same-origin, connect-src 'self') and renders an account chip
+// into #oa-account-slot. Resilient: any non-200 hides the slot (a self-host with
+// no /api/me keeps today's chrome). On coda0 a session returns {user:{name}};
+// 401 renders a "Sign in" link to /login. Logout is POST /auth/logout (no body).
+const ACCOUNT_SCRIPT = `
+(function(){
+  var slot=document.getElementById('oa-account-slot');
+  if(!slot)return;
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function initial(name){var ch=[...String(name||'').trim()][0];return ch?ch.toUpperCase():'?';}
+  function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';}
+  function renderUser(name){
+    var btn=document.createElement('button');btn.type='button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');
+    var av=document.createElement('span');av.className='oa-account-av';av.setAttribute('aria-hidden','true');av.textContent=initial(name);
+    var nm=document.createElement('span');nm.className='oa-account-name';nm.textContent=name||'Account';
+    btn.appendChild(av);btn.appendChild(nm);
+    var menu=document.createElement('div');menu.className='oa-account-menu';menu.setAttribute('role','menu');menu.hidden=true;
+    var dash=document.createElement('a');dash.href='/dashboard';dash.setAttribute('role','menuitem');dash.textContent='Dashboard';
+    var lo=document.createElement('button');lo.type='button';lo.setAttribute('role','menuitem');lo.textContent='Sign out';
+    lo.addEventListener('click',function(){fetch('/auth/logout',{method:'POST',credentials:'same-origin'}).then(function(){location.href='/';}).catch(function(){location.href='/';});});
+    menu.appendChild(dash);menu.appendChild(lo);
+    btn.appendChild(menu);
+    btn.addEventListener('click',function(e){e.stopPropagation();var open=!menu.hidden;menu.hidden=open;btn.setAttribute('aria-expanded',String(!open));});
+    document.addEventListener('click',function(){menu.hidden=true;btn.setAttribute('aria-expanded','false');});
+    slot.innerHTML='';slot.appendChild(btn);
+  }
+  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();return null;}return r.json();}).then(function(me){
+    if(!me)return;var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
+  }).catch(function(){});
+})();
 `;
 
 export interface FrameDocumentOptions {
@@ -1910,7 +1969,7 @@ export function hostShell(options: HostShellOptions): string {
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${handoffEnabled ? HANDOFF_CSS : ""}${HOST_FRAME_CSS}</style>
+<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${handoffEnabled ? HANDOFF_CSS : ""}${ACCOUNT_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
@@ -1927,6 +1986,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
+<script nonce="${nonce}">${escapeInlineScript(ACCOUNT_SCRIPT)}</script>
 ${liveEnabled ? `<script nonce="${nonce}">${escapeInlineScript(LIVE_SCRIPT)}</script>` : ""}
 ${handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(HANDOFF_SCRIPT)}</script>` : ""}
 </body>
