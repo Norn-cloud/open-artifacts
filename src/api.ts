@@ -108,18 +108,6 @@ export const liveWsUrl = (c: Context<AppContext>, id: string): string =>
 export const handoffEnabled = (c: Context<AppContext>): boolean =>
   c.env.OPEN_ARTIFACTS_HANDOFF === "1";
 
-export const handoffMediaUrl = (
-  c: Context<AppContext>,
-  id: string,
-  hid: string,
-): string => `${baseUrl(c)}/api/artifacts/${id}/handoffs/${hid}/media`;
-
-export const handoffEventsUrl = (
-  c: Context<AppContext>,
-  id: string,
-  hid: string,
-): string => `${baseUrl(c)}/api/artifacts/${id}/handoffs/${hid}/events`;
-
 function bearerToken(c: Context<AppContext>): string | null {
   const header = c.req.header("authorization");
   const match = header?.match(/^Bearer\s+(.+)$/i);
