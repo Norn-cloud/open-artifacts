@@ -5,8 +5,29 @@ import {
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Bindings } from "../../src/api";
+import { createApp } from "../../src/app";
+import type { Authorizer, OwnershipGrant } from "../../src/authorizer";
 import app from "../../src/index";
+import type { ArtifactRecord } from "../../src/store";
 import { D1R2Store } from "../../src/store";
+
+// A canManage=true authorizer so owner-only surfaces (Handoff/Live toggle
+// buttons) render in tests. The default app (defaultAuthorizer) returns
+// canManage=false, exercising the viewer (no-button) path.
+function ownerAuthorizer(): Authorizer {
+  const grant: OwnershipGrant = {
+    ownerId: "u1",
+    orgId: null,
+    visibility: "public",
+  };
+  return {
+    authorizeCreate: async () => grant,
+    authorizeView: async () => true,
+    authorizeWrite: async () => true,
+    canManage: async () => true,
+  };
+}
+const ownerApp = createApp(ownerAuthorizer());
 
 // Handoff recording is OPT-IN: a deploy sets OPEN_ARTIFACTS_HANDOFF=1. Without
 // it the host page renders no Handoff button, the /handoffs* routes 404, and the
@@ -27,6 +48,18 @@ async function fetchWith(
 ): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await app.fetch(request, environment, ctx);
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
+// Owner-mode fetch: uses an authorizer whose canManage is true, so the
+// owner-only toggle buttons render.
+async function ownerFetchWith(
+  request: Request,
+  environment: Bindings,
+): Promise<Response> {
+  const ctx = createExecutionContext();
+  const res = await ownerApp.fetch(request, environment, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -140,12 +173,22 @@ describe("handoff routes without OPEN_ARTIFACTS_HANDOFF", () => {
 });
 
 describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
-  it("the host page renders a Handoff toggle button", async () => {
+  it("an owner sees the Handoff toggle button", async () => {
     const { id } = await createArtifact(ON);
+    const res = await ownerFetchWith(new Request(`${BASE}/a/${id}`), ON);
+    const html = await res.text();
+    expect(html).toContain('<button class="oa-handoff-toggle"');
+    expect(html).toContain("oa-handoff-root");
+    expect(html).toContain("window.__oaCanManage=true");
+  });
+
+  it("a non-owner viewer sees no Handoff toggle button", async () => {
+    const { id } = await createArtifact(ON);
+    // default authorizer -> canManage=false.
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON);
     const html = await res.text();
-    expect(html).toContain("oa-handoff-toggle");
-    expect(html).toContain("oa-handoff-root");
+    expect(html).not.toContain('<button class="oa-handoff-toggle"');
+    expect(html).toContain("window.__oaCanManage=false");
   });
 
   it("the frame document carries the inert handoff shim", async () => {
@@ -500,11 +543,13 @@ describe("deleting the artifact sweeps its handoffs", () => {
 // Keeps the default-env contract honest: exports.default.fetch (no custom env)
 // honors whatever wrangler.jsonc declares for OPEN_ARTIFACTS_HANDOFF.
 describe("default env honors wrangler vars", () => {
-  it("the host page reflects the configured flag", async () => {
+  it("the host page reflects the configured flag (viewer sees no toggle)", async () => {
     const { id } = await createArtifact(ON);
+    // exports.default uses defaultAuthorizer (canManage=false) - the flag is on
+    // (frame carries the shim, no toggle button for non-owners).
     const res = await exports.default.fetch(new Request(`${BASE}/a/${id}`));
     const html = await res.text();
-    // wrangler.jsonc sets OPEN_ARTIFACTS_HANDOFF=1, so the button is present.
-    expect(html).toContain("oa-handoff-toggle");
+    expect(html).not.toContain('<button class="oa-handoff-toggle"');
+    expect(html).toContain("oa-handoff-cam-canvas"); // shim present regardless
   });
 });

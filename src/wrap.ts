@@ -506,17 +506,24 @@ function headerHtml(
       : "";
   const share = canManage ? visibilityPickerHtml(visibility) : "";
   // The Live toggle opens the live-edit bar (host chrome, outside the
-  // sandbox). Only when the deploy bound a LIVE_DO namespace; a self-hoster
-  // without it never sees the button.
-  const live = liveEnabled
-    ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
-    : "";
-  // The Handoff toggle opens the record/play dock (host chrome, outside the
-  // sandbox - getUserMedia cannot run in the opaque-origin frame). Only when the
-  // deploy set OPEN_ARTIFACTS_HANDOFF=1; a self-hoster without it never sees it.
-  const handoff = handoffEnabled
-    ? `<button class="oa-handoff-toggle" type="button" aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span></button>`
-    : "";
+  // sandbox). Only when the deploy bound a LIVE_DO namespace AND the viewer is
+  // an owner (canManage) — live editing mutates the artifact, so it's
+  // write-gated server-side too; the button is just hidden for non-owners.
+  const live =
+    liveEnabled && canManage
+      ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
+      : "";
+  // The Handoff toggle opens the record/play dock. Record is owner-only
+  // (write-gated server-side); Play is open to any viewer. The button is shown
+  // to owners (Record + Play) and to viewers who have a handoff to Play — but
+  // since a non-owner can't Record and the only owner-action is Record, hide
+  // the toggle entirely for non-owners and surface Play through the inlined
+  // handoff list when one exists. Simpler: gate on canManage, and render a
+  // Play-only affordance for non-owners when a handoff is inlined.
+  const handoff =
+    handoffEnabled && canManage
+      ? `<button class="oa-handoff-toggle" type="button" aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span></button>`
+      : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${picker}
@@ -1477,6 +1484,12 @@ const HANDOFF_SCRIPT = `
   // Client-side ceilings so a long recording uploads cleanly instead of
   // hitting the server's 64 MiB 413 and wasting the clip. 10 min / 60 MiB.
   var MAX_REC_MS=600000, MAX_REC_BYTES=60*1024*1024, recBytes=0, recTimeout=0, playUrl=null;
+  // Whether the in-progress recording actually captured the composited
+  // (blurred) canvas stream, set in beginRecord. Decoupled from the camBlur
+  // *preference* because the canvas may not be live yet on the first record
+  // (MediaPipe still loading) — recording raw + flagging hasBlur=false keeps
+  // playback honest (it re-composites live instead of trusting a missing blur).
+  var recUsedBlur=false;
 
   // Drag the webcam overlay to any of the four screen corners during record
   // (selfie preview) and play (playback). Position is kept as {left,top} so it
@@ -1609,6 +1622,10 @@ const HANDOFF_SCRIPT = `
   function authHeaders(){ var wt=ownerToken(); return wt?{Authorization:'Bearer '+wt}:{}; }
   function setStatus(s){ if(!statusEl)return; statusEl.innerHTML=s||''; statusEl.hidden=!s; }
 
+  // canManage gates Record/Re-record/Delete (write-gated server-side). A non-
+  // owner viewer can still Play, so the dock auto-opens a Play-only view when a
+  // handoff exists and there's no owner toggle button to click.
+  var canManage = window.__oaCanManage === true;
   function openDock(){ root.removeAttribute('hidden'); if(toggle)toggle.setAttribute('aria-expanded','true'); render(); }
   function closeDock(){ if(state!=='IDLE')return; root.hidden=true; if(toggle)toggle.setAttribute('aria-expanded','false'); }
   if(toggle)toggle.addEventListener('click',function(){ root.hidden?openDock():closeDock(); });
@@ -1618,26 +1635,33 @@ const HANDOFF_SCRIPT = `
     else if(state==='RECORDING')renderRec();
     else if(state==='PLAYING')renderPlay();
   }
-  // One handoff per artifact: IDLE shows Record (when none exists) or
-  // Re-record + Play + Delete (when one does). No list, no picker.
+  // One handoff per artifact. Owner IDLE: Record (none) or Re-record + Play +
+  // Delete (exists). Viewer IDLE: Play-only (no Record/Delete) when one exists.
   function renderIdle(){
     if(handoff){
-      var rerec=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Re-record</span>'); rerec.type='button'; rerec.onclick=startRecord; rerec.title='Record a new handoff (replaces the current one)';
       var play=el('button','oa-handoff-btn oa-handoff-play', ${JSON.stringify(PLAY_SVG)}+'<span>Play</span>'); play.type='button'; play.onclick=function(){startPlay(handoff.id);};
       var dur=el('span','oa-handoff-dur', fmt(handoff.durationMs));
-      controls.appendChild(play); controls.appendChild(dur); controls.appendChild(rerec);
-      if(getDelToken(handoff.id)||ownerToken()){
-        var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
-        del.onclick=function(){delHandoff(handoff.id);};
-        controls.appendChild(del);
+      controls.appendChild(play); controls.appendChild(dur);
+      if(canManage){
+        var rerec=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Re-record</span>'); rerec.type='button'; rerec.onclick=startRecord; rerec.title='Record a new handoff (replaces the current one)';
+        controls.appendChild(rerec);
+        if(getDelToken(handoff.id)||ownerToken()){
+          var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
+          del.onclick=function(){delHandoff(handoff.id);};
+          controls.appendChild(del);
+        }
       }
       setStatus('');
-    }else{
+    }else if(canManage){
       var b=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Record</span>'); b.type='button'; b.onclick=startRecord;
       controls.appendChild(b);
       setStatus('Record a handoff walkthrough');
+    }else{
+      setStatus('No handoff recording yet');
     }
   }
+  // Auto-open a Play-only dock for non-owners when a handoff is inlined.
+  if(!canManage && handoff){ openDock(); }
   function renderRec(){
     var stop=el('button','oa-handoff-btn oa-handoff-stop', ${JSON.stringify(STOP_SVG)}+'<span>Stop</span>'); stop.type='button'; stop.onclick=stopRecord;
     var timer=el('span','oa-handoff-timer','<span class="oa-handoff-rec-dot"></span><span id="oa-handoff-timer-txt">0:00</span>');
@@ -1667,44 +1691,60 @@ const HANDOFF_SCRIPT = `
       video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
       audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
     }).then(function(s){
-      stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable(); cam.play().then(function(){ syncCamDisplay(); }).catch(function(){ syncCamDisplay(); });
-      // Diagnose a silent-mic track now: a track that is muted at the OS level
-      // or reports readyState 'ended' captures zero audio. Surface it so the
-      // user sees "Mic muted by system" instead of a silent clip after Stop.
-      var aTracks=s.getAudioTracks();
-      if(!aTracks.length){ setStatus('No audio track - mic unavailable'); }
-      else if(aTracks.some(function(t){return t.muted||t.readyState==='ended';})){
-        setStatus('Mic muted by system - check your OS mic permissions');
-      }
-      startMicMeter(s);
-      var mime=pickMime();
-      // When blur is on, record the composited canvas stream (crisp person +
-      // blurred bg) so the saved file has the same effect at playback; splice
-      // in the mic track since captureStream() carries video only. When blur
-      // is off, record the raw camera stream (video + audio) as before.
-      var recStream = stream;
-      if(camBlur && segCanvas){
-        var cs = segCanvas.captureStream ? segCanvas.captureStream(30) : null;
-        if(cs){
-          var at = s.getAudioTracks()[0];
-          if(at) try{ cs.addTrack(at); }catch(e){}
-          recStream = cs;
-        }
-      }
-      // 2.5 Mbps VP8 / 64 kbps opus: 720p is sharp without blowing the 64 MiB
-      // server cap (2.5Mbps * 600s ~= 188 MiB, so the 10-min client ceiling is
-      // the real limiter; a 1-min clip is ~19 MiB). A 250ms timeslice keeps
-      // motion from compressing into blocky 1s chunks.
-      try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
-      catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
-      chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
-      mr.start(250);
-      recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
-      recStart=performance.now(); events=[]; state='RECORDING';
-      toFrame({type:'oa:handoff:record:arm'});
-      if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
-      render();
+      stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable();
+      // syncCamDisplay (which runs startSeg when camBlur is on, assigning
+      // segCanvas + kicking off the composite rAF loop) MUST resolve before we
+      // pick the recorder stream below — otherwise segCanvas is null on the
+      // FIRST recording in a session and recStream falls back to the raw camera,
+      // silently recording an unblurred background while hasBlur=true. So the
+      // recorder setup waits for cam.play() + syncCamDisplay to land.
+      cam.play().then(function(){ syncCamDisplay(); beginRecord(s); }).catch(function(){ syncCamDisplay(); beginRecord(s); });
     }).catch(function(err){ setStatus('Camera/mic denied: '+(err&&err.message?err.message:'permission needed')); });
+  }
+  function beginRecord(s){
+    // Diagnose a silent-mic track now: a track that is muted at the OS level
+    // or reports readyState 'ended' captures zero audio. Surface it so the
+    // user sees "Mic muted by system" instead of a silent clip after Stop.
+    var aTracks=s.getAudioTracks();
+    if(!aTracks.length){ setStatus('No audio track - mic unavailable'); }
+    else if(aTracks.some(function(t){return t.muted||t.readyState==='ended';})){
+      setStatus('Mic muted by system - check your OS mic permissions');
+    }
+    startMicMeter(s);
+    var mime=pickMime();
+    // When blur is on AND the composite canvas is live, record the canvas
+    // stream (crisp person + blurred bg) so the saved file carries the blur;
+    // splice in the mic track since captureStream() carries video only. When
+    // blur is off OR the canvas isn't ready yet (MediaPipe still loading on the
+    // very first record), record the raw camera stream and store hasBlur=false
+    // so playback re-composites live rather than trusting a blur that isn't in
+    // the file. This guards against the privacy bug where a blurred intent
+    // silently recorded raw and the hasBlur=true flag suppressed re-composite.
+    var recStream = stream;
+    var usedBlur = false;
+    if(camBlur && segCanvas && !segCanvas.hidden && segFirstFrame){
+      var cs = segCanvas.captureStream ? segCanvas.captureStream(30) : null;
+      if(cs){
+        var at = s.getAudioTracks()[0];
+        if(at) try{ cs.addTrack(at); }catch(e){}
+        recStream = cs;
+        usedBlur = true;
+      }
+    }
+    recUsedBlur = usedBlur;
+    // 2.5 Mbps VP8 / 64 kbps opus: 720p is sharp without blowing the 64 MiB
+    // server cap (2.5Mbps * 600s ~= 188 MiB, so the 10-min client ceiling is
+    // the real limiter; a 1-min clip is ~19 MiB). A 250ms timeslice keeps
+    // motion from compressing into blocky 1s chunks.
+    try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
+    catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
+    chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
+    mr.start(250);
+    recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
+    recStart=performance.now(); events=[]; state='RECORDING';
+    toFrame({type:'oa:handoff:record:arm'});
+    if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
+    render();
   }
   // Live RMS meter on the mic track. Writes micLevel (0..1) sampled each rAF
   // tick by renderRec's level bar. Belt-and-suspenders against the static
@@ -1741,7 +1781,7 @@ const HANDOFF_SCRIPT = `
     if(recTimeout)clearTimeout(recTimeout);
     var blob=new Blob(chunks, {type:(mr&&mr.mimeType)||'video/webm'});
     var eventsJson=JSON.stringify(events);
-    var meta={durationMs:Math.round(dur),hasVideo:true,hasAudio:true,hasBlur:camBlur,author:getName()||null,version:window.__oaViewedVersion||1};
+    var meta={durationMs:Math.round(dur),hasVideo:true,hasAudio:true,hasBlur:recUsedBlur,author:getName()||null,version:window.__oaViewedVersion||1};
     var fd=new FormData();
     fd.append('media', blob, 'media.webm');
     fd.append('events', eventsJson);
@@ -1879,7 +1919,7 @@ ${drawer}
 ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
 ${handoffEnabled ? handoffChromeHtml(artifactId, handoffList) : ""}
 ${commentsDataScript(commentsList)}
-<script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};</script>
+<script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};window.__oaCanManage=${canManage};</script>
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
