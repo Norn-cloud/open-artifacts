@@ -7,6 +7,8 @@ import type {
   CommentMeta,
   CreateInput,
   EncryptionParams,
+  HandoffCreateInput,
+  HandoffMeta,
   UpdateInput,
   VersionMeta,
 } from "./domain";
@@ -63,6 +65,37 @@ export interface ArtifactStore {
   ): Promise<{ artifactId: string; deleteTokenHash: string | null } | null>;
   setCommentDone(commentId: string, done: boolean): Promise<boolean>;
   deleteComment(commentId: string): Promise<void>;
+
+  // Handoff recordings (webcam+mic + interaction events) for an artifact. Media
+  // + events live in R2 under handoff/<artifactId>/<handoffId>/{media,events};
+  // only metadata is in D1. createHandoff owns the R2 puts + D1 insert together
+  // so an orphaned R2 object never survives a failed D1 write. deleteHandoff
+  // returns false if the row does not exist (the route 404s).
+  listHandoffs(artifactId: string): Promise<HandoffMeta[]>;
+  createHandoff(
+    artifactId: string,
+    input: HandoffCreateInput,
+    media: { body: ReadableStream | string | ArrayBuffer | Blob; size: number },
+    events: { json: string; size: number },
+    deleteTokenHash: string | null,
+  ): Promise<HandoffMeta>;
+  getHandoff(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<HandoffMeta | null>;
+  getHandoffAuth(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<{ deleteTokenHash: string | null } | null>;
+  getHandoffMedia(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<{ body: ReadableStream; mediaType: string } | null>;
+  getHandoffEvents(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<string | null>;
+  deleteHandoff(artifactId: string, handoffId: string): Promise<void>;
 }
 
 const SCHEMA = [
@@ -109,6 +142,27 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_comments_artifact_created
     ON comments(artifact_id, created_at)`,
+  // Handoff recordings: a creator's webcam+mic walkthrough of an artifact.
+  // media + events are R2 objects under handoff/<artifactId>/<handoffId>/; this
+  // table holds only metadata. version pins a recording to the artifact
+  // snapshot it was captured against so playback re-serves that frame.
+  `CREATE TABLE IF NOT EXISTS handoffs (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    media_size INTEGER NOT NULL,
+    events_size INTEGER NOT NULL,
+    has_video INTEGER NOT NULL DEFAULT 1,
+    has_audio INTEGER NOT NULL DEFAULT 1,
+    has_blur INTEGER NOT NULL DEFAULT 0,
+    author TEXT,
+    delete_token_hash TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_handoffs_artifact_created
+    ON handoffs(artifact_id, created_at)`,
 ];
 
 // Convention (#33): SCHEMA is the full current shape for fresh DBs; MIGRATIONS
@@ -148,6 +202,30 @@ const MIGRATIONS = [
   `ALTER TABLE artifacts ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'`,
   `CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_id)`,
   `CREATE INDEX IF NOT EXISTS idx_artifacts_org ON artifacts(org_id)`,
+  // Handoff recordings (new table): idempotent CREATE so an existing DB picks
+  // it up on first request; a fresh DB already has it from SCHEMA above.
+  `CREATE TABLE IF NOT EXISTS handoffs (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    media_size INTEGER NOT NULL,
+    events_size INTEGER NOT NULL,
+    has_video INTEGER NOT NULL DEFAULT 1,
+    has_audio INTEGER NOT NULL DEFAULT 1,
+    has_blur INTEGER NOT NULL DEFAULT 0,
+    author TEXT,
+    delete_token_hash TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_handoffs_artifact_created
+    ON handoffs(artifact_id, created_at)`,
+  // has_blur added after the initial handoffs table shipped: existing DBs got
+  // the table from the CREATE TABLE IF NOT EXISTS above but without this
+  // column. The ALTER is idempotent (duplicate-column error swallowed by
+  // isExpectedMigrationError). Fresh DBs already have it from SCHEMA.
+  `ALTER TABLE handoffs ADD COLUMN has_blur INTEGER NOT NULL DEFAULT 0`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -287,6 +365,14 @@ const defaultOwnership = (): OwnershipGrant => ({
 });
 
 const contentKey = (id: string, version: number) => `content/${id}/${version}`;
+
+// Derive a stable, deterministic handoff id from the artifact id so re-records
+// overwrite the same D1 row + R2 keys (one-per-artifact, race-free). The "h"
+// prefix keeps the handoff id visually distinct from the artifact id while
+// staying in the same URL-safe alphabet. Two concurrent POSTs to the same
+// artifact resolve to the same id and the ON CONFLICT DO UPDATE makes the last
+// COMMIT win - no list/delete/create window, no orphaned media.
+const handoffIdFor = (artifactId: string): string => `h${artifactId}`;
 
 interface Envelope extends EncryptionParams {
   v: 1;
@@ -563,18 +649,22 @@ export class D1R2Store implements ArtifactStore {
     await ensureSchema(this.db);
     // list() returns at most 1000 keys per page (delete() accepts at most as
     // many), so drain page by page — an artifact republished from a channel
-    // can easily accumulate more versions than one page holds.
-    for (;;) {
-      const page = await this.bucket.list({ prefix: `content/${id}/` });
-      if (page.objects.length > 0) {
-        await this.bucket.delete(page.objects.map((o) => o.key));
+    // can easily accumulate more versions than one page holds. The same drain
+    // sweeps handoff media+events (handoff/<id>/) alongside content/<id>/.
+    for (const prefix of [`content/${id}/`, `handoff/${id}/`]) {
+      for (;;) {
+        const page = await this.bucket.list({ prefix });
+        if (page.objects.length > 0) {
+          await this.bucket.delete(page.objects.map((o) => o.key));
+        }
+        if (!page.truncated) break;
       }
-      if (!page.truncated) break;
     }
     await this.db.batch([
       this.db.prepare("DELETE FROM versions WHERE artifact_id = ?").bind(id),
       this.db.prepare("DELETE FROM artifacts WHERE id = ?").bind(id),
       this.db.prepare("DELETE FROM comments WHERE artifact_id = ?").bind(id),
+      this.db.prepare("DELETE FROM handoffs WHERE artifact_id = ?").bind(id),
     ]);
   }
 
@@ -679,6 +769,175 @@ export class D1R2Store implements ArtifactStore {
       .bind(commentId)
       .run();
   }
+
+  // --- Handoff recordings (webcam+mic media + interaction events in R2) ---
+
+  async listHandoffs(artifactId: string): Promise<HandoffMeta[]> {
+    await ensureSchema(this.db);
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, artifact_id, version, duration_ms, media_type, media_size, events_size, has_video, has_audio, has_blur, author, created_at
+         FROM handoffs WHERE artifact_id = ? ORDER BY created_at DESC LIMIT 100`,
+      )
+      .bind(artifactId)
+      .all<HandoffRow>();
+    return results.map(toHandoff);
+  }
+
+  async createHandoff(
+    artifactId: string,
+    input: HandoffCreateInput,
+    media: { body: ReadableStream | string | ArrayBuffer | Blob; size: number },
+    events: { json: string; size: number },
+    deleteTokenHash: string | null,
+  ): Promise<HandoffMeta> {
+    await ensureSchema(this.db);
+    // One handoff per artifact: derive a stable id from the artifactId so a
+    // re-record UPSERTs the same D1 row and overwrites the same R2 keys in
+    // place - no list/delete/create window, no race, no orphaned media under
+    // a discarded id. Concurrent POSTs converge on the same id and the last
+    // COMMIT wins (INSERT ... ON CONFLICT DO UPDATE), exactly one row survives.
+    const id = handoffIdFor(artifactId);
+    const now = new Date().toISOString();
+    const mediaKey = `handoff/${artifactId}/${id}/media`;
+    const eventsKey = `handoff/${artifactId}/${id}/events`;
+    // Write R2 (media + events) then D1. Any failure across the three writes
+    // sweeps both R2 objects so a partial write (e.g. media put succeeds, events
+    // put fails) never orphans the media under a D1-less id - the create()
+    // channel-conflict cleanup pattern, extended to two objects. customMetadata
+    // carries the media type so a direct R2 fetch still knows it without a join.
+    try {
+      await this.bucket.put(mediaKey, media.body, {
+        customMetadata: {
+          media_type: input.mediaType,
+          artifact_id: artifactId,
+        },
+      });
+      await this.bucket.put(eventsKey, events.json, {
+        customMetadata: { artifact_id: artifactId },
+      });
+      await this.db
+        .prepare(
+          `INSERT INTO handoffs (id, artifact_id, version, duration_ms, media_type, media_size, events_size, has_video, has_audio, has_blur, author, delete_token_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             version = excluded.version,
+             duration_ms = excluded.duration_ms,
+             media_type = excluded.media_type,
+             media_size = excluded.media_size,
+             events_size = excluded.events_size,
+             has_video = excluded.has_video,
+             has_audio = excluded.has_audio,
+             has_blur = excluded.has_blur,
+             author = excluded.author,
+             delete_token_hash = excluded.delete_token_hash,
+             created_at = excluded.created_at`,
+        )
+        .bind(
+          id,
+          artifactId,
+          input.version,
+          input.durationMs,
+          input.mediaType,
+          media.size,
+          events.size,
+          input.hasVideo ? 1 : 0,
+          input.hasAudio ? 1 : 0,
+          input.hasBlur ? 1 : 0,
+          input.author,
+          deleteTokenHash,
+          now,
+        )
+        .run();
+    } catch (error) {
+      await this.bucket.delete([mediaKey, eventsKey]).catch(() => {});
+      throw error;
+    }
+    return {
+      id,
+      artifactId,
+      version: input.version,
+      durationMs: input.durationMs,
+      mediaType: input.mediaType,
+      mediaSize: media.size,
+      eventsSize: events.size,
+      hasVideo: input.hasVideo,
+      hasAudio: input.hasAudio,
+      hasBlur: input.hasBlur,
+      author: input.author,
+      createdAt: now,
+    };
+  }
+
+  async getHandoff(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<HandoffMeta | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare(
+        "SELECT id, artifact_id, version, duration_ms, media_type, media_size, events_size, has_video, has_audio, has_blur, author, created_at FROM handoffs WHERE id = ? AND artifact_id = ?",
+      )
+      .bind(handoffId, artifactId)
+      .first<HandoffRow>();
+    return row ? toHandoff(row) : null;
+  }
+
+  // delete_token_hash is server-only (never part of HandoffMeta), mirroring the
+  // comment delete-token idiom: the route reads it to authorize a delete.
+  async getHandoffAuth(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<{ deleteTokenHash: string | null } | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare(
+        "SELECT delete_token_hash FROM handoffs WHERE id = ? AND artifact_id = ?",
+      )
+      .bind(handoffId, artifactId)
+      .first<{ delete_token_hash: string | null }>();
+    return row ? { deleteTokenHash: row.delete_token_hash } : null;
+  }
+
+  async getHandoffMedia(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<{ body: ReadableStream; mediaType: string } | null> {
+    const meta = await this.getHandoff(artifactId, handoffId);
+    if (meta === null) return null;
+    const object = await this.bucket.get(
+      `handoff/${artifactId}/${handoffId}/media`,
+    );
+    if (object === null) return null;
+    return { body: object.body, mediaType: meta.mediaType };
+  }
+
+  async getHandoffEvents(
+    artifactId: string,
+    handoffId: string,
+  ): Promise<string | null> {
+    // Symmetric with getHandoffMedia: a deleted-but-not-swept events object
+    // must never be served for a handoff whose D1 row is gone.
+    const meta = await this.getHandoff(artifactId, handoffId);
+    if (meta === null) return null;
+    const object = await this.bucket.get(
+      `handoff/${artifactId}/${handoffId}/events`,
+    );
+    if (object === null) return null;
+    return object.text();
+  }
+
+  async deleteHandoff(artifactId: string, handoffId: string): Promise<void> {
+    await ensureSchema(this.db);
+    await this.bucket.delete([
+      `handoff/${artifactId}/${handoffId}/media`,
+      `handoff/${artifactId}/${handoffId}/events`,
+    ]);
+    await this.db
+      .prepare("DELETE FROM handoffs WHERE id = ? AND artifact_id = ?")
+      .bind(handoffId, artifactId)
+      .run();
+  }
 }
 
 interface CommentRow {
@@ -699,6 +958,38 @@ function toComment(row: CommentRow): CommentMeta {
     body: row.body,
     anchor: row.anchor ? (JSON.parse(row.anchor) as Anchor) : null,
     done: row.done === 1,
+    createdAt: row.created_at,
+  };
+}
+
+interface HandoffRow {
+  id: string;
+  artifact_id: string;
+  version: number;
+  duration_ms: number;
+  media_type: string;
+  media_size: number;
+  events_size: number;
+  has_video: number;
+  has_audio: number;
+  has_blur: number;
+  author: string | null;
+  created_at: string;
+}
+
+function toHandoff(row: HandoffRow): HandoffMeta {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    version: row.version,
+    durationMs: row.duration_ms,
+    mediaType: row.media_type,
+    mediaSize: row.media_size,
+    eventsSize: row.events_size,
+    hasVideo: row.has_video === 1,
+    hasAudio: row.has_audio === 1,
+    hasBlur: row.has_blur === 1,
+    author: row.author,
     createdAt: row.created_at,
   };
 }

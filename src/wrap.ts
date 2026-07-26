@@ -4,6 +4,7 @@ import type {
   ArtifactFormat,
   CommentMeta,
   EncryptionParams,
+  HandoffMeta,
   VersionMeta,
 } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
@@ -159,8 +160,12 @@ export function hostContentSecurityPolicy(nonce: string): string {
     "default-src 'none'",
     // script-src is nonce-only with 'self' (same-origin /vendor/... runtime
     // bundles) — no 'unsafe-inline', no external script host, no
-    // 'strict-dynamic' (issue #11).
-    `script-src ${scriptSrcForNonce("'self'", nonce)}`,
+    // 'strict-dynamic' (issue #11). 'wasm-unsafe-eval' lets the handoff webcam's
+    // MediaPipe Selfie Segmentation instantiate its WASM module on the host
+    // page (compile/run only — no eval of JS strings, no arbitrary code); the
+    // sandboxed artifact frame stays without it (its connect-src 'none' blocks
+    // the WASM fetch anyway, and it never runs MediaPipe).
+    `script-src ${scriptSrcForNonce("'self'", nonce)} 'wasm-unsafe-eval'`,
     "style-src 'unsafe-inline'",
     "img-src data: blob:",
     "font-src data:",
@@ -402,6 +407,18 @@ const BRAND_SVG =
 const LIVE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
 
+// Handoff toggle: a video camera (the record-a-walkthrough affordance), stroke
+// to match the toolbar's other outline controls (Live/comments). The record
+// action itself uses a filled dot; stop uses a square; play uses a triangle.
+const HANDOFF_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>';
+const RECORD_DOT_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="6"/></svg>';
+const STOP_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+const PLAY_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>';
+
 function versionPickerHtml(
   versions: VersionMeta[],
   currentVersion: number,
@@ -468,6 +485,7 @@ function headerHtml(
   canManage = false,
   visibility: Visibility = "public",
   liveEnabled = false,
+  handoffEnabled = false,
 ): string {
   // A primary brand (BRAND_NAME) always names itself and links its own root,
   // ignoring BRAND_URL; a self-hoster without BRAND_NAME shows the neutral
@@ -488,11 +506,24 @@ function headerHtml(
       : "";
   const share = canManage ? visibilityPickerHtml(visibility) : "";
   // The Live toggle opens the live-edit bar (host chrome, outside the
-  // sandbox). Only when the deploy bound a LIVE_DO namespace; a self-hoster
-  // without it never sees the button.
-  const live = liveEnabled
-    ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
-    : "";
+  // sandbox). Only when the deploy bound a LIVE_DO namespace AND the viewer is
+  // an owner (canManage) — live editing mutates the artifact, so it's
+  // write-gated server-side too; the button is just hidden for non-owners.
+  const live =
+    liveEnabled && canManage
+      ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
+      : "";
+  // The Handoff toggle opens the record/play dock. Record is owner-only
+  // (write-gated server-side); Play is open to any viewer. The button is shown
+  // to owners (Record + Play) and to viewers who have a handoff to Play — but
+  // since a non-owner can't Record and the only owner-action is Record, hide
+  // the toggle entirely for non-owners and surface Play through the inlined
+  // handoff list when one exists. Simpler: gate on canManage, and render a
+  // Play-only affordance for non-owners when a handoff is inlined.
+  const handoff =
+    handoffEnabled && canManage
+      ? `<button class="oa-handoff-toggle" type="button" aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span></button>`
+      : "";
   return `<header class="oa-header">
   <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
   ${picker}
@@ -500,6 +531,7 @@ function headerHtml(
   ${chip}
   ${comments}
   ${live}
+  ${handoff}
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -747,6 +779,11 @@ export interface FrameDocumentOptions {
    *  attribute. The plain HTTP-served /a/:id/frame route already gets its CSP
    *  from the real response header and omits this. */
   stampCsp?: boolean;
+  /** When true the deploy set OPEN_ARTIFACTS_HANDOFF=1 and the frame carries
+   *  the handoff record + play shims. They are inert until armed by the host
+   *  over the postMessage bridge (the same always-present-but-unarmed pattern
+   *  the Live picker uses), so a normal view pays no behavioral cost. */
+  handoffEnabled?: boolean;
 }
 
 // The re-asserted CSP for a srcdoc'd artifact frame (R2). Deliberately fixed
@@ -765,7 +802,7 @@ function frameMetaCsp(nonce: string): string {
 // comments drawer, no LAYOUT_SCRIPT — those are host-page chrome that never
 // enters the sandboxed, opaque-origin document.
 export function frameDocument(options: FrameDocumentOptions): string {
-  const { format, content, nonce, stampCsp } = options;
+  const { format, content, nonce, stampCsp, handoffEnabled = false } = options;
   // A react artifact's content is a precompiled, self-contained IIFE (React +
   // ReactDOM + the component, bundled by the skill). It mounts itself into
   // #oa-root, so the frame emits the mount node plus the bundle as a single
@@ -801,6 +838,8 @@ ${body}
 <script nonce="${nonce}">${FRAME_ANCHOR_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_TEXT_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_LIVE_PICKER_SCRIPT}</script>
+${handoffEnabled ? `<script nonce="${nonce}">${FRAME_HANDOFF_RECORD_SCRIPT}</script>` : ""}
+${handoffEnabled ? `<script nonce="${nonce}">${FRAME_HANDOFF_PLAY_SCRIPT}</script>` : ""}
 </body>
 </html>
 `;
@@ -844,6 +883,14 @@ export interface HostShellOptions {
   /** Absolute WebSocket URL for the live channel, e.g. "wss://coda0.com/api/artifacts/<id>/live".
    *  Only used when liveEnabled is true. */
   liveWsUrl?: string;
+  /** When true the deploy set OPEN_ARTIFACTS_HANDOFF=1 and the host page renders
+   *  the Handoff button + record/play dock, and the frame carries the handoff
+   *  shims. False for self-hosters without the flag. */
+  handoffEnabled?: boolean;
+  /** Handoffs inlined at serve time (the same inlining pattern comments and the
+   *  version picker use) so the play UI can list them with no runtime fetch from
+   *  the sandboxed frame. Only read when handoffEnabled is true. */
+  handoffs?: HandoffMeta[];
 }
 
 const OG_CARD_W = 1200;
@@ -1309,6 +1356,510 @@ const LIVE_SCRIPT = `
 const CLOSE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
+// Handoff record/play chrome. The dock (bottom-center pill, the Live dock
+// language) holds the Record button + handoff list in IDLE, Stop/timer/Cancel
+// while RECORDING, and Play/Pause/scrub/Exit while PLAYING. The webcam <video>
+// is a fixed corner overlay - mirrored during recording (selfie), unmirrored
+// during playback. Quiet chrome, single --accent + --danger, both themes,
+// visible focus rings, no decorative motion (the rec dot blink is informational).
+const HANDOFF_CSS = `
+.oa-handoff-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-handoff-toggle::before{content:"";position:absolute;inset:-6px}
+.oa-handoff-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-handoff-toggle:active{transform:translateY(1px)}
+.oa-handoff-toggle svg{display:block;width:15px;height:15px;margin:auto}
+.oa-handoff-toggle[aria-expanded="true"]{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-accent) 40%);color:var(--oa-accent)}
+@media (hover:hover) and (pointer:fine){.oa-handoff-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+#oa-handoff-root[hidden]{display:none}
+#oa-handoff-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
+#oa-handoff-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(30rem,92vw);display:flex;flex-direction:column;gap:.4rem;padding:.6rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%);pointer-events:auto}
+#oa-handoff-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;min-height:1.1rem}
+#oa-handoff-status[hidden]{display:none}
+#oa-handoff-status .oa-handoff-spin{display:inline-block;width:11px;height:11px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-handoff-spin .7s linear infinite;vertical-align:-1px;margin-right:.3rem}
+@keyframes oa-handoff-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#oa-handoff-status .oa-handoff-spin{animation:none}}
+#oa-handoff-controls{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.oa-handoff-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
+.oa-handoff-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-handoff-btn:active{transform:translateY(1px)}
+.oa-handoff-btn svg{width:13px;height:13px;display:block}
+.oa-handoff-record,.oa-handoff-stop{background:var(--oa-danger);color:#fff;border-color:transparent;opacity:1}
+.oa-handoff-timer{display:inline-flex;align-items:center;gap:.3rem;color:var(--oa-fg);font-variant-numeric:tabular-nums;font-size:.8rem}
+.oa-handoff-rec-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--oa-danger);animation:oa-handoff-blink 1s infinite}
+@keyframes oa-handoff-blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.oa-handoff-rec-dot{animation:none}}
+@media (hover:hover) and (pointer:fine){.oa-handoff-btn:not(.oa-handoff-record):not(.oa-handoff-stop):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
+.oa-handoff-play{height:30px;padding:0 .6rem;border:0;border-radius:7px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0}
+.oa-handoff-play svg{width:13px;height:13px}
+.oa-handoff-play:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-handoff-play:active{transform:translateY(1px)}
+@media (hover:hover) and (pointer:fine){.oa-handoff-play:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
+.oa-handoff-dur{font-size:.78rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:center}
+.oa-handoff-del{height:30px;width:30px;border:1px solid var(--oa-border);border-radius:7px;background:var(--oa-bg);color:var(--oa-muted);cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.oa-handoff-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-handoff-del:hover{color:var(--oa-danger);border-color:color-mix(in oklab,var(--oa-danger),transparent 50%)}}
+.oa-handoff-scrub{flex:1;min-width:80px;height:4px;-webkit-appearance:none;appearance:none;background:var(--oa-border);border-radius:2px;outline:none;cursor:pointer}
+.oa-handoff-scrub::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--oa-accent);border:0}
+.oa-handoff-scrub::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--oa-accent);border:0}
+.oa-handoff-time{font-size:.72rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;min-width:2.5rem;text-align:right;flex-shrink:0}
+#oa-handoff-cam{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-bg),#000 0%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 28px -6px rgba(0,0,0,.5),0 0 0 1px var(--oa-border);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
+#oa-handoff-cam[hidden]{display:none}
+#oa-handoff-cam[data-rec]{transform:scaleX(-1)}
+#oa-handoff-cam-canvas{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-bg),#000 0%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 28px -6px rgba(0,0,0,.5),0 0 0 1px var(--oa-border);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
+#oa-handoff-cam-canvas[hidden]{display:none}
+#oa-handoff-cam[data-dragging]{cursor:grabbing}
+.oa-handoff-mic{display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0;width:36px;height:18px}
+.oa-handoff-mic-bar{display:block;width:100%;height:4px;border-radius:2px;background:color-mix(in oklab,var(--oa-fg),transparent 82%);transform:scaleX(.02);transform-origin:left center;transition:transform .08s linear}
+.oa-handoff-mic-bar.oa-handoff-mic-silent{background:color-mix(in oklab,var(--oa-danger),transparent 60%)}
+`;
+
+// The inlined handoff list is serve-time JSON (the comments/version-picker
+// pattern) so the play UI can list recordings with no runtime fetch from the
+// sandboxed frame. Only public fields cross - never the delete-token hash.
+function handoffChromeHtml(
+  artifactId: string,
+  handoffs: HandoffMeta[],
+): string {
+  // One handoff per artifact: inline the single current handoff (or null) so
+  // the dock renders Record-when-absent / Play-Re-record-when-present with no
+  // list. The shape stays an array server-side for a forward-compatible API,
+  // but the host only ever reads handoffs[0].
+  const current = handoffs[0] ?? null;
+  const publicSingle = current
+    ? {
+        id: current.id,
+        version: current.version,
+        durationMs: current.durationMs,
+        hasVideo: current.hasVideo,
+        hasAudio: current.hasAudio,
+        hasBlur: current.hasBlur,
+        author: current.author,
+        createdAt: current.createdAt,
+      }
+    : null;
+  return `<div id="oa-handoff-root" hidden>
+  <div id="oa-handoff-dock">
+    <div id="oa-handoff-status" role="status" aria-live="polite" hidden></div>
+    <div id="oa-handoff-controls" role="toolbar" aria-label="Handoff recording"></div>
+  </div>
+  <video id="oa-handoff-cam" hidden playsinline></video>
+  <canvas id="oa-handoff-cam-canvas" hidden></canvas>
+  <script type="application/json" id="oa-handoff-data" data-artifact-id="${escapeHtml(artifactId)}">${jsonForInlineScript(publicSingle)}</script>
+</div>`;
+}
+
+// Host-side handoff controller: getUserMedia + MediaRecorder (the sandboxed
+// frame cannot), arms the frame record shim over postMessage, buffers events,
+// uploads multipart on stop, and drives playback (fetch media -> blob URL ->
+// <video>, fetch events -> frame play shim). Recording is write-gated: the
+// owner write token is reused from the comments ?wt= storage (oa-cm-wt-<id>),
+// or the session cookie authorizes on a SaaS deploy. The author delete token
+// is stored per handoff (oa-handoff-dt-<hid>) so the recorder can delete their
+// own. Visual-only playback: the frame draws a synthetic cursor + ripples +
+// scroll, never real DOM events.
+const HANDOFF_SCRIPT = `
+(function(){
+  var dataEl=document.getElementById('oa-handoff-data');
+  if(!dataEl)return;
+  // One handoff per artifact: a single object (or null), inlined at serve time.
+  var handoff=null;
+  try{handoff=JSON.parse(dataEl.textContent||'null')}catch(e){handoff=null}
+  var root=document.getElementById('oa-handoff-root');
+  var dock=document.getElementById('oa-handoff-dock');
+  var statusEl=document.getElementById('oa-handoff-status');
+  var controls=document.getElementById('oa-handoff-controls');
+  var cam=document.getElementById('oa-handoff-cam');
+  var toggle=document.querySelector('.oa-handoff-toggle');
+  var frame=document.getElementById('oa-frame');
+  var ID=window.__oaBridgeId;
+  if(!root||!dock||!controls||!cam||!frame||!ID)return;
+
+  var state='IDLE';
+  var mr=null, chunks=[], stream=null, recStart=0, events=[], timerInt=null;
+  var playDur=0, scrubbing=false;
+  // Live mic level meter so a silent recording is diagnosed at record time,
+  // not after. A flat bar means the mic track has no signal (muted by the OS,
+  // wrong input device, or permissions) and the recorded audio will be silent.
+  var audioCtx=null, analyser=null, micLevel=0, micRAF=0;
+  // Client-side ceilings so a long recording uploads cleanly instead of
+  // hitting the server's 64 MiB 413 and wasting the clip. 10 min / 60 MiB.
+  var MAX_REC_MS=600000, MAX_REC_BYTES=60*1024*1024, recBytes=0, recTimeout=0, playUrl=null;
+  // Whether the in-progress recording actually captured the composited
+  // (blurred) canvas stream, set in beginRecord. Decoupled from the camBlur
+  // *preference* because the canvas may not be live yet on the first record
+  // (MediaPipe still loading) — recording raw + flagging hasBlur=false keeps
+  // playback honest (it re-composites live instead of trusting a missing blur).
+  var recUsedBlur=false;
+
+  // Drag the webcam overlay to any of the four screen corners during record
+  // (selfie preview) and play (playback). Position is kept as {left,top} so it
+  // survives between record and play; defaults to bottom-right. Pointer-event
+  // based so it works for mouse, touch, and pen. The corner the closest edge
+  // snaps toward is irrelevant - the overlay goes wherever you drop it.
+  var CAM_KEY='oa-handoff-cam-pos', camDragBound=false;
+  function loadCamPos(){ try{ var s=localStorage.getItem(CAM_KEY); if(s){var p=JSON.parse(s); if(p&&typeof p.left==='number'&&typeof p.top==='number')return p;}}catch(e){} return null; }
+  function saveCamPos(p){ try{localStorage.setItem(CAM_KEY, JSON.stringify(p));}catch(e){} }
+  function applyCamPos(){ var p=loadCamPos(); if(!p)return; var t=visibleCam(); if(!t)return; t.style.left=p.left+'px'; t.style.top=p.top+'px'; t.style.right='auto'; t.style.bottom='auto'; }
+  // Portrait-segmentation background blur via MediaPipe Selfie Segmentation
+  // (self-hosted same-origin at /vendor/mediapipe/*, no CSP widening). When on,
+  // a hidden <video> feeds MediaPipe per frame; the visible overlay becomes a
+  // <canvas> composited crisp-person + blurred-background. When off, the raw
+  // <video> is the overlay (today's behavior). Persisted so record and play
+  // share the choice; the recorded file carries hasBlur so playback knows not
+  // to double-process an already-blurred clip.
+  var BLUR_KEY='oa-handoff-blur', camBlur=false;
+  var seg=null, segReady=false, segLoading=false, segRAF=0, segCanvas=null, segCtx=null, segOnResults=null, segFirstFrame=false;
+  function loadBlur(){ try{ camBlur=localStorage.getItem(BLUR_KEY)==='1'; }catch(e){} }
+  function saveBlur(v){ try{localStorage.setItem(BLUR_KEY, v?'1':'0');}catch(e){} }
+  function visibleCam(){ return (camBlur&&segCanvas&&!segCanvas.hidden) ? segCanvas : cam; }
+  function applyBlur(){ /* state applied in startSeg/stopSeg, called from showCam */ }
+  function toggleBlur(){ camBlur=!camBlur; saveBlur(camBlur); var b=document.getElementById('oa-handoff-blur'); if(b){ b.setAttribute('aria-pressed',String(camBlur)); } if(state==='RECORDING'||state==='PLAYING'){ syncCamDisplay(); } }
+  function mkBlurBtn(){ var b=el('button','oa-handoff-btn','Blur'); b.type='button'; b.id='oa-handoff-blur'; b.setAttribute('aria-pressed',String(camBlur)); b.title='Blur the webcam background'; b.onclick=toggleBlur; return b; }
+  loadBlur();
+  // Lazy-load MediaPipe once. Returns a promise resolving to the segmenter.
+  function loadSeg(){
+    if(segReady) return Promise.resolve(seg);
+    if(segLoading) return segLoading;
+    segLoading = new Promise(function(res, rej){
+      var s=document.createElement('script');
+      s.src='/vendor/mediapipe/selfie_segmentation.js';
+      s.onload=function(){
+        try{
+          // @ts-ignore - global injected by the vendored IIFE.
+          var SS=window.SelfieSegmentation;
+          seg=new SS({locateFile:function(p){ return '/vendor/mediapipe/'+p; }});
+          seg.onResults(function(r){ if(segOnResults)segOnResults(r); });
+          seg.setOptions({modelSelection:1});
+          seg.initialize().then(function(){ segReady=true; res(seg); }).catch(rej);
+        }catch(e){ rej(e); }
+      };
+      s.onerror=function(){ rej(new Error('MediaPipe failed to load')); };
+      document.head.appendChild(s);
+    });
+    segLoading.catch(function(){ segLoading=null; });
+    return segLoading;
+  }
+  // Composite one frame: crisp person + blurred background, using the mask as
+  // the alpha stencil. Standard MediaPipe composite idiom.
+  function composite(video, mask){
+    var c=segCanvas, ctx=segCtx; if(!c||!ctx)return;
+    var vw=video.videoWidth, vh=video.videoHeight; if(!vw||!vh)return;
+    if(c.width!==vw){ c.width=vw; c.height=vh; }
+    ctx.save();
+    ctx.globalCompositeOperation='source-over';
+    ctx.filter='blur(12px)';
+    ctx.drawImage(video, 0, 0, vw, vh);
+    ctx.filter='none';
+    // Cut the person hole out of the blurred bg, then draw crisp person behind.
+    ctx.globalCompositeOperation='destination-out';
+    ctx.drawImage(mask, 0, 0, vw, vh);
+    ctx.globalCompositeOperation='destination-over';
+    ctx.drawImage(video, 0, 0, vw, vh);
+    ctx.restore();
+  }
+  // Drive MediaPipe at rAF while the overlay is visible + blur is on.
+  function segLoop(){
+    if(!segRAF)return;
+    var v=cam;
+    if(v.readyState>=2){
+      // Until MediaPipe is ready, draw the raw video onto the canvas so the
+      // bubble shows the camera (unblurred) instead of collapsing to empty.
+      // Once ready, seg.send() fires onResults -> composite (blurred bg).
+      if(segReady){ try{ seg.send({image:v}); }catch(e){} }
+      else if(segCtx && segCanvas && !segCanvas.hidden){
+        var vw=v.videoWidth, vh=v.videoHeight;
+        if(vw&&vh){ if(segCanvas.width!==vw){segCanvas.width=vw; segCanvas.height=vh;} segCtx.globalCompositeOperation='source-over'; segCtx.filter='none'; segCtx.drawImage(v,0,0,vw,vh); }
+      }
+    }
+    segRAF=requestAnimationFrame(segLoop);
+  }
+  function startSeg(){
+    if(!camBlur)return;
+    if(!segCanvas){ segCanvas=document.getElementById('oa-handoff-cam-canvas'); segCtx=segCanvas?segCanvas.getContext('2d'):null; }
+    if(!segCanvas)return;
+    // Show the canvas overlay with the raw video drawn as a fallback so the
+    // circular bubble stays visible while MediaPipe loads + before the first
+    // segmentation lands (otherwise a 0x0 canvas collapses and the bubble
+    // vanishes). The video is NOT hidden until the first composite succeeds;
+    // it is just covered by the canvas. Once MediaPipe returns a frame, the
+    // composite path takes over and the video is hidden.
+    segCanvas.hidden=false; applyCamPos();
+    segFirstFrame=false;
+    setStatus('<span class="oa-handoff-spin"></span>Loading blur…');
+    segOnResults=function(r){ if(r&&r.segmentationMask&&r.image){ composite(cam, r.segmentationMask); if(!segFirstFrame){ segFirstFrame=true; cam.hidden=true; } setStatus(''); } };
+    loadSeg().then(function(){ if(!segRAF && camBlur){ segRAF=requestAnimationFrame(segLoop); } }).catch(function(e){ setStatus('Blur load failed: '+(e&&e.message||'')); });
+  }
+  function stopSeg(){
+    if(segRAF)cancelAnimationFrame(segRAF); segRAF=0; segOnResults=null;
+    if(segCanvas){ segCanvas.hidden=true; }
+  }
+  // Re-sync which element is the visible overlay after a blur toggle or show.
+  function syncCamDisplay(){
+    if(!camBlur){ stopSeg(); cam.hidden=false; applyCamPos(); return; }
+    startSeg();
+  }
+  function makeCamDraggable(){
+    if(camDragBound)return; camDragBound=true;
+    var sx=0, sy=0, ox=0, oy=0, w=0, h=0, dragging=false;
+    function down(e){ dragging=true; var t=visibleCam(); if(t)t.setAttribute('data-dragging',''); var pt=e.touches?e.touches[0]:e; sx=pt.clientX; sy=pt.clientY; var r=(visibleCam()||cam).getBoundingClientRect(); w=r.width; h=r.height; ox=r.left; oy=r.top; e.preventDefault(); }
+    function move(e){ if(!dragging)return; var t=visibleCam()||cam; var pt=e.touches?e.touches[0]:e; var nx=Math.max(0,Math.min(window.innerWidth-w, ox+(pt.clientX-sx))); var ny=Math.max(0,Math.min(window.innerHeight-h, oy+(pt.clientY-sy))); t.style.left=nx+'px'; t.style.top=ny+'px'; t.style.right='auto'; t.style.bottom='auto'; e.preventDefault(); }
+    function up(e){ if(!dragging)return; dragging=false; var t=visibleCam(); if(t)t.removeAttribute('data-dragging'); var r=(visibleCam()||cam).getBoundingClientRect(); var p={left:Math.max(0,Math.min(window.innerWidth-w,r.left)), top:Math.max(0,Math.min(window.innerHeight-h,r.top))}; saveCamPos(p); }
+    cam.addEventListener('pointerdown',down);
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',up);
+    window.addEventListener('pointercancel',up);
+    applyCamPos();
+  }
+
+  function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function el(t,c,h){ var d=document.createElement(t); if(c)d.className=c; if(h!=null)d.innerHTML=h; return d; }
+  function fmt(ms){ ms=Math.max(0,ms||0); var s=Math.floor(ms/1000), m=Math.floor(s/60); s=s%60; return m+':'+(s<10?'0':'')+s; }
+  function ownerToken(){ try{return localStorage.getItem('oa-cm-wt-'+ID)}catch(e){return null} }
+  function getName(){ try{return localStorage.getItem('oa-cm-name')||''}catch(e){return ''} }
+  function saveDelToken(hid,t){ try{localStorage.setItem('oa-handoff-dt-'+hid,t)}catch(e){} }
+  function getDelToken(hid){ try{return localStorage.getItem('oa-handoff-dt-'+hid)}catch(e){return null} }
+  function authHeaders(){ var wt=ownerToken(); return wt?{Authorization:'Bearer '+wt}:{}; }
+  function setStatus(s){ if(!statusEl)return; statusEl.innerHTML=s||''; statusEl.hidden=!s; }
+
+  // canManage gates Record/Re-record/Delete (write-gated server-side). A non-
+  // owner viewer can still Play, so the dock auto-opens a Play-only view when a
+  // handoff exists and there's no owner toggle button to click.
+  var canManage = window.__oaCanManage === true;
+  function openDock(){ root.removeAttribute('hidden'); if(toggle)toggle.setAttribute('aria-expanded','true'); render(); }
+  function closeDock(){ if(state!=='IDLE')return; root.hidden=true; if(toggle)toggle.setAttribute('aria-expanded','false'); }
+  if(toggle)toggle.addEventListener('click',function(){ root.hidden?openDock():closeDock(); });
+
+  function render(){ if(!controls)return; controls.innerHTML='';
+    if(state==='IDLE')renderIdle();
+    else if(state==='RECORDING')renderRec();
+    else if(state==='PLAYING')renderPlay();
+  }
+  // One handoff per artifact. Owner IDLE: Record (none) or Re-record + Play +
+  // Delete (exists). Viewer IDLE: Play-only (no Record/Delete) when one exists.
+  function renderIdle(){
+    if(handoff){
+      var play=el('button','oa-handoff-btn oa-handoff-play', ${JSON.stringify(PLAY_SVG)}+'<span>Play</span>'); play.type='button'; play.onclick=function(){startPlay(handoff.id);};
+      var dur=el('span','oa-handoff-dur', fmt(handoff.durationMs));
+      controls.appendChild(play); controls.appendChild(dur);
+      if(canManage){
+        var rerec=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Re-record</span>'); rerec.type='button'; rerec.onclick=startRecord; rerec.title='Record a new handoff (replaces the current one)';
+        controls.appendChild(rerec);
+        if(getDelToken(handoff.id)||ownerToken()){
+          var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
+          del.onclick=function(){delHandoff(handoff.id);};
+          controls.appendChild(del);
+        }
+      }
+      setStatus('');
+    }else if(canManage){
+      var b=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Record</span>'); b.type='button'; b.onclick=startRecord;
+      controls.appendChild(b);
+      setStatus('Record a handoff walkthrough');
+    }else{
+      setStatus('No handoff recording yet');
+    }
+  }
+  // Auto-open a Play-only dock for non-owners when a handoff is inlined.
+  if(!canManage && handoff){ openDock(); }
+  function renderRec(){
+    var stop=el('button','oa-handoff-btn oa-handoff-stop', ${JSON.stringify(STOP_SVG)}+'<span>Stop</span>'); stop.type='button'; stop.onclick=stopRecord;
+    var timer=el('span','oa-handoff-timer','<span class="oa-handoff-rec-dot"></span><span id="oa-handoff-timer-txt">0:00</span>');
+    var cancel=el('button','oa-handoff-btn','Cancel'); cancel.type='button'; cancel.onclick=cancelRecord;
+    var micWrap=el('label','oa-handoff-mic'); micWrap.title='Microphone level';
+    micWrap.setAttribute('aria-label','Microphone level');
+    var meter=el('span','oa-handoff-mic-bar'); meter.id='oa-handoff-mic-bar';
+    micWrap.appendChild(meter); controls.appendChild(stop); controls.appendChild(timer); controls.appendChild(micWrap); controls.appendChild(mkBlurBtn()); controls.appendChild(cancel);
+    if(micRAF)requestAnimationFrame(updateMicBar);
+  }
+  function updateMicBar(){ var bar=document.getElementById('oa-handoff-mic-bar'); if(!bar)return; if(!micRAF)return; bar.style.transform='scaleX('+Math.min(1,Math.max(0.02,micLevel*3))+')'; if(micLevel>0.003)bar.classList.remove('oa-handoff-mic-silent'); else bar.classList.add('oa-handoff-mic-silent'); requestAnimationFrame(updateMicBar); }
+  function tickTimer(){ var t=document.getElementById('oa-handoff-timer-txt'); if(t)t.textContent=fmt(performance.now()-recStart); }
+  function renderPlay(){
+    var pp=el('button','oa-handoff-btn','Pause'); pp.type='button'; pp.id='oa-handoff-pp'; pp.onclick=togglePause;
+    var scrub=el('input','oa-handoff-scrub'); scrub.type='range'; scrub.min=0; scrub.max=Math.max(1000,playDur); scrub.value=0; scrub.step=100;
+    scrub.oninput=function(){ scrubbing=true; var t=Number(scrub.value); if(cam){try{cam.currentTime=t/1000}catch(e){}} toFrame({type:'oa:handoff:seek',t:t}); };
+    scrub.onchange=function(){ scrubbing=false; };
+    var time=el('span','oa-handoff-time','0:00'); time.id='oa-handoff-time';
+    var exit=el('button','oa-handoff-btn','Exit'); exit.type='button'; exit.onclick=exitPlay;
+    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(mkBlurBtn()); controls.appendChild(exit);
+  }
+
+  function startRecord(){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('Camera/mic not supported here'); return; }
+    if(!window.MediaRecorder){ setStatus('Recording not supported in this browser'); return; }
+    navigator.mediaDevices.getUserMedia({
+      video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+    }).then(function(s){
+      stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable();
+      // syncCamDisplay (which runs startSeg when camBlur is on, assigning
+      // segCanvas + kicking off the composite rAF loop) MUST resolve before we
+      // pick the recorder stream below — otherwise segCanvas is null on the
+      // FIRST recording in a session and recStream falls back to the raw camera,
+      // silently recording an unblurred background while hasBlur=true. So the
+      // recorder setup waits for cam.play() + syncCamDisplay to land.
+      cam.play().then(function(){ syncCamDisplay(); beginRecord(s); }).catch(function(){ syncCamDisplay(); beginRecord(s); });
+    }).catch(function(err){ setStatus('Camera/mic denied: '+(err&&err.message?err.message:'permission needed')); });
+  }
+  function beginRecord(s){
+    // Diagnose a silent-mic track now: a track that is muted at the OS level
+    // or reports readyState 'ended' captures zero audio. Surface it so the
+    // user sees "Mic muted by system" instead of a silent clip after Stop.
+    var aTracks=s.getAudioTracks();
+    if(!aTracks.length){ setStatus('No audio track - mic unavailable'); }
+    else if(aTracks.some(function(t){return t.muted||t.readyState==='ended';})){
+      setStatus('Mic muted by system - check your OS mic permissions');
+    }
+    startMicMeter(s);
+    var mime=pickMime();
+    // When blur is on AND the composite canvas is live, record the canvas
+    // stream (crisp person + blurred bg) so the saved file carries the blur;
+    // splice in the mic track since captureStream() carries video only. When
+    // blur is off OR the canvas isn't ready yet (MediaPipe still loading on the
+    // very first record), record the raw camera stream and store hasBlur=false
+    // so playback re-composites live rather than trusting a blur that isn't in
+    // the file. This guards against the privacy bug where a blurred intent
+    // silently recorded raw and the hasBlur=true flag suppressed re-composite.
+    var recStream = stream;
+    var usedBlur = false;
+    if(camBlur && segCanvas && !segCanvas.hidden && segFirstFrame){
+      var cs = segCanvas.captureStream ? segCanvas.captureStream(30) : null;
+      if(cs){
+        var at = s.getAudioTracks()[0];
+        if(at) try{ cs.addTrack(at); }catch(e){}
+        recStream = cs;
+        usedBlur = true;
+      }
+    }
+    recUsedBlur = usedBlur;
+    // 2.5 Mbps VP8 / 64 kbps opus: 720p is sharp without blowing the 64 MiB
+    // server cap (2.5Mbps * 600s ~= 188 MiB, so the 10-min client ceiling is
+    // the real limiter; a 1-min clip is ~19 MiB). A 250ms timeslice keeps
+    // motion from compressing into blocky 1s chunks.
+    try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
+    catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
+    chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
+    mr.start(250);
+    recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
+    recStart=performance.now(); events=[]; state='RECORDING';
+    toFrame({type:'oa:handoff:record:arm'});
+    if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
+    render();
+  }
+  // Live RMS meter on the mic track. Writes micLevel (0..1) sampled each rAF
+  // tick by renderRec's level bar. Belt-and-suspenders against the static
+  // readyState check: a track can report live but still deliver zero frames.
+  function startMicMeter(s){
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return;
+      audioCtx=new AC(); var src=audioCtx.createMediaStreamSource(s);
+      analyser=audioCtx.createAnalyser(); analyser.fftSize=256; analyser.smoothingTimeConstant=0.7;
+      src.connect(analyser); var buf=new Uint8Array(analyser.frequencyBinCount); var sum=0;
+      function tick(){ if(!analyser){return;} analyser.getByteTimeDomainData(buf); var s=0; for(var i=0;i<buf.length;i++){var v=(buf[i]-128)/128; s+=v*v;} micLevel=Math.sqrt(s/buf.length); micRAF=requestAnimationFrame(tick); }
+      tick();
+    }catch(e){ /* meter optional */ }
+  }
+  function stopMicMeter(){ if(micRAF)cancelAnimationFrame(micRAF); micRAF=0; if(audioCtx){audioCtx.close().catch(function(){}); audioCtx=null;} analyser=null; micLevel=0; }
+  function pickMime(){
+    // vp8+opus first: vp9+opus is known to record silent audio on some Chrome
+    // builds (the very symptom this fix targets). vp8+opus is the reliable
+    // default across Chrome/Firefox; mp4 is the Safari fallback.
+    var cands=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'];
+    for(var i=0;i<cands.length;i++){ if(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(cands[i]))return cands[i]; }
+    return '';
+  }
+  function stopRecord(){ if(mr&&mr.state!=='inactive')mr.stop(); }
+  function cancelRecord(){ events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); stopSeg(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); }
+  function cleanupStream(){ if(stream){stream.getTracks().forEach(function(tr){tr.stop();}); stream=null;} if(cam){cam.srcObject=null; cam.hidden=true; cam.removeAttribute('data-rec');} }
+  function onRecStop(){
+    var dur=performance.now()-recStart;
+    toFrame({type:'oa:handoff:record:disarm'});
+    stopMicMeter();
+    stopSeg();
+    cleanupStream();
+    if(timerInt)clearInterval(timerInt);
+    if(recTimeout)clearTimeout(recTimeout);
+    var blob=new Blob(chunks, {type:(mr&&mr.mimeType)||'video/webm'});
+    var eventsJson=JSON.stringify(events);
+    var meta={durationMs:Math.round(dur),hasVideo:true,hasAudio:true,hasBlur:recUsedBlur,author:getName()||null,version:window.__oaViewedVersion||1};
+    var fd=new FormData();
+    fd.append('media', blob, 'media.webm');
+    fd.append('events', eventsJson);
+    fd.append('meta', JSON.stringify(meta));
+    setStatus('<span class="oa-handoff-spin"></span>Saving handoff…');
+    state='SAVING';
+    fetch('/api/artifacts/'+ID+'/handoffs', {method:'POST', headers:authHeaders(), body:fd}).then(function(r){
+      if(r.status===401||r.status===403) throw new Error('You need owner access to record');
+      if(!r.ok) throw new Error('Upload failed ('+r.status+')');
+      return r.json();
+    }).then(function(h){
+      if(h.deleteToken)saveDelToken(h.id, h.deleteToken);
+      handoff={id:h.id,version:h.version,durationMs:h.durationMs,hasVideo:h.hasVideo,hasAudio:h.hasAudio,hasBlur:!!h.hasBlur,author:h.author,createdAt:h.createdAt};
+      state='IDLE'; setStatus('Handoff saved'); render();
+      try{frame.contentWindow.location.reload();}catch(e){frame.src=frame.src;}
+    }).catch(function(err){ state='IDLE'; setStatus(esc(err.message||'Upload failed')); render(); });
+  }
+
+  function startPlay(hid){
+    var h=handoff; if(!h||h.id!==hid)return;
+    state='PLAYING'; playDur=h.durationMs||0; scrubbing=false; render();
+    setStatus('<span class="oa-handoff-spin"></span>Loading handoff…');
+    var wantV=h.version, curV=window.__oaViewedVersion||1;
+    var loadP;
+    if(wantV!==curV){ loadP=new Promise(function(res){ frame.addEventListener('load',function(){res();},{once:true}); }); frame.src='/a/'+ID+'/frame?v='+wantV; }
+    else loadP=Promise.resolve();
+    Promise.all([
+      loadP,
+      fetch('/api/artifacts/'+ID+'/handoffs/'+hid+'/events').then(function(r){return r.ok?r.json():Promise.reject(new Error('events '+r.status));}),
+      fetch('/api/artifacts/'+ID+'/handoffs/'+hid+'/media').then(function(r){return r.ok?r.blob():Promise.reject(new Error('media '+r.status));})
+    ]).then(function(arr){
+      var evs=arr[1]||[]; if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} playUrl=URL.createObjectURL(arr[2]); var url=playUrl;
+      cam.srcObject=null; cam.removeAttribute('data-rec'); makeCamDraggable(); cam.src=url;
+      // If the clip was recorded with blur, the background is already blurred
+      // in the file - don't re-composite (would double-blur). If it was
+      // recorded without blur but the viewer toggled Blur on, re-composite live.
+      var recHasBlur = !!(handoff && handoff.hasBlur);
+      cam.hidden=false;
+      if(camBlur && !recHasBlur){ startSeg(); } else { stopSeg(); }
+      // Explicit unmute: the <video> carries no muted content attribute, so the
+      // recorded audio plays. Re-assert on loadedmetadata in case a new src
+      // load resets the muted state, and set volume too.
+      cam.muted=false; cam.volume=1;
+      cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; }catch(e){} };
+      cam.onclick=null;
+      cam.ontimeupdate=function(){ var t=cam.currentTime*1000; var tm=document.getElementById('oa-handoff-time'); if(tm)tm.textContent=fmt(t); if(!scrubbing){var s=controls.querySelector('.oa-handoff-scrub'); if(s)s.value=t;} };
+      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} cam.onclick=null; state='IDLE'; render(); };
+      cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:evs, durationMs:playDur}); setStatus(''); }).catch(function(){
+        // Unmuted autoplay can be blocked when the async media fetch outlasts
+        // the Play click's user activation. Fall back to muted autoplay
+        // (always allowed) and let the user tap the video to enable sound.
+        cam.muted=true;
+        cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:evs, durationMs:playDur}); setStatus('Tap the video to unmute'); cam.onclick=function(){ cam.muted=false; cam.onclick=null; setStatus(''); }; }).catch(function(e2){ setStatus('Playback failed: '+(e2&&e2.message||'')); });
+      });
+    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); });
+  }
+  function togglePause(){ if(!cam)return;
+    if(cam.paused){ cam.play(); toFrame({type:'oa:handoff:resume'}); var pp=document.getElementById('oa-handoff-pp'); if(pp)pp.textContent='Pause'; }
+    else { cam.pause(); toFrame({type:'oa:handoff:pause'}); var pp=document.getElementById('oa-handoff-pp'); if(pp)pp.textContent='Play'; }
+  }
+  function exitPlay(){ toFrame({type:'oa:handoff:stop'}); stopSeg(); if(cam){cam.pause(); cam.removeAttribute('src'); cam.srcObject=null; cam.hidden=true; cam.onclick=null;} if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} state='IDLE'; render();
+    var curV=window.__oaViewedVersion||1; frame.src='/a/'+ID+'/frame?v='+curV; }
+  function delHandoff(hid){
+    var dt=getDelToken(hid); var headers=dt?{Authorization:'Bearer '+dt}:authHeaders();
+    if(!headers.Authorization){ setStatus('Sign in as owner to delete'); return; }
+    fetch('/api/artifacts/'+ID+'/handoffs/'+hid, {method:'DELETE', headers:headers}).then(function(r){ if(!r.ok)throw new Error('Delete failed ('+r.status+')'); return r.json(); }).then(function(){ handoff=null; try{localStorage.removeItem('oa-handoff-dt-'+hid);}catch(e){} render(); }).catch(function(err){ setStatus(esc(err.message)); });
+  }
+
+  // Frame -> host: buffer interaction events during RECORDING.
+  window.addEventListener('message', function(e){
+    if(!e.data||typeof e.data.type!=='string')return;
+    if(e.source!==frame.contentWindow)return;
+    var d=e.data;
+    if(d.type==='oa:handoff:event'&&state==='RECORDING'){ events.push({t:d.t, kind:d.kind, x:d.x, y:d.y, sx:d.sx, sy:d.sy}); }
+  });
+})();
+`;
+
 // crawler-facing <head>, the reused header + comments drawer chrome, and an
 // <iframe> embedding the sandboxed artifact frame below the header. It never
 // renders the artifact body itself — that lives entirely in frameDocument(),
@@ -1332,9 +1883,11 @@ export function hostShell(options: HostShellOptions): string {
     visibility = "public",
     liveEnabled = false,
     liveWsUrl = "",
+    handoffEnabled = false,
   } = options;
   const ogDescription = description || title;
   const commentsList = options.comments ?? [];
+  const handoffList = options.handoffs ?? [];
   const drawer = commentsDrawerHtml(artifactId, commentsList);
   return `<!doctype html>
 <html lang="en">
@@ -1357,15 +1910,16 @@ export function hostShell(options: HostShellOptions): string {
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${HOST_FRAME_CSS}</style>
+<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${handoffEnabled ? HANDOFF_CSS : ""}${HOST_FRAME_CSS}</style>
 </head>
 <body>
-${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled)}
+${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
+${handoffEnabled ? handoffChromeHtml(artifactId, handoffList) : ""}
 ${commentsDataScript(commentsList)}
-<script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};</script>
+<script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};window.__oaCanManage=${canManage};</script>
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
@@ -1374,6 +1928,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 ${liveEnabled ? `<script nonce="${nonce}">${escapeInlineScript(LIVE_SCRIPT)}</script>` : ""}
+${handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(HANDOFF_SCRIPT)}</script>` : ""}
 </body>
 </html>
 `;
@@ -1560,6 +2115,127 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(m.type==='oa:live:pick:arm')arm();
     else if(m.type==='oa:live:pick:disarm')disarm();
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
+  });
+})();
+`;
+
+// Handoff RECORD shim, running inside the sandboxed artifact frame. The host
+// page cannot reach the opaque-origin frame's DOM, so the frame captures its
+// own pointer + scroll events and postMessages them out with a timestamp (ms
+// since arm). Coordinates are clientX/clientY (viewport-relative) plus
+// scrollX/scrollY, so playback on the same artifact version maps them back to
+// the same points. mousemove is rAF-throttled (~30fps); click/scroll fire at
+// native rate. Capture-phase listeners only OBSERVE - no preventDefault - so
+// the artifact behaves normally during recording. Inert until the host sends
+// oa:handoff:record:arm; disarmed by oa:handoff:record:disarm.
+const FRAME_HANDOFF_RECORD_SCRIPT = `
+(function(){
+  if(!window.__oaSend)return;
+  var armed=false, t0=0, raf=0, lastX=0, lastY=0, dirty=false, lastSend=0;
+  var THROTTLE_MS=33;
+  function now(){ return performance.now()-t0; }
+  function curScroll(){ return { sx: window.scrollX||0, sy: window.scrollY||0 }; }
+  function onMove(e){ if(!armed)return; lastX=e.clientX; lastY=e.clientY; dirty=true; }
+  function onClick(e){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'click',x:e.clientX,y:e.clientY,sx:s.sx,sy:s.sy}); }
+  function onScroll(){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'scroll',x:lastX,y:lastY,sx:s.sx,sy:s.sy}); }
+  function onResize(){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'resize',x:0,y:0,sx:s.sx,sy:s.sy,w:window.innerWidth,h:window.innerHeight}); }
+  function tick(){
+    if(!armed)return;
+    var t=performance.now();
+    if(dirty && t-lastSend>=THROTTLE_MS){ var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'move',x:lastX,y:lastY,sx:s.sx,sy:s.sy}); dirty=false; lastSend=t; }
+    raf=requestAnimationFrame(tick);
+  }
+  function arm(){ if(armed)return; armed=true; t0=performance.now(); dirty=false; lastSend=0;
+    document.addEventListener('mousemove',onMove,true);
+    document.addEventListener('click',onClick,true);
+    window.addEventListener('scroll',onScroll,true);
+    window.addEventListener('resize',onResize);
+    document.documentElement.classList.add('oa-handoff-recording');
+    raf=requestAnimationFrame(tick);
+    window.__oaSend({type:'oa:handoff:record:ready'});
+  }
+  function disarm(){ if(!armed)return; armed=false;
+    document.removeEventListener('mousemove',onMove,true);
+    document.removeEventListener('click',onClick,true);
+    window.removeEventListener('scroll',onScroll,true);
+    window.removeEventListener('resize',onResize);
+    document.documentElement.classList.remove('oa-handoff-recording');
+    if(raf)cancelAnimationFrame(raf); raf=0;
+  }
+  window.addEventListener('message',function(e){
+    if(e.source!==window.parent)return;
+    var m=e.data; if(!m||typeof m!=='object')return;
+    if(m.type==='oa:handoff:record:arm')arm();
+    else if(m.type==='oa:handoff:record:disarm')disarm();
+  });
+})();
+`;
+
+// Handoff PLAY shim, inside the frame. Receives the recorded event stream from
+// the host (the frame cannot fetch - connect-src 'none') and reproduces a
+// synthetic cursor + click ripples + scroll, driven by its own rAF clock from
+// t=0. The host starts the webcam <video> in the same tick so the two share a
+// t=0; pause/resume/seek/stop are mirrored from the host controls. Visual-only:
+// no real DOM events are dispatched, so replay can never navigate away or
+// trigger destructive actions. Inert until oa:handoff:play arrives.
+const FRAME_HANDOFF_PLAY_SCRIPT = `
+(function(){
+  if(!window.__oaSend)return;
+  var events=[], cursor=null, raf=0, offset=0, lastResume=0, playing=false, idx=0;
+  var st=document.createElement('style');
+  st.textContent='#oa-handoff-cursor{position:fixed;top:0;left:0;width:16px;height:16px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(100,87,240,.92);border:2px solid #fff;box-shadow:0 0 0 2px rgba(100,87,240,.35),0 2px 6px rgba(0,0,0,.3);pointer-events:none;z-index:2147483644;will-change:transform} .oa-handoff-ripple{position:fixed;border-radius:50%;border:2px solid var(--oa-accent,#6457f0);pointer-events:none;z-index:2147483643;animation:oa-handoff-ripple .6s ease-out forwards} @keyframes oa-handoff-ripple{0%{transform:scale(.5);opacity:.85}100%{transform:scale(2.4);opacity:0}} html.oa-handoff-recording{box-shadow:inset 0 3px 0 0 var(--oa-danger,#b42318)}';
+  (document.head||document.documentElement).appendChild(st);
+  function mkCursor(){ if(cursor)return; cursor=document.createElement('div'); cursor.id='oa-handoff-cursor'; document.body.appendChild(cursor); }
+  function ripple(x,y){ var r=document.createElement('div'); r.className='oa-handoff-ripple'; r.style.left=(x-12)+'px'; r.style.top=(y-12)+'px'; r.style.width='24px'; r.style.height='24px'; document.body.appendChild(r); setTimeout(function(){ if(r.parentNode)r.parentNode.removeChild(r); },650); }
+  function apply(ev){
+    if(ev.kind==='scroll'||ev.kind==='resize'){ if(typeof ev.sx==='number'&&typeof ev.sy==='number'){lastScroll={sx:ev.sx,sy:ev.sy};window.scrollTo(ev.sx,ev.sy);} }
+    else if(ev.kind==='click'){ if(cursor)cursor.style.transform='translate('+ev.x+'px,'+ev.y+'px)'; ripple(ev.x,ev.y); }
+    else if(ev.kind==='move'){ if(cursor)cursor.style.transform='translate('+ev.x+'px,'+ev.y+'px)'; }
+  }
+  function curT(){ return playing ? offset+(performance.now()-lastResume) : offset; }
+  function tick(){
+    var t=curT();
+    while(idx<events.length && events[idx].t<=t){ apply(events[idx]); idx++; }
+    if(idx<events.length) raf=requestAnimationFrame(tick); else { playing=false; raf=0; }
+  }
+  function play(){ if(playing)return; playing=true; lockScroll(true); lastResume=performance.now(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); }
+  function pause(){ if(!playing)return; offset=curT(); playing=false; if(raf)cancelAnimationFrame(raf); raf=0; lockScroll(false); }
+  function seek(t){ offset=t; lastResume=performance.now(); idx=0; for(var i=0;i<events.length;i++){ if(events[i].t<=t){ apply(events[i]); idx=i+1; } else break; } if(playing){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); } }
+  function stop(){ playing=false; if(raf)cancelAnimationFrame(raf); raf=0; offset=0; idx=0; lockScroll(false); if(cursor&&cursor.parentNode)cursor.parentNode.removeChild(cursor); cursor=null; }
+  // While a handoff is playing, the viewer's own scroll is locked so the only
+  // scroll is the recorded one - the play shim drives window.scrollTo from the
+  // event stream. Capture-phase, passive:false so preventDefault holds; wheel,
+  // touchmove, and the scroll-bearing keys (arrows, space, PgUp/PgDn, Home/End)
+  // are all blocked. Released on pause/stop so the page scrolls normally then.
+  var locked=false, scrollKeys=new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','PageUp','PageDown','Home','End']);
+  function blockWheel(e){ e.preventDefault(); e.stopPropagation(); }
+  function blockTouch(e){ if(e.cancelable)e.preventDefault(); }
+  function blockKey(e){ if(scrollKeys.has(e.key)){ e.preventDefault(); e.stopPropagation(); } }
+  function lockScroll(on){
+    if(on===locked)return; locked=on;
+    if(on){
+      document.addEventListener('wheel',blockWheel,{capture:true,passive:false});
+      document.addEventListener('touchmove',blockTouch,{capture:true,passive:false});
+      document.addEventListener('keydown',blockKey,{capture:true});
+      // Freeze the recorded scroll position so the viewport does not jump.
+      var r=lastScroll; if(r)window.scrollTo(r.sx,r.sy);
+      document.documentElement.style.overflow='hidden';
+    }else{
+      document.removeEventListener('wheel',blockWheel,{capture:true});
+      document.removeEventListener('touchmove',blockTouch,{capture:true});
+      document.removeEventListener('keydown',blockKey,{capture:true});
+      document.documentElement.style.overflow='';
+    }
+  }
+  var lastScroll=null;
+  window.addEventListener('message',function(e){
+    if(e.source!==window.parent)return;
+    var m=e.data; if(!m||typeof m!=='object')return;
+    if(m.type==='oa:handoff:play'){ stop(); events=Array.isArray(m.events)?m.events:[]; mkCursor(); lastScroll=null; offset=0; idx=0; play(); }
+    else if(m.type==='oa:handoff:pause')pause();
+    else if(m.type==='oa:handoff:resume')play();
+    else if(m.type==='oa:handoff:seek')seek(Number(m.t)||0);
+    else if(m.type==='oa:handoff:stop')stop();
   });
 })();
 `;

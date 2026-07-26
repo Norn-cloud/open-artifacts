@@ -29,10 +29,14 @@ async function authorizeLive(c: Context<AppContext>, id: string) {
   const store = storeFrom(c);
   const record = await store.get(id);
   if (record === null) return null;
-  // authorizeView is the read gate; the authorizer (default = always-true for
-  // open self-host, coda0 = session/sk_ + visibility) decides who can open a
-  // live session. Identical to GET /api/artifacts/:id — no new auth surface.
-  if (!(await c.get("authorizer").authorizeView(c, record))) return null;
+  // Live editing mutates the artifact (the agent edits source + republishes),
+  // so it is WRITE-gated, not view. A missing record collapses to null -> 404
+  // so a private artifact's existence is never confirmed (matches /raw). On a
+  // default (open) self-host authorizeWrite is always false, which means Live
+  // is owner-only there too — the owner surfaces it via the write/channel
+  // token or the coda0 session. coda0's Coda0Authorizer treats a valid sk_
+  // bearer as a write principal so the agent CLI poll still reaches the DO.
+  if (!(await c.get("authorizer").authorizeWrite(c, record))) return null;
   return record;
 }
 
