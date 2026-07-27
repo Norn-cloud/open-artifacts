@@ -23,6 +23,7 @@ import {
   writeArtifactPreview,
 } from "./build-artifact.mjs";
 import { CANVAS_MARKERS, loadCanvasRuntime } from "./lib/compose.mjs";
+import { waitForEventAck } from "./lib/live-ack.mjs";
 import { loadRecipe, resolveWatchFiles } from "./lib/recipe.mjs";
 import { MAX_CONTENT_BYTES } from "./lib/validate.mjs";
 
@@ -1601,6 +1602,50 @@ async function commandLive(rest, flags) {
     return json;
   };
 
+  // Ack-status polling: the watch loop waits for each event's `done` reply to
+  // clear it from the DO's pending queue before polling the next, so the loop
+  // paces one event at a time and avoids re-delivering a lease-expired,
+  // unreplied event ahead of a newer one. The reply POST is synchronous, so
+  // this is about pacing the decoupled watcher, not confirming the reply. The
+  // deadline/exit/resilience logic lives in lib/live-ack.mjs (unit-tested).
+  const fetchStatus = async () => {
+    const { status: httpStatus, json } = await fetchJson(
+      "GET",
+      `${base}/status`,
+    );
+    if (httpStatus !== 200) {
+      throw new Error(
+        `live status failed (${httpStatus}): ${json.error ?? "unknown"}`,
+      );
+    }
+    return json;
+  };
+  const parseMs = (raw, def, min = 0) => {
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n >= min ? n : def;
+  };
+  const ackTimeoutMs = parseMs(flags["ack-timeout"], 600_000);
+  const ackPollMs = parseMs(flags["ack-poll"], 1000, 1);
+
+  // `live <id> --wait-ack <eid>`: block until the event leaves pendingEvents
+  // (or the ack timeout / session exit). Standalone defensive probe.
+  const waitAckId = flags["wait-ack"];
+  if (waitAckId) {
+    const result = await waitForEventAck(fetchStatus, waitAckId, {
+      pollIntervalMs: ackPollMs,
+      maxWaitMs: ackTimeoutMs,
+    });
+    if (result !== "cleared") {
+      fail(
+        result === "exit"
+          ? `session exited before event ${waitAckId} was acknowledged`
+          : `ack timeout waiting for event ${waitAckId}`,
+      );
+    }
+    console.log(JSON.stringify({ ok: true, id: waitAckId }));
+    return;
+  }
+
   if (!flags.watch) {
     // One-shot: print one event and exit.
     console.log(JSON.stringify(await pollOnce()));
@@ -1633,6 +1678,27 @@ async function commandLive(rest, flags) {
         await reply(evt.id, "ack");
       } catch (e) {
         console.error(`[live watch] ack failed: ${e.message}`);
+      }
+      // Wait for the agent's `done` to clear the event before polling the
+      // next, so the loop paces one event at a time and avoids re-delivering
+      // a lease-expired, unreplied event ahead of a newer one. Disable with
+      // --ack-timeout=0 for the legacy fire-and-forget behavior. An `exit`
+      // arriving during the wait (user closed the session) breaks the loop so
+      // the watcher stops promptly instead of blocking for the ack timeout.
+      if (ackTimeoutMs > 0) {
+        const result = await waitForEventAck(fetchStatus, evt.id, {
+          pollIntervalMs: ackPollMs,
+          maxWaitMs: ackTimeoutMs,
+        });
+        if (result === "exit") {
+          console.error("[live watch] session ended during edit");
+          break;
+        }
+        if (result === "timeout") {
+          console.error(
+            `[live watch] ack timeout on event ${evt.id}; continuing`,
+          );
+        }
       }
     }
     // The agent (the parent process consuming our stdout) now edits source,
@@ -1673,7 +1739,12 @@ commands:
   live <id>            live editing: poll one event (stdout JSON, exit),
                        or --reply <eid> <status> --version <n> to ack
   live <id> --watch    stay online for the session: poll, auto-ack each
-                       generate, print each event on stdout, exit on "exit"
+                       generate, print each event on stdout, exit on "exit";
+                       waits for each event's done reply (polls /live/status)
+                       before polling the next (--ack-timeout=0 disables)
+  live <id> --wait-ack <eid>
+                       block until event <eid> leaves the pending queue
+                       (polls /live/status) or the ack timeout elapses
 
 options:
   --output <path>      (build) explicit preview/export output path
@@ -1689,6 +1760,10 @@ options:
   --force              overwrite on version conflict
   --v <n>              (show) view a specific version's content
   --hook               (status) emit Claude Code hook JSON instead of text
+  --ack-timeout <ms>   (live --watch/--wait-ack) max wait for an event's done
+                       reply before continuing; default 600000, 0 disables
+  --ack-poll <ms>      (live --watch/--wait-ack) /live/status poll interval;
+                       default 1000 (remote-Worker friendly)
 
 auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > OPEN_ARTIFACTS_TOKEN >
 config createToken > credentials.json apiKey
@@ -1716,6 +1791,9 @@ async function main() {
       types: { type: "string" },
       version: { type: "string" },
       watch: { type: "boolean" },
+      "wait-ack": { type: "string" },
+      "ack-timeout": { type: "string" },
+      "ack-poll": { type: "string" },
       help: { type: "boolean" },
     },
   });

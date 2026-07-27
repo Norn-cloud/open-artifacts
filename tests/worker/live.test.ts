@@ -56,6 +56,14 @@ describe("live routes without LIVE_DO binding", () => {
     expect(res.status).toBe(404);
   });
 
+  it("GET /api/artifacts/:id/live/status returns 404", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`),
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("the viewer host page renders no Live button without the binding", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await exports.default.fetch(new Request(`${BASE}/a/${id}`));
