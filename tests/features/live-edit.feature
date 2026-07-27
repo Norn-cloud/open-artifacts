@@ -48,3 +48,11 @@ Feature: Live variant editing
     Then the generate event carries comments [{x,y,text}] and strokes [{points:[[x,y],...]}] in element-local CSS px
     And a screenshot (data URL PNG with annotations baked in) is included
     But when no annotations are present, no screenshot is sent
+
+  Scenario: The Live and Handoff toggles are mutually exclusive
+    When the deploy binds a LIVE_DO Durable Object and sets OPEN_ARTIFACTS_HANDOFF=1
+    And the owner sees both the Live and Handoff toggle buttons
+    Then opening Live closes the Handoff dock
+    And opening Handoff tears down the Live editor
+    But Live refuses to open while a handoff is recording or playing
+    So both toggles are never expanded at once
