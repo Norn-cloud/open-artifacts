@@ -150,6 +150,31 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     this.broadcast({ type, id, ...payload } as LiveEvent);
   }
 
+  // Snapshot of the pending queue for ack-status polling. The agent CLI drains
+  // this via GET /live/status to wait for its own `done` reply to clear an
+  // event before polling the next (see waitForEventAck in artifact.mjs).
+  async rpcStatus(): Promise<{
+    pendingEvents: {
+      id: string;
+      type: string;
+      leased_until: number;
+      created_at: number;
+    }[];
+  }> {
+    await this.ensureSchema();
+    const rows = this.ctx.storage.sql
+      .exec<{
+        id: string;
+        type: string;
+        leased_until: number;
+        created_at: number;
+      }>(
+        `SELECT id, type, leased_until, created_at FROM pending ORDER BY seq ASC`,
+      )
+      .toArray();
+    return { pendingEvents: rows };
+  }
+
   // --- internals ---
 
   private async ensureSchema(): Promise<void> {
