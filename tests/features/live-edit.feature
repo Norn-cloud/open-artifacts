@@ -1,8 +1,8 @@
-Feature: Live variant editing
+Feature: Live editing
   A deploy that binds a LIVE_DO Durable Object lets the viewer open a Live bar,
-  pick an element, and cycle variants the authoring agent generates by editing
-  the artifact source and republishing. A deploy without the binding keeps
-  today's viewer.
+  pick one or more elements, and have the authoring agent edit the artifact
+  source and republish - one shot per generate, no variant cycling and no
+  accept/discard loop. A deploy without the binding keeps today's viewer.
 
   Background:
     Given an instance with an artifact published at /a/<id>
@@ -26,28 +26,15 @@ Feature: Live variant editing
     Then the host postMessages oa:live:pick:arm into the frame
     And the frame picker highlights the hovered element
     And on click the frame postMessages oa:element:picked with a context blob
-    But the context is NOT a CSS selector — it is {tagName, id, classes, outerHTML, computedStyles, parentContext, boundingRect}
+    But the context is NOT a CSS selector - it is {tagName, id, classes, outerHTML, computedStyles, parentContext, boundingRect}
 
-  Scenario: The agent generates N variants by editing source and republishing
-    When the browser POSTs a generate event over the WebSocket
-    Then the agent CLI polls GET /api/artifacts/<id>/live/poll and receives {type:'generate', element, action, count}
-    And the agent edits the artifact source to wrap the picked element in a display:contents variant container with N variants
-    And the agent runs `node artifact.mjs update <id>` to republish
-    And the agent runs `node artifact.mjs live <id> --reply <eid> done --version <n>`
+  Scenario: The agent edits source once and republishes
+    When the browser sends a generate event over the WebSocket with items [{element, prompt, rect}]
+    Then the agent CLI polls GET /api/artifacts/<id>/live/poll and receives {type:'generate', items}
+    And the agent edits the artifact source and runs `node artifact.mjs update <id>` to republish as v+1
+    And the agent runs `node artifact.mjs live <id> --reply <eid> done --version <v+1>`
     Then the DO broadcasts {type:'done', id, version} to the subscribed browser
-    And the frame's MutationObserver sees the [data-impeccable-variant] children and enters Cycling
-
-  Scenario: Accept keeps the chosen variant, discard restores
-    When the user cycles to variant N and clicks Accept
-    Then the browser POSTs {type:'accept', id, variantId:N}
-    And the agent updates the source to keep only variant N (drops the wrapper) and replies done
-    Then the DO broadcasts {type:'accept'} and the host shows Confirmed
-
-  Scenario: Annotation-aware generation
-    When the user draws strokes or drops comment pins before Go
-    Then the generate event carries comments [{x,y,text}] and strokes [{points:[[x,y],...]}] in element-local CSS px
-    And a screenshot (data URL PNG with annotations baked in) is included
-    But when no annotations are present, no screenshot is sent
+    And the host reloads the frame and shows CONFIRMED "Applied"
 
   Scenario: The Live and Handoff toggles are mutually exclusive
     When the deploy binds a LIVE_DO Durable Object and sets OPEN_ARTIFACTS_HANDOFF=1
