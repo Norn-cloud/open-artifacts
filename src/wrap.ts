@@ -208,23 +208,23 @@ img,video,canvas{max-width:100%}
    need the offset. */
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
-.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
+.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 5%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
 .oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:-.01em;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
-.oa-header #oa-theme-toggle{position:relative;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
 .oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-header #oa-theme-toggle:active{transform:translateY(1px)}
-.oa-header #oa-theme-toggle svg{display:block;width:15px;height:15px}
-.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;margin-left:.5rem;padding:.2rem .5rem;border-radius:6px;transition:color .15s,background .15s}
+.oa-header #oa-theme-toggle svg{display:block;width:16px;height:16px}
+.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;margin-left:.5rem;padding:.2rem .5rem;border-radius:6px;background:transparent;transition:color .15s,background .15s}
 .oa-brand::before{content:"";position:absolute;inset:-6px 0}
 .oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-brand:active{transform:translateY(1px)}
 .oa-brand svg{display:block;width:14px;height:14px}
-@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
+@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}.oa-brand:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 @media (max-width:30rem){.oa-brand .oa-brand-text{display:none}.oa-account-name{display:none}}
 .oa-version,.oa-visibility{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
-.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:background .15s,border-color .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 /* After the base rule, not before: same selector, same specificity, and a
    media query does not raise it, so source order alone decides. Emitted
    first, the base rule's padding shorthand resets padding-right and silently
@@ -232,7 +232,7 @@ img,video,canvas{max-width:100%}
 @media (max-width:30rem){.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select:focus-visible,.oa-visibility .oa-visibility-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-version .oa-version-select:active,.oa-visibility .oa-visibility-select:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
 `;
 
 const MARKDOWN_CSS = `
@@ -249,14 +249,14 @@ const MARKDOWN_CSS = `
 `;
 
 const COMMENTS_CSS = `
-.oa-cm-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-cm-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}.oa-cm-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
 .oa-cm-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-cm-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-toggle:active{transform:translateY(1px)}
-.oa-cm-toggle svg{display:block;width:15px;height:15px;margin:auto}
-.oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--oa-accent);color:var(--oa-accent-on);font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
+.oa-cm-toggle svg{display:block;width:16px;height:16px}
+.oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--oa-accent);color:var(--oa-accent-on);font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
+.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-8px 0 24px -8px color-mix(in oklab,var(--oa-fg),transparent 72%);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
    with the theme toggle above it, and the list card shares the same edge. */
@@ -264,26 +264,26 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-head h2{flex:1;display:flex;align-items:baseline;gap:.4rem;margin:0;font-size:.8rem;font-weight:600;letter-spacing:-.01em;color:var(--oa-fg)}
 .oa-cm-drawer .oa-cm-head-count{display:none;padding:.05rem .35rem;border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums}
 .oa-cm-drawer .oa-cm-head-count[data-count]{display:inline-block}
-.oa-cm-drawer .oa-cm-close{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:15px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s}
+.oa-cm-drawer .oa-cm-close{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-muted);font-size:15px;line-height:1;cursor:pointer;transition:color .15s,background .15s}
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 /* Filter — done comments are hidden under "Open" by default, so this dropdown
    is the way back to them. The trigger shares the close button's chrome and
    sits beside it. */
 .oa-cm-filter{position:relative;flex-shrink:0;display:flex}
-.oa-cm-filter-btn{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s}
+.oa-cm-filter-btn{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-muted);cursor:pointer;transition:color .15s,background .15s}
 .oa-cm-filter-btn svg{width:14px;height:14px;display:block}
 .oa-cm-filter-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-filter-btn:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-cm-filter-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (hover:hover) and (pointer:fine){.oa-cm-filter-btn:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 .oa-cm-filter-menu{top:calc(100% + 4px)}
 .oa-cm-filter-menu button[aria-checked="true"]{background:var(--oa-surface);color:var(--oa-fg);font-weight:600}
 /* Card list — each comment is a rounded surface card (reference UI). */
 .oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
-.oa-cm-item{position:relative;display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border-radius:10px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:var(--oa-surface);transition:border-color .12s,background .12s}
-@media (hover:hover) and (pointer:fine){.oa-cm-item:hover{border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 14%)}}
+.oa-cm-item{position:relative;display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border-radius:8px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:var(--oa-surface);transition:border-color .12s,background .12s}
+@media (hover:hover) and (pointer:fine){.oa-cm-item:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
 .oa-cm-avatar{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 90%);color:var(--oa-fg);font-size:.75rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
 .oa-cm-stack{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
 .oa-cm-top{display:flex;gap:.4rem;align-items:flex-start}
@@ -321,23 +321,23 @@ const COMMENTS_CSS = `
   .oa-cm-more:hover,.oa-cm-done:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%);color:var(--oa-fg)}
   .oa-cm-done[aria-pressed="true"]:hover{color:var(--oa-accent)}
 }
-.oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg)}
+.oa-cm-menu{position:absolute;top:100%;right:0;z-index:2;min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%)}
 .oa-cm-menu[hidden]{display:none}
-.oa-cm-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
+.oa-cm-menu button{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
 .oa-cm-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 @media (hover:hover) and (pointer:fine){.oa-cm-menu button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
 .oa-cm-menu .oa-cm-del{color:var(--oa-danger)}
-@media (hover:hover) and (pointer:fine){.oa-header .oa-cm-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (hover:hover) and (pointer:fine){.oa-header .oa-cm-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 @media (max-width:30rem){.oa-cm-drawer{max-width:100%}}
 /* Anchored-comment chrome (task 011): the "add comment" tool, the compose
    popover, delete controls, and the focused-thread state. Tokens only, both
    themes, visible focus rings, no decorative motion. */
-.oa-cm-tool{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:17px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-cm-tool{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
 .oa-cm-tool:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-cm-tool svg{display:block;width:15px;height:15px;margin:auto}
-.oa-cm-tool[aria-pressed="true"]{opacity:1;border-color:var(--oa-accent);color:var(--oa-accent)}
+.oa-cm-tool svg{display:block;width:16px;height:16px}
+.oa-cm-tool[aria-pressed="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
 .oa-cm-tool:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{opacity:1}}
+@media (hover:hover) and (pointer:fine){.oa-cm-tool:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 /* Compose: a single rounded pill — "Add a comment" + a circular send button
    (muted until there is text, then accent) — floating over the artifact. The
    name is a small quiet pill shown only the first time, before one is saved. */
@@ -346,7 +346,7 @@ const COMMENTS_CSS = `
 .oa-cm-compose ::placeholder{color:var(--oa-muted);opacity:1}
 /* The name pill and the input row are the same object at two sizes: identical
    surface, border, and pill radius, no shadow — the border carries the edge. */
-.oa-cm-name,.oa-cm-row{background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px}
+.oa-cm-name,.oa-cm-row{background:var(--oa-bg);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);border-radius:999px;box-shadow:0 4px 16px -4px color-mix(in oklab,var(--oa-fg),transparent 75%)}
 .oa-cm-name{align-self:flex-start;max-width:70%;padding:.32rem .7rem;color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem}
 .oa-cm-name[hidden]{display:none}
 /* One focus treatment for both pills: whichever holds focus takes the accent
@@ -697,13 +697,13 @@ const LAYOUT_SCRIPT = `
 // Pick -> Configure -> Generating -> Confirmed. Quiet chrome, single
 // --accent, both themes, no decorative motion.
 const LIVE_CSS = `
-.oa-live-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-live-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
 .oa-live-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-live-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-live-toggle:active{transform:translateY(1px)}
-.oa-live-toggle svg{display:block;width:15px;height:15px;margin:auto}
-.oa-live-toggle[aria-expanded="true"]{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-accent) 40%);color:var(--oa-accent)}
-@media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+.oa-live-toggle svg{display:block;width:16px;height:16px}
+.oa-live-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
+@media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
 #oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
@@ -721,7 +721,7 @@ const LIVE_CSS = `
 #oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls{display:flex;align-items:center;gap:.35rem;flex-shrink:0;padding-bottom:.5rem;border-bottom:1px solid color-mix(in oklab,var(--oa-border),transparent 50%)}
 #oa-live-dock:not(:has(#oa-live-chips:not(:empty))) #oa-live-controls{padding-bottom:0;border-bottom:0}
-#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .5rem;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s,background .15s,border-color .15s}
+#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .5rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s,background .15s,border-color .15s}
 #oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls button:active{transform:translateY(1px)}
 #oa-live-controls button .oa-live-icon{display:inline-flex;align-items:center}
@@ -731,14 +731,14 @@ const LIVE_CSS = `
 #oa-live-exit{margin-left:auto}
 #oa-live-submit-wrap{margin-left:.35rem}
 #oa-live-submit-wrap:empty{display:none}
-#oa-live-submit-wrap .oa-live-submit{height:32px;padding:0 1rem;border:0;border-radius:7px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;transition:background .15s,transform .06s}
+#oa-live-submit-wrap .oa-live-submit{height:32px;padding:0 1rem;border:0;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;transition:background .15s,transform .06s}
 #oa-live-submit-wrap .oa-live-submit:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%)}
 #oa-live-submit-wrap .oa-live-submit:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-submit-wrap .oa-live-submit:active{transform:translateY(1px)}
 #oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + 5rem);display:flex;pointer-events:auto;z-index:2147483645}
 #oa-live-action-bar[hidden]{display:none}
 #oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.35rem;padding:.4rem .45rem;border-radius:12px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 6px 24px -4px color-mix(in oklab,var(--oa-fg),transparent 88%)}
-#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:32px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);border-radius:7px;padding:0 .6rem;transition:border-color .15s,box-shadow .15s}
+#oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:32px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);border-radius:6px;padding:0 .6rem;transition:border-color .15s,box-shadow .15s}
 #oa-live-action-bar .oa-live-row>input{min-width:14rem}
 #oa-live-action-bar .oa-live-row>input::placeholder{color:color-mix(in oklab,var(--oa-fg),transparent 55%)}
 #oa-live-action-bar .oa-live-row>input:focus-visible{outline:none;border-color:color-mix(in oklab,var(--oa-accent),var(--oa-border) 40%);box-shadow:var(--oa-focus-ring)}
@@ -774,15 +774,15 @@ const HOST_FRAME_CSS = `
 const ACCOUNT_CSS = `
 .oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px;margin-left:.5rem}
 .oa-account-slot:empty{display:none}
-.oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;opacity:.9;transition:opacity .15s,border-color .15s,background .15s}
+.oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;transition:color .15s,background .15s}
 .oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-account-btn:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-account-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+@media (hover:hover) and (pointer:fine){.oa-account-btn:hover{background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 .oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
 .oa-account-name{max-width:8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);z-index:2147483646}
+.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%);z-index:2147483646}
 .oa-account-menu[hidden]{display:none}
-.oa-account-menu a,.oa-account-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.78rem;cursor:pointer;text-decoration:none}
+.oa-account-menu a,.oa-account-menu button{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg);font:inherit;font-size:.78rem;cursor:pointer;text-decoration:none}
 .oa-account-menu a:focus-visible,.oa-account-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 @media (hover:hover) and (pointer:fine){.oa-account-menu a:hover,.oa-account-menu button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
 .oa-account-signin{display:inline-flex;align-items:center;height:28px;padding:0 .7rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:600;line-height:1;cursor:pointer;text-decoration:none;transition:background .15s,transform .06s}
@@ -1445,13 +1445,13 @@ const CLOSE_SVG =
 // during playback. Quiet chrome, single --accent + --danger, both themes,
 // visible focus rings, no decorative motion (the rec dot blink is informational).
 const HANDOFF_CSS = `
-.oa-handoff-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-handoff-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
 .oa-handoff-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-handoff-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-handoff-toggle:active{transform:translateY(1px)}
-.oa-handoff-toggle svg{display:block;width:15px;height:15px;margin:auto}
-.oa-handoff-toggle[aria-expanded="true"]{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-accent) 40%);color:var(--oa-accent)}
-@media (hover:hover) and (pointer:fine){.oa-handoff-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
+.oa-handoff-toggle svg{display:block;width:16px;height:16px}
+.oa-handoff-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
+@media (hover:hover) and (pointer:fine){.oa-handoff-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 #oa-handoff-root[hidden]{display:none}
 #oa-handoff-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
 #oa-handoff-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(30rem,92vw);display:flex;flex-direction:column;gap:.4rem;padding:.6rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%);pointer-events:auto}
@@ -1461,7 +1461,7 @@ const HANDOFF_CSS = `
 @keyframes oa-handoff-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-handoff-status .oa-handoff-spin{animation:none}}
 #oa-handoff-controls{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
-.oa-handoff-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
+.oa-handoff-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
 .oa-handoff-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-handoff-btn:active{transform:translateY(1px)}
 .oa-handoff-btn svg{width:13px;height:13px;display:block}
@@ -1471,13 +1471,13 @@ const HANDOFF_CSS = `
 @keyframes oa-handoff-blink{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.oa-handoff-rec-dot{animation:none}}
 @media (hover:hover) and (pointer:fine){.oa-handoff-btn:not(.oa-handoff-record):not(.oa-handoff-stop):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-.oa-handoff-play{height:30px;padding:0 .6rem;border:0;border-radius:7px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0}
+.oa-handoff-play{height:30px;padding:0 .6rem;border:0;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0}
 .oa-handoff-play svg{width:13px;height:13px}
 .oa-handoff-play:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-handoff-play:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-handoff-play:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
 .oa-handoff-dur{font-size:.78rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:center}
-.oa-handoff-del{height:30px;width:30px;border:1px solid var(--oa-border);border-radius:7px;background:var(--oa-bg);color:var(--oa-muted);cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.oa-handoff-del{height:30px;width:30px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
 .oa-handoff-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 @media (hover:hover) and (pointer:fine){.oa-handoff-del:hover{color:var(--oa-danger);border-color:color-mix(in oklab,var(--oa-danger),transparent 50%)}}
 .oa-handoff-scrub{flex:1;min-width:80px;height:4px;-webkit-appearance:none;appearance:none;background:var(--oa-border);border-radius:2px;outline:none;cursor:pointer}
@@ -1701,7 +1701,10 @@ const HANDOFF_SCRIPT = `
   function getName(){ try{return localStorage.getItem('oa-cm-name')||''}catch(e){return ''} }
   function saveDelToken(hid,t){ try{localStorage.setItem('oa-handoff-dt-'+hid,t)}catch(e){} }
   function getDelToken(hid){ try{return localStorage.getItem('oa-handoff-dt-'+hid)}catch(e){return null} }
-  function authHeaders(){ var wt=ownerToken(); return wt?{Authorization:'Bearer '+wt}:{}; }
+  // X-OA-CSRF: a SaaS deploy (coda0) gates session-based writes on this header
+  // (requireCsrf); self-host admits via the bearer wt_ instead. Send both so
+  // the upload/delete work either way.
+  function authHeaders(){ var wt=ownerToken(); var h=wt?{Authorization:'Bearer '+wt}:{}; h['X-OA-CSRF']='1'; return h; }
   function setStatus(s){ if(!statusEl)return; statusEl.innerHTML=s||''; statusEl.hidden=!s; }
 
   // canManage gates Record/Re-record/Delete (write-gated server-side). A non-
@@ -1938,8 +1941,7 @@ const HANDOFF_SCRIPT = `
   function exitPlay(){ toFrame({type:'oa:handoff:stop'}); stopSeg(); if(cam){cam.pause(); cam.removeAttribute('src'); cam.srcObject=null; cam.hidden=true; cam.onclick=null;} if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} state='IDLE'; render();
     var curV=window.__oaViewedVersion||1; frame.src='/a/'+ID+'/frame?v='+curV; }
   function delHandoff(hid){
-    var dt=getDelToken(hid); var headers=dt?{Authorization:'Bearer '+dt}:authHeaders();
-    if(!headers.Authorization){ setStatus('Sign in as owner to delete'); return; }
+    var dt=getDelToken(hid); var headers=dt?{Authorization:'Bearer '+dt}:authHeaders(); headers['X-OA-CSRF']='1';
     fetch('/api/artifacts/'+ID+'/handoffs/'+hid, {method:'DELETE', headers:headers}).then(function(r){ if(!r.ok)throw new Error('Delete failed ('+r.status+')'); return r.json(); }).then(function(){ handoff=null; try{localStorage.removeItem('oa-handoff-dt-'+hid);}catch(e){} render(); }).catch(function(err){ setStatus(esc(err.message)); });
   }
 
@@ -2403,7 +2405,7 @@ const FRAME_ANCHOR_SCRIPT = `
 const FRAME_TEXT_CSS = `
 ::highlight(oa-cm){background-color:color-mix(in oklab,var(--oa-accent),transparent 72%)}
 /* font-family is pinned to --oa-font — never inherit the artifact face. */
-.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:7px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
+.oa-cm-sel{position:fixed;z-index:2147483647;display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .55rem .28rem .45rem;border-radius:6px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 8%);background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-font);font-size:.78rem;font-weight:600;line-height:1;letter-spacing:-.01em;cursor:pointer;transform:translate(-50%,.4rem);opacity:.98;transition:border-color .12s,background .12s,opacity .12s}
 .oa-cm-sel svg{display:block;width:14px;height:14px;flex-shrink:0}
 .oa-cm-sel:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-sel:active{transform:translate(-50%,.4rem) translateY(1px)}
