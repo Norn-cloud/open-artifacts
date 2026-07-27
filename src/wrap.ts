@@ -208,21 +208,21 @@ img,video,canvas{max-width:100%}
    need the offset. */
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
-.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
-.oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:normal;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 8%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
+.oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:-.01em;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
-.oa-header #oa-theme-toggle{position:relative;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
+.oa-header #oa-theme-toggle{position:relative;display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font-size:13px;line-height:1;cursor:pointer;opacity:.8;transition:opacity .15s,border-color .15s,background .15s;flex-shrink:0}
 .oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
 .oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-header #oa-theme-toggle:active{transform:translateY(1px)}
-.oa-header #oa-theme-toggle svg{display:block}
-.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.2rem .5rem;border-radius:6px;transition:color .15s,background .15s}
+.oa-header #oa-theme-toggle svg{display:block;width:15px;height:15px}
+.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;margin-left:.5rem;padding:.2rem .5rem;border-radius:6px;transition:color .15s,background .15s}
 .oa-brand::before{content:"";position:absolute;inset:-6px 0}
 .oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-brand:active{transform:translateY(1px)}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}.oa-brand:hover{color:var(--oa-fg);background:var(--oa-surface)}}
-@media (max-width:30rem){.oa-brand .oa-brand-text{display:none}}
+@media (max-width:30rem){.oa-brand .oa-brand-text{display:none}.oa-account-name{display:none}}
 .oa-version,.oa-visibility{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
 .oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:border-color .15s,background .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 /* After the base rule, not before: same selector, same specificity, and a
@@ -772,7 +772,7 @@ const HOST_FRAME_CSS = `
 // stays empty - today's chrome unchanged. No external avatar image (name
 // initial only) so the host CSP img-src stays data: blob: - no CDN widening.
 const ACCOUNT_CSS = `
-.oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
+.oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px;margin-left:.5rem}
 .oa-account-slot:empty{display:none}
 .oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:999px;border:1px solid var(--oa-border);background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;opacity:.9;transition:opacity .15s,border-color .15s,background .15s}
 .oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
@@ -780,7 +780,7 @@ const ACCOUNT_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-account-btn:hover{opacity:1;border-color:color-mix(in oklab,var(--oa-border),var(--oa-fg) 25%)}}
 .oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
 .oa-account-name{max-width:8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);box-shadow:0 6px 20px -4px color-mix(in oklab,var(--oa-fg),transparent 80%);z-index:2147483646}
+.oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);z-index:2147483646}
 .oa-account-menu[hidden]{display:none}
 .oa-account-menu a,.oa-account-menu button{display:block;width:100%;text-align:left;padding:.4rem .55rem;border:0;border-radius:6px;background:none;color:var(--oa-fg);font:inherit;font-size:.78rem;cursor:pointer;text-decoration:none}
 .oa-account-menu a:focus-visible,.oa-account-menu button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
