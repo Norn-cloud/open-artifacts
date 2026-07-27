@@ -1242,6 +1242,15 @@ const LIVE_SCRIPT = `
 
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
+      // Live and Handoff are mutually exclusive: opening Live closes the
+      // Handoff dock first. __oaCloseHandoff returns false while a handoff is
+      // recording/playing (it refuses to yield) - then bail out rather than
+      // run both at once; stop the handoff first, then open Live.
+      if(window.__oaCloseHandoff && !window.__oaCloseHandoff()) return;
+      // Reconnect if the ws died (a prior Exit, or Handoff tore Live down).
+      // onclose only auto-reconnects while non-IDLE, so an IDLE-time close
+      // leaves it dead - reopen has to re-establish it explicitly.
+      if(!ws || ws.readyState>=2) connect();
       root.removeAttribute('hidden');
       liveToggle.setAttribute('aria-expanded','true');
       // Clicking Live = enter pick mode immediately. The global bar's Pick
@@ -1370,6 +1379,11 @@ const LIVE_SCRIPT = `
 
   // --- WebSocket ---
   function connect(){
+    // Idempotent against concurrent callers: the toggle's reopen reconnect can
+    // race a pending onclose auto-reconnect (1s timer) when the ws dies while
+    // non-IDLE. Bail if a socket is already open or connecting so we don't
+    // orphan it - connect() reassigns ws without closing the prior one.
+    if(ws && ws.readyState<=1) return;
     try{ ws=new WebSocket(cfg.wsUrl); }catch(e){ setTimeout(connect,1000); return; }
     ws.onopen=function(){ wsReady=true; };
     ws.onmessage=function(e){
@@ -1403,7 +1417,16 @@ const LIVE_SCRIPT = `
     if(!on){ setState('PICKING'); toFrame({type:'oa:live:pick:arm'}); }
     else{ setState('IDLE'); toFrame({type:'oa:live:pick:disarm'}); }
   };
-  exitBtn.onclick=function(){ send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false'); };
+  function exitLive(){
+    // No-op when Live isn't open. The Handoff dock calls this on open to tear
+    // Live down (mutual exclusion); a no-op preserves the idle websocket so
+    // Live still works if opened afterwards. Tearing down is otherwise safe -
+    // Live has no irreplaceable in-flight work, so it always yields when open.
+    if(root.hidden) return;
+    send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false');
+  }
+  exitBtn.onclick=exitLive;
+  window.__oaExitLive=exitLive;
 
   function reset(){ state='IDLE'; items=[]; draft=null; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
 
@@ -1686,8 +1709,19 @@ const HANDOFF_SCRIPT = `
   // handoff exists and there's no owner toggle button to click.
   var canManage = window.__oaCanManage === true;
   function openDock(){ root.removeAttribute('hidden'); if(toggle)toggle.setAttribute('aria-expanded','true'); render(); }
-  function closeDock(){ if(state!=='IDLE')return; root.hidden=true; if(toggle)toggle.setAttribute('aria-expanded','false'); }
-  if(toggle)toggle.addEventListener('click',function(){ root.hidden?openDock():closeDock(); });
+  function closeDock(){ if(state!=='IDLE')return false; root.hidden=true; if(toggle)toggle.setAttribute('aria-expanded','false'); return true; }
+  // Exposed so the Live editor can ask the Handoff dock to yield when Live
+  // opens (mutual exclusion). Returns true when closed (or already closed),
+  // false while recording/playing - those have irreplaceable in-flight work.
+  window.__oaCloseHandoff=function(){ return root.hidden ? true : closeDock(); };
+  if(toggle)toggle.addEventListener('click',function(){
+    if(root.hidden){
+      // Live and Handoff are mutually exclusive: opening Handoff tears Live
+      // down first via its exposed exit (a clean, safe teardown).
+      if(window.__oaExitLive) window.__oaExitLive();
+      openDock();
+    } else closeDock();
+  });
 
   function render(){ if(!controls)return; controls.innerHTML='';
     if(state==='IDLE')renderIdle();
