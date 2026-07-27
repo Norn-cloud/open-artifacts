@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-27T05:39:45Z",
+  "title": "Design System: Open Artifacts (service chrome)",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Indigo",
+        "canonical": "#6457f0",
+        "tonalRamp": [
+          "oklch(20% 0.10 280)",
+          "oklch(30% 0.15 280)",
+          "oklch(40% 0.18 280)",
+          "oklch(50% 0.20 280)",
+          "oklch(55% 0.20 280)",
+          "oklch(65% 0.17 280)",
+          "oklch(78% 0.12 280)",
+          "oklch(92% 0.04 280)"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "BG",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(20% 0.004 280)",
+          "oklch(30% 0.004 280)",
+          "oklch(45% 0.004 280)",
+          "oklch(60% 0.004 280)",
+          "oklch(75% 0.004 280)",
+          "oklch(88% 0.004 280)",
+          "oklch(95% 0.004 280)",
+          "oklch(100% 0 0)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#f8f8f8",
+        "tonalRamp": [
+          "oklch(20% 0.004 280)",
+          "oklch(35% 0.004 280)",
+          "oklch(50% 0.004 280)",
+          "oklch(65% 0.004 280)",
+          "oklch(78% 0.004 280)",
+          "oklch(88% 0.004 280)",
+          "oklch(95% 0.004 280)",
+          "oklch(98% 0.004 280)"
+        ]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "FG",
+        "canonical": "#18181b",
+        "tonalRamp": [
+          "oklch(12% 0.006 280)",
+          "oklch(20% 0.006 280)",
+          "oklch(35% 0.005 280)",
+          "oklch(50% 0.005 280)",
+          "oklch(65% 0.005 280)",
+          "oklch(78% 0.004 280)",
+          "oklch(90% 0.004 280)",
+          "oklch(96% 0.004 280)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#71717a",
+        "tonalRamp": [
+          "oklch(20% 0.008 280)",
+          "oklch(30% 0.008 280)",
+          "oklch(42% 0.008 280)",
+          "oklch(52% 0.008 280)",
+          "oklch(60% 0.008 280)",
+          "oklch(70% 0.007 280)",
+          "oklch(82% 0.006 280)",
+          "oklch(92% 0.005 280)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "#e4e4e7",
+        "tonalRamp": [
+          "oklch(20% 0.006 280)",
+          "oklch(35% 0.006 280)",
+          "oklch(50% 0.006 280)",
+          "oklch(65% 0.006 280)",
+          "oklch(78% 0.006 280)",
+          "oklch(86% 0.006 280)",
+          "oklch(92% 0.005 280)",
+          "oklch(96% 0.004 280)"
+        ]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Danger",
+        "canonical": "#b42318",
+        "tonalRamp": [
+          "oklch(20% 0.10 25)",
+          "oklch(30% 0.14 25)",
+          "oklch(40% 0.16 25)",
+          "oklch(48% 0.17 25)",
+          "oklch(58% 0.16 25)",
+          "oklch(70% 0.13 25)",
+          "oklch(82% 0.08 25)",
+          "oklch(92% 0.04 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Header title, drawer headings." },
+      "body": { "displayName": "Body", "purpose": "Header running text." },
+      "label": { "displayName": "Label", "purpose": "Select options, secondary controls." },
+      "caption": { "displayName": "Caption", "purpose": "Comment bylines, tags, metadata." },
+      "micro": { "displayName": "Micro", "purpose": "Count badges only." }
+    },
+    "shadows": [
+      { "name": "focus-ring", "value": "0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)", "purpose": "Layered :focus-visible ring on every control. The only shadow on inline chrome." },
+      { "name": "panel-lift", "value": "0 4px 12px -2px color-mix(in oklab, var(--oa-fg), transparent 78%)", "purpose": "Dropdown menus and the compose popover." },
+      { "name": "drawer-lift", "value": "-8px 0 24px -8px color-mix(in oklab, var(--oa-fg), transparent 72%)", "purpose": "The comments drawer (directional, left edge)." },
+      { "name": "action-bar-lift", "value": "0 6px 24px -4px color-mix(in oklab, var(--oa-fg), transparent 88%)", "purpose": "The live action bar (deepest, with backdrop-blur)." }
+    ],
+    "motion": [
+      { "name": "fast", "value": "150ms", "purpose": "Feedback: color/bg transitions on hover, toggle, press." },
+      { "name": "base", "value": "200ms", "purpose": "State: menu open, popover." },
+      { "name": "drawer", "value": "180ms ease", "purpose": "Comments drawer slide (translateX)." },
+      { "name": "ease-standard", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Default easing for state transitions." }
+    ],
+    "breakpoints": [
+      { "name": "narrow", "value": "30rem", "purpose": "Hide brand text + account name; selects cap at 5rem; drawer goes full-width." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Icon button (ghost)",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "The canonical header toggle - theme, comments, live, handoff. Ghost: transparent, no border, muted->fg on hover, accent tint when active.",
+      "html": "<button class=\"ds-icon-btn\" aria-pressed=\"false\" title=\"Toggle\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2\"/></svg></button>",
+      "css": ".ds-icon-btn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted,#71717a);border-radius:6px;cursor:pointer;transition:color .15s,background .15s}.ds-icon-btn::before{content:\"\";position:absolute;inset:-6px}.ds-icon-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-icon-btn:active{transform:translateY(1px)}.ds-icon-btn:hover{color:var(--oa-fg,#18181b);background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 90%)}.ds-icon-btn[aria-pressed=\"true\"]{color:var(--oa-accent,#6457f0);background:color-mix(in oklab,var(--oa-accent,#6457f0),transparent 88%)}.ds-icon{width:16px;height:16px;display:block}"
+    },
+    {
+      "name": "Select (trigger)",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "Native select styled as a shadcn trigger: bg-background, 6px radius, custom chevron, hover tint, accent border + ring on focus.",
+      "html": "<select class=\"ds-select\" aria-label=\"Version\"><option>v1</option><option>v2</option><option>v3</option></select>",
+      "css": ".ds-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff);color:var(--oa-fg,#18181b);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted,#71717a) 50%),linear-gradient(135deg,var(--oa-muted,#71717a) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat;transition:background .15s,border-color .15s}.ds-select:hover{background-color:color-mix(in oklab,var(--oa-fg,#18181b),transparent 92%)}.ds-select:focus-visible{outline:none;border-color:var(--oa-accent,#6457f0);box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}"
+    },
+    {
+      "name": "Count badge",
+      "kind": "chip",
+      "refersTo": "count-badge",
+      "description": "Accent-filled, rounded-full, 9px/600. Pinned top-right of a toggle; hidden unless a count is set.",
+      "html": "<span class=\"ds-badge\">3</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--oa-accent,#6457f0);color:var(--oa-accent-on,#fff);font-size:9px;font-weight:600;line-height:15px;text-align:center}"
+    },
+    {
+      "name": "Avatar",
+      "kind": "custom",
+      "refersTo": "avatar",
+      "description": "28px circle, fg-tinted fill, uppercase initials. Used in the account chip and comment items.",
+      "html": "<span class=\"ds-avatar\">F</span>",
+      "css": ".ds-avatar{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 90%);color:var(--oa-fg,#18181b);font-size:.75rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}"
+    },
+    {
+      "name": "Comment item (card)",
+      "kind": "card",
+      "refersTo": "comment-item",
+      "description": "8px (rounded-lg) surface card, 1px tinted border, hover bg tint. Avatar + title + byline. Flat - no shadow on inline cards.",
+      "html": "<div class=\"ds-card\"><span class=\"ds-avatar\">F</span><div class=\"ds-card-stack\"><span class=\"ds-card-title\">Looks good here</span><span class=\"ds-card-byline\">Frad · 2m</span></div></div>",
+      "css": ".ds-card{display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border-radius:8px;border:1px solid color-mix(in oklab,var(--oa-border,#e4e4e7),var(--oa-fg,#18181b) 4%);background:var(--oa-surface,#f8f8f8);transition:background .12s}.ds-card:hover{background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 94%)}.ds-card-stack{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}.ds-card-title{font-size:.875rem;font-weight:600;line-height:1.35;color:var(--oa-fg,#18181b)}.ds-card-byline{font-size:.72rem;color:var(--oa-muted,#71717a)}"
+    },
+    {
+      "name": "Dropdown menu",
+      "kind": "custom",
+      "refersTo": "dropdown-menu",
+      "description": "shadcn DropdownMenu: 6px radius, panel-lift shadow, 4px (rounded-sm) items with hover tint. Destructive item in danger.",
+      "html": "<div class=\"ds-menu\"><button class=\"ds-menu-item\">Edit</button><button class=\"ds-menu-item\">Resolve</button><button class=\"ds-menu-item ds-menu-danger\">Delete</button></div>",
+      "css": ".ds-menu{min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg,#18181b),transparent 78%)}.ds-menu-item{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg,#18181b);font:inherit;font-size:.8rem;cursor:pointer;transition:background .12s}.ds-menu-item:hover{background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 94%)}.ds-menu-item:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-menu-danger{color:var(--oa-danger,#b42318)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Instrument",
+    "overview": "The service chrome is the host UI around an artifact - the sticky header, its toggles, the comments drawer, the live and handoff docks, the version picker. It is tool UI, not content: quiet, precise, systems-grade, the kind of chrome a Figma canvas or a Linear toolbar user trusts on sight. The artifact leads; the chrome recedes. One accent, one font family, one radius scale, both themes always, keyboard first-class. The chrome does not own a palette of its own - it reads --oa-* tokens that bridge to the artifact's identity, so a brand-register artifact repaints the chrome to match. The design system is therefore structural: sizes, radii, spacing, states, focus. Icon buttons are shadcn ghost (transparent, no border, muted-to-fg on hover, accent tint when active). Inline chrome is flat; floating panels (drawer, dropdown, compose, action bar) cast a --oa-fg-tinted shadow to lift above the canvas.",
+    "keyCharacteristics": [
+      "One accent (Signal Indigo #6457f0 / #8d82f5 dark), the only interactive color; danger for destruction only.",
+      "Both themes always; the viewer stamps data-theme and every chrome element reads in light and dark.",
+      "28px hit targets, shadcn radii (6px controls, 4px menu items, 8px cards, 999px badges/avatar).",
+      "Ghost icon buttons (transparent, no border, muted-to-fg on hover).",
+      "Inline chrome flat; floating panels cast a --oa-fg-tinted shadow.",
+      "Keyboard-first: :focus-visible rings on every control, no animation on high-frequency actions."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Signal Indigo is the only interactive color. Danger is for destruction only. No second accent, no semantic red/yellow/green in chrome.", "section": "colors" },
+      { "name": "The Bridge Rule", "body": "The chrome reads --oa-*, which the token contract mirrors from the artifact's identity tokens. Never hand-override --oa-* in an artifact theme fragment.", "section": "colors" },
+      { "name": "The Flat-Bar / Lifted-Panel Rule", "body": "Inline chrome (header, icon buttons, selects, list cards) is flat. Only panels that float over content (drawer, dropdown, compose, action bar) cast a shadow. Never shadow an inline control.", "section": "elevation" },
+      { "name": "The Compact Radius Rule", "body": "Radii stay at 4-8px for controls and cards (plus 999px pill for badges/avatar/compose). No 12px+ corners in chrome.", "section": "shapes" },
+      { "name": "The One Family Rule", "body": "One font family in the chrome; no display face, no mono costume. Hierarchy is weight + size, not family contrast.", "section": "typography" }
+    ],
+    "dos": [
+      "Do use one accent (Signal Indigo) for every interactive/active state; danger only for destructive actions.",
+      "Do ship :focus-visible rings (the layered focus-ring shadow) on every control; keyboard is first-class.",
+      "Do keep hit targets at 28px and radii aligned (6px controls, 4px menu items, 8px cards, 999px badges/avatar/compose).",
+      "Do let the chrome follow the artifact's palette via the --oa-* bridge; the service defaults are a fallback, not a fixed identity.",
+      "Do support both themes on every chrome element.",
+      "Do shadow floating panels (drawer, dropdown, compose, action bar) with a --oa-fg-tinted color-mix so the shadow reads in both themes."
+    ],
+    "donts": [
+      "Don't shadow inline controls (icon buttons, selects, list cards) - they stay flat; only floating panels cast a shadow.",
+      "Don't introduce a second accent or decorative semantic colors in chrome.",
+      "Don't hand-override --oa-* tokens in artifact theme fragments - the bridge already mirrors the artifact identity.",
+      "Don't animate high-frequency actions (toggles, presses); motion is .15s for feedback and .18s for drawer slide, nothing more.",
+      "Don't invent new chrome control patterns - reuse the ghost icon-button; the chrome's consistency is its identity."
+    ]
+  }
+}

@@ -38,8 +38,8 @@ typography:
     lineHeight: 1
 rounded:
   button: "6px"
-  item: "10px"
-  badge: "8px"
+  item: "8px"
+  badge: "999px"
   avatar: "50%"
 spacing:
   xs: "0.375rem"
@@ -48,16 +48,16 @@ spacing:
   lg: "1rem"
 components:
   icon-button:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.fg}"
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.muted}"
     rounded: "{rounded.button}"
     height: "28px"
     width: "28px"
   icon-button-active:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.bg}"
     textColor: "{colors.accent}"
   select:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.bg}"
     textColor: "{colors.fg}"
     rounded: "{rounded.button}"
     height: "28px"
@@ -98,9 +98,11 @@ structural - sizes, radii, spacing, states, focus - carried by a small set of
 - One accent (`#6457f0` light / `#8d82f5` dark), the only interactive color.
 - Both themes always; the viewer stamps `data-theme` and every chrome element
   reads in light and dark.
-- 28px hit targets, 6px radii, 1px hairline borders - a console, not soft UI.
-- Flat by default: hairline borders + surface tint carry depth; the only shadow
-  is the layered focus ring.
+- 28px hit targets, shadcn-aligned radii (6px controls, 4px menu items, 8px
+  cards, 999px badges/avatar) - a console, not soft UI.
+- Ghost icon buttons (transparent, no border, muted-to-fg on hover); inline
+  chrome is flat, floating panels (drawer, dropdown, compose, action bar) cast a
+  `--oa-fg`-tinted shadow.
 - Keyboard-first: `:focus-visible` rings on every control, no animation on
   high-frequency actions.
 
@@ -124,7 +126,7 @@ and a lightness staircase for depth.
 - **BG** (`#ffffff`): page and drawer floor.
 - **Surface** (`#f8f8f8`): toggle/select fills, comment-item cards.
 - **FG** (`#18181b`): primary text and icon color.
-- **Muted** (`#71717a`): bylines, labels, inactive icon color (at `opacity .8`).
+- **Muted** (`#71717a`): bylines, labels, and the rest-state icon color on ghost buttons (hover lifts to `--oa-fg`).
 - **Border** (`#e4e4e7`): 1px hairlines on every control and divider.
 
 ### Neutral (dark)
@@ -182,45 +184,55 @@ artifact, not the frame.
 
 ## Elevation & Depth
 
-Flat by default. Structure comes from 1px hairline borders (`--oa-border`) and
-the surface tint (`--oa-surface` on `--oa-bg`). The header carries a
-`backdrop-filter: blur(10px)` over an 8%-transparent background so content
-scrolls beneath it - the only place blur is permitted. Dark-theme depth is a
-lightness staircase (`#131316` -> `#1c1c21`), never a shadow.
+Flat surfaces, lifted panels. Bars and inline controls (icon buttons, selects,
+cards) stay flat - structure comes from 1px hairline borders (`--oa-border`) and
+the surface tint (`--oa-surface` on `--oa-bg`). **Floating panels** - the
+comments drawer, dropdown menus, the compose popover, the live action bar - cast
+a soft shadow to lift above the canvas. The header carries a
+`backdrop-filter: blur(10px)` over a 5%-transparent background so content scrolls
+beneath it. Dark-theme depth is a lightness staircase (`#131316` -> `#1c1c21`)
+for surfaces; floating-panel shadows use a `--oa-fg`-tinted `color-mix` so they
+read in both themes.
 
 ### Shadow Vocabulary
 - **Focus ring** (`box-shadow: 0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)`):
-  the only shadow in the chrome. Layered (bg gap + accent outer) so it reads on
-  any surface; applied on `:focus-visible` only.
+  layered (bg gap + accent outer) so it reads on any surface; applied on
+  `:focus-visible` only.
+- **Panel lift** (`box-shadow: 0 4px 12px -2px color-mix(in oklab, var(--oa-fg), transparent 78%)`):
+  dropdown menus and the compose popover. The drawer uses a directional variant
+  (`-8px 0 24px -8px …`); the live action bar a deeper one (`0 6px 24px -4px …`).
 
 ### Named Rules
-**The Flat Chrome Rule.** No drop shadows on chrome elements - not cards, not
-drawers, not toggles. Borders + surface tint + the focus ring carry everything.
-The header's backdrop-blur is the single exception.
+**The Flat-Bar / Lifted-Panel Rule.** Inline chrome (header bar, icon buttons,
+selects, list cards) is flat - borders and surface tint carry it. Only panels
+that float over content (drawer, dropdown menu, compose popover, action bar)
+cast a shadow. Never shadow an inline control.
 
 ## Shapes
 
-Compact, console-grade radii. `6px` for every interactive control (icon buttons,
-selects, close, filter), `10px` for comment-item cards, `8px` for count badges,
-`50%` for avatars only. No large radii; the chrome is a tool, not a soft
-consumer surface.
+Compact, shadcn-aligned radii. `6px` (rounded-md) for icon buttons, selects, and
+menu containers; `4px` (rounded-sm) for menu items; `8px` (rounded-lg) for
+comment-item cards; `999px` (full) for the count badge, avatar, and the compose
+pill. No large radii; the chrome is a tool, not a soft consumer surface.
 
 ### Named Rules
-**The Compact Radius Rule.** Radii stay at 6-10px (plus the avatar circle). No
-`12px+` corners in chrome. The radius scale is `--oa-*`-aware but does not shift
-between themes.
+**The Compact Radius Rule.** Radii stay at 4-8px for controls and cards (plus
+the `999px` pill for badges/avatar/compose). No `12px+` corners in chrome. The
+radius scale is `--oa-*`-aware but does not shift between themes.
 
 ## Components
 
 ### Icon button (the canonical toggle)
 One repeating pattern drives every header control - theme toggle, live toggle,
-handoff toggle, comments toggle, close, filter. 28×28 (`6px` radius, 1px
-`--oa-border`, `--oa-surface` fill, `--oa-fg` icon at `opacity .8`). A
-`::before` pseudo expands the hit area (`inset: -6px`). `:focus-visible` shows
-the focus ring; `:active` shifts `translateY(1px)`. `[aria-expanded="true"]` or
-`[aria-pressed="true"]` raises opacity to 1, tints the border toward the accent,
-and colors the icon `--oa-accent`. SVG icons are `15×15`, `display: block`,
-centered.
+handoff toggle, comments toggle, close, filter. A shadcn **ghost** button:
+28×28, `6px` radius, transparent background, no border (`1px solid transparent`
+keeps the box), `--oa-muted` icon at rest. A `::before` pseudo expands the hit
+area (`inset: -6px`). `:focus-visible` shows the focus ring; `:active` shifts
+`translateY(1px)`. Hover lifts the icon to `--oa-fg` and tints the background
+(`color-mix(in oklab, var(--oa-fg), transparent 90%)`). `[aria-expanded="true"]`
+or `[aria-pressed="true"]` colors the icon `--oa-accent` and tints the background
+toward the accent (`color-mix(in oklab, var(--oa-accent), transparent 88%)`).
+SVG icons are `16×16`, `display: block`, centered.
 
 ### Header
 Sticky, backdrop-blurred, 2.5rem tall. Favicon + title (ellipsis, `0.8rem`/600)
@@ -229,23 +241,27 @@ handoff toggle, theme toggle trail right. `--oa-header-h` is exposed so artifact
 sticky bars and full-viewport sections clear it.
 
 ### Select (version / visibility)
-`28px` min-height, `6px` radius, 1px border, `--oa-surface` fill, `0.75rem`
-label. Custom chevron via two `linear-gradient` arrows in `--oa-muted`.
+`28px` min-height, `6px` radius, 1px border, `--oa-bg` fill (shadcn trigger),
+`0.75rem` label. Custom chevron via two `linear-gradient` arrows in `--oa-muted`.
+Hover tints the background (`color-mix(in oklab, var(--oa-fg), transparent 92%)`);
 `:focus-visible` -> accent border + focus ring.
 
 ### Comments drawer
-Fixed right, `23rem` max, slides `.18s`. Head (title + count + close), filter
-row, scrollable list, footer input. Comment items: `10px` radius, `--oa-surface`
-bg, 1px tinted border, avatar + title (`0.875rem`/600) + byline (`0.72rem`
-muted). Done state strikes through and dims the avatar.
+Fixed right, `23rem` max, slides `.18s`, casts a directional shadow (panel lift).
+Head (title + count + close), filter row, scrollable list, footer input.
+Comment items: `8px` radius (rounded-lg), `--oa-surface` bg, 1px tinted border,
+hover background tint, avatar + title (`0.875rem`/600) + byline (`0.72rem`
+muted). Done state strikes through and dims the avatar. Dropdown menus (more,
+filter) are shadcn-style: `6px` radius, panel-lift shadow, `4px` items with
+hover tint.
 
 ### Avatar
 `28px` circle, `--oa-fg`-tinted fill (`color-mix(in oklab, var(--oa-fg), transparent 90%)`),
 initials uppercase `0.75rem`/600.
 
 ### Count badge
-`--oa-accent` fill, `--oa-accent-on` text, `9px`/600, `8px` radius, pinned
-top-right of its toggle. Hidden unless `[data-count]` is set.
+`--oa-accent` fill, `--oa-accent-on` text, `9px`/600, `999px` radius (rounded-full),
+pinned top-right of its toggle. Hidden unless `[data-count]` is set.
 
 ### Live / Handoff docks
 Bottom-center pills that inherit the icon-button vocabulary for their controls
@@ -259,19 +275,23 @@ exclusive (opening one closes the other) - a state rule, not a visual one.
   danger only for destructive actions.
 - **Do** ship `:focus-visible` rings (the layered focus-ring shadow) on every
   control; keyboard is first-class.
-- **Do** keep hit targets at 28px and radii at 6-10px - a console dialect.
+- **Do** keep hit targets at 28px and radii aligned (6px controls, 4px menu
+  items, 8px cards, 999px badges/avatar/compose).
 - **Do** let the chrome follow the artifact's palette via the `--oa-*` bridge;
   the service defaults are a fallback, not a fixed identity.
 - **Do** support both themes on every chrome element; the viewer stamps
   `data-theme` and the toggle must win over `prefers-color-scheme`.
+- **Do** shadow floating panels (drawer, dropdown, compose, action bar) so they
+  lift above the canvas; use a `--oa-fg`-tinted `color-mix` so the shadow reads
+  in both themes.
 
 ### Don't
-- **Don't** drop shadows on chrome - borders + surface tint + the focus ring
-  only (the header's backdrop-blur is the single exception).
+- **Don't** shadow inline controls (icon buttons, selects, list cards) - they
+  stay flat; only floating panels cast a shadow.
 - **Don't** introduce a second accent or decorative semantic colors in chrome.
 - **Don't** hand-override `--oa-*` tokens in artifact theme fragments - the
   bridge already mirrors the artifact identity.
 - **Don't** animate high-frequency actions (toggles, presses); motion is
   `.15s` for feedback and `.18s` for drawer slide, nothing more.
-- **Don't** invent new chrome control patterns - reuse the icon-button; the
-  chrome's consistency is its identity.
+- **Don't** invent new chrome control patterns - reuse the ghost icon-button;
+  the chrome's consistency is its identity.
