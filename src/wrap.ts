@@ -1320,14 +1320,17 @@ const DOCK_SCRIPT = `
     toggle:function(name){ var d=docks[name]; if(!d)return false; return active===name?close(name):open(name); },
     isActive:function(name){return active===name;}
   };
-  // One Escape closes the active dock (after any open comments surface - drawer,
-  // compose, menu - has had its turn), restoring focus to its toggle. A refused
-  // close (Handoff recording/playing) surfaces the dock's refuseMessage instead.
+  // One Escape closes the active dock, but only after any open comments surface
+  // (drawer/compose/menu) has had its turn. The surfaces' own Escape handlers
+  // close them synchronously in the bubble phase, so this listener is captured
+  // to run FIRST and bail when one is still open - the surface closes on this
+  // keypress, the dock on the next. A refused close (Handoff recording/playing)
+  // surfaces the dock's refuseMessage instead.
   document.addEventListener('keydown',function(e){
     if(e.key!=='Escape'||!active)return;
     if(document.querySelector('.oa-cm-drawer[data-open], #oa-cm-compose:not([hidden]), .oa-cm-menu:not([hidden])'))return;
     close(active);
-  });
+  }, true);
 })();
 `;
 
@@ -1876,7 +1879,9 @@ const HANDOFF_SCRIPT = `
       close: closeDock,
       restoreFocus: function(){ if(toggle) toggle.focus(); },
       refuseMessage: function(){
-        return state==='RECORDING' ? 'Stop the recording before closing.' : 'Stop playback before closing.';
+        if(state==='RECORDING') return 'Stop the recording before closing.';
+        if(state==='SAVING') return 'Saving the handoff - please wait...';
+        return 'Stop playback before closing.';
       }
     });
   }
