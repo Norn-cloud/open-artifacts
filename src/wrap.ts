@@ -882,7 +882,7 @@ const ACCOUNT_SCRIPT = `
   }
   showLoading();
   fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else slot.innerHTML='';return null;}return r.json();}).then(function(me){
-    if(!me)return;var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
+    if(!me){slot.innerHTML='';return;}var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
   }).catch(function(){slot.innerHTML=''});
 })();
 `;
@@ -1979,7 +1979,7 @@ const HANDOFF_SCRIPT = `
     setStatus('<span class="oa-handoff-spin"></span>Starting blur…');
     var waited=0;
     function tick(){
-      if(!camBlur){ beginRecord(s); return; }
+      if(!camBlur){ setStatus(''); beginRecord(s); return; }
       if(segFirstFrame){ setStatus(''); beginRecord(s); return; }
       waited+=60;
       if(waited>=4000){ setStatus('Blur unavailable - recording raw'); beginRecord(s); return; }
