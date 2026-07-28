@@ -13,6 +13,7 @@ Feature: Live editing
     And GET /api/artifacts/<id>/live/poll returns 404
     And POST /api/artifacts/<id>/live/reply returns 404
     And GET /api/artifacts/<id>/live/status returns 404
+    And POST /api/artifacts/<id>/live/consume-exit returns 404
     And the /a/<id> host page renders no "Live" button
     And the /a/<id>/frame document carries the picker script (no-op until armed)
 
@@ -79,3 +80,9 @@ Feature: Live editing
     And the watch polls GET /api/artifacts/<id>/live/status at a bounded interval until the event leaves pendingEvents before polling the next event
     But `--ack-timeout=0` disables the wait and restores fire-and-forget polling
     And a standalone `node artifact.mjs live <id> --wait-ack <eid>` blocks until that event is cleared or the ack timeout elapses
+
+  Scenario: An observed exit is consumed so it does not poison a new session
+    When the browser closes the live session (enqueues an exit event)
+    And the agent's watcher observes the exit via pollOnce or /live/status during an ack-wait
+    Then the watcher POSTs /api/artifacts/<id>/live/consume-exit to drop the exit row
+    And a new `node artifact.mjs live <id> --watch` started within the GC window does not break on the stale exit

@@ -56,6 +56,9 @@ watcher loop, not to confirm the reply itself.
   restoring fire-and-forget polling).
 - `--ack-poll=MS` - `/live/status` poll interval (default 1000; the status route
   is a remote Worker, not localhost, so 400ms-class intervals are too aggressive).
+- When the watcher observes an `exit` (via pollOnce or `/live/status` during the
+  ack-wait), it POSTs `/live/consume-exit` to drop queued exit rows, so a stale
+  exit from a prior session can't poison a new `--watch` within the 1h GC window.
 - On ack timeout the watcher warns on stderr and continues (resilient, not a hard
   fail). If the user exits the session during the wait, the next `/live/status`
   poll surfaces the `exit` event and the watcher stops promptly instead of

@@ -1620,6 +1620,16 @@ async function commandLive(rest, flags) {
     }
     return json;
   };
+  // Drop queued exit rows so a stale exit from a prior session can't poison a
+  // new --watch (pollOnce would otherwise re-offer it for up to the 1h GC).
+  // Called when the watcher observes an exit, via pollOnce or /status.
+  const consumeExit = async () => {
+    try {
+      await fetchJson("POST", `${base}/consume-exit`);
+    } catch (e) {
+      console.error(`[live watch] consume-exit failed: ${e.message}`);
+    }
+  };
   const parseMs = (raw, def, min = 0) => {
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n >= min ? n : def;
@@ -1670,6 +1680,7 @@ async function commandLive(rest, flags) {
     }
     console.log(JSON.stringify(evt));
     if (evt.type === "exit") {
+      await consumeExit();
       console.error("[live watch] session ended");
       break;
     }
@@ -1691,6 +1702,7 @@ async function commandLive(rest, flags) {
           maxWaitMs: ackTimeoutMs,
         });
         if (result === "exit") {
+          await consumeExit();
           console.error("[live watch] session ended during edit");
           break;
         }

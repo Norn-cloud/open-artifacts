@@ -175,6 +175,17 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     return { pendingEvents: rows };
   }
 
+  // Drop queued exit rows so a stale exit from a prior session can't poison a
+  // new --watch (pollOnce would otherwise re-offer it for up to the 1h GC).
+  // Called by the agent CLI when it observes an exit (via pollOnce or the
+  // /status ack-wait). Safe vs. the done-races-exit case: acknowledge (done/
+  // error) still preserves exits - only an explicit consume clears them, and
+  // only after the watcher has already seen one.
+  async rpcConsumeExit(): Promise<void> {
+    await this.ensureSchema();
+    await this.ctx.storage.sql.exec(`DELETE FROM pending WHERE type = 'exit'`);
+  }
+
   // --- internals ---
 
   private async ensureSchema(): Promise<void> {
