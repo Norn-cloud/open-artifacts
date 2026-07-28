@@ -150,6 +150,42 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     this.broadcast({ type, id, ...payload } as LiveEvent);
   }
 
+  // Snapshot of the pending queue for ack-status polling. The agent CLI drains
+  // this via GET /live/status to wait for its own `done` reply to clear an
+  // event before polling the next (see waitForEventAck in artifact.mjs).
+  async rpcStatus(): Promise<{
+    pendingEvents: {
+      id: string;
+      type: string;
+      leased_until: number;
+      created_at: number;
+    }[];
+  }> {
+    await this.ensureSchema();
+    const rows = this.ctx.storage.sql
+      .exec<{
+        id: string;
+        type: string;
+        leased_until: number;
+        created_at: number;
+      }>(
+        `SELECT id, type, leased_until, created_at FROM pending ORDER BY seq ASC`,
+      )
+      .toArray();
+    return { pendingEvents: rows };
+  }
+
+  // Drop queued exit rows so a stale exit from a prior session can't poison a
+  // new --watch (pollOnce would otherwise re-offer it for up to the 1h GC).
+  // Called by the agent CLI when it observes an exit (via pollOnce or the
+  // /status ack-wait). Safe vs. the done-races-exit case: acknowledge (done/
+  // error) still preserves exits - only an explicit consume clears them, and
+  // only after the watcher has already seen one.
+  async rpcConsumeExit(): Promise<void> {
+    await this.ensureSchema();
+    await this.ctx.storage.sql.exec(`DELETE FROM pending WHERE type = 'exit'`);
+  }
+
   // --- internals ---
 
   private async ensureSchema(): Promise<void> {

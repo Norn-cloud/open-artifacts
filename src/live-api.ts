@@ -9,6 +9,8 @@ import type { LiveEvent, LiveObject } from "./live-do";
 //   GET  /api/artifacts/:id/live        WebSocket upgrade (browser host chrome)
 //   GET  /api/artifacts/:id/live/poll   agent long-poll (sk_ bearer)
 //   POST /api/artifacts/:id/live/reply  agent reply -> broadcast to browsers
+//   GET  /api/artifacts/:id/live/status agent ack-status poll (pending events)
+//   POST /api/artifacts/:id/live/consume-exit agent drops observed exit rows
 //
 // Auth: every route requires authorizeView on the artifact (so private/org
 // artifacts only expose live to the owner / org members, just like reads). The
@@ -88,6 +90,22 @@ liveApi.get("/artifacts/:id/live/poll", async (c) => {
   );
   const event = await stubFor(c, id).rpcPoll(types, timeout);
   return c.json(event);
+});
+
+liveApi.get("/artifacts/:id/live/status", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const id = c.req.param("id") ?? "";
+  if (!(await authorizeLive(c, id))) return c.text("not found", 404);
+  const status = await stubFor(c, id).rpcStatus();
+  return c.json(status);
+});
+
+liveApi.post("/artifacts/:id/live/consume-exit", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const id = c.req.param("id") ?? "";
+  if (!(await authorizeLive(c, id))) return c.text("not found", 404);
+  await stubFor(c, id).rpcConsumeExit();
+  return c.json({ ok: true });
 });
 
 liveApi.post("/artifacts/:id/live/reply", async (c) => {

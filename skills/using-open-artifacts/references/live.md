@@ -42,6 +42,34 @@ as `artifact login`.
 `--reply <eid> done --version <v>` is fire-and-forget: it returns once the
 LiveObject has broadcast `done` to the waiting browser.
 
+## Ack-status polling
+
+`--watch` paces one event at a time: after printing a `generate` and auto-acking
+it, the watcher polls `GET /api/artifacts/<id>/live/status` until that event
+leaves the pending queue (i.e. the agent's `done` reply has cleared it) before
+polling for the next event. This closes the re-delivery race where a
+lease-expired, unreplied event would otherwise be re-dispatched ahead of a newer
+one. The reply POST is already synchronous, so this pacing is for the decoupled
+watcher loop, not to confirm the reply itself.
+
+- `--ack-timeout=MS` - max wait per event's `done` (default 600000; `0` disables,
+  restoring fire-and-forget polling).
+- `--ack-poll=MS` - `/live/status` poll interval (default 1000; the status route
+  is a remote Worker, not localhost, so 400ms-class intervals are too aggressive).
+- When the watcher observes an `exit` (via pollOnce or `/live/status` during the
+  ack-wait), it POSTs `/live/consume-exit` to drop queued exit rows, so a stale
+  exit from a prior session can't poison a new `--watch` within the 1h GC window.
+- On ack timeout the watcher warns on stderr and continues (resilient, not a hard
+  fail). If the user exits the session during the wait, the next `/live/status`
+  poll surfaces the `exit` event and the watcher stops promptly instead of
+  blocking for the full timeout. Residual edge case: if the agent crashes and the
+  timeout fires, the next poll may re-deliver the stale event - same as today's
+  behavior; the common case (agent replies `done`) is fully fixed.
+
+`live <id> --wait-ack <eid>` is the standalone form: block until event `<eid>`
+leaves the pending queue or the ack timeout elapses. Useful as a defensive probe
+after a reply, or as a building block for a custom poll loop.
+
 ## Element context (the `element` field)
 
 The picker does NOT send a CSS selector or xpath — it sends a rich context
