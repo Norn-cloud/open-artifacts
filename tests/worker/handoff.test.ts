@@ -8,7 +8,6 @@ import type { Bindings } from "../../src/api";
 import { createApp } from "../../src/app";
 import type { Authorizer, OwnershipGrant } from "../../src/authorizer";
 import app from "../../src/index";
-import type { ArtifactRecord } from "../../src/store";
 import { D1R2Store } from "../../src/store";
 
 // A canManage=true authorizer so owner-only surfaces (Handoff/Live toggle
@@ -208,34 +207,59 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
   });
 });
 
-describe("one handoff per artifact (overwrite)", () => {
-  it("a second POST overwrites the first in place - same id, no orphan", async () => {
+describe("one handoff per artifact+version", () => {
+  it("a second POST for the SAME version overwrites in place - same id, no orphan", async () => {
     const { id, writeToken } = await createArtifact(ON);
     const first = await fetchWith(
-      handoffPostRequest(id, writeToken, {
-        bytes: "first-media",
-        type: "video/webm",
-      }),
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "first-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 10, y: 20 }],
+        {
+          durationMs: 1000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 1,
+        },
+      ),
       ON,
     );
     const firstBody = (await first.json()) as { id: string };
     expect(first.status).toBe(201);
 
     const second = await fetchWith(
-      handoffPostRequest(id, writeToken, {
-        bytes: "second-media",
-        type: "video/webm",
-      }),
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "second-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 10, y: 20 }],
+        {
+          durationMs: 1000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 1,
+        },
+      ),
       ON,
     );
     const secondBody = (await second.json()) as { id: string };
     expect(second.status).toBe(201);
 
-    // The id is derived from the artifact id, so a re-record reuses it -
-    // no race window, no orphaned R2 under a discarded id.
+    // The id is derived from the artifact id + version, so a re-record of the
+    // same version reuses it - no race window, no orphaned R2 under a
+    // discarded id.
     expect(secondBody.id).toBe(firstBody.id);
 
-    // Exactly one row, at the same id.
+    // Exactly one row for this version, at the same id.
     const listRes = await fetchWith(
       new Request(`${BASE}/api/artifacts/${id}/handoffs`),
       ON,
@@ -256,6 +280,169 @@ describe("one handoff per artifact (overwrite)", () => {
     expect(new TextDecoder().decode(await mediaRes.arrayBuffer())).toBe(
       "second-media",
     );
+  });
+
+  it("POSTs for DIFFERENT versions keep both handoffs under distinct ids", async () => {
+    const { id, writeToken } = await createArtifact(ON);
+    // v1 recording (explicit version: 1).
+    const v1 = await fetchWith(
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "v1-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 0, y: 0 }],
+        {
+          durationMs: 1000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 1,
+        },
+      ),
+      ON,
+    );
+    const v1Body = (await v1.json()) as { id: string; version: number };
+    expect(v1.status).toBe(201);
+    expect(v1Body.version).toBe(1);
+
+    // Publish a second version of the artifact so version 2 exists.
+    const updateRes = await fetchWith(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${id}`,
+        {
+          content: "<h1>Hello v2</h1>",
+        },
+        { Authorization: `Bearer ${writeToken}` },
+      ),
+      ON,
+    );
+    expect(updateRes.status).toBe(200);
+
+    // v2 recording (explicit version: 2).
+    const v2 = await fetchWith(
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "v2-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 0, y: 0 }],
+        {
+          durationMs: 1000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 2,
+        },
+      ),
+      ON,
+    );
+    const v2Body = (await v2.json()) as { id: string; version: number };
+    expect(v2.status).toBe(201);
+    expect(v2Body.version).toBe(2);
+
+    // Distinct ids (version-scoped), both rows survive.
+    expect(v2Body.id).not.toBe(v1Body.id);
+    const listRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/handoffs`),
+      ON,
+    );
+    const list = (await listRes.json()) as {
+      handoffs: { id: string; version: number }[];
+    };
+    expect(list.handoffs).toHaveLength(2);
+    expect(list.handoffs.map((h) => h.version).sort()).toEqual([1, 2]);
+
+    // Each version's media is its own - v1 was NOT overwritten by the v2 POST.
+    const v1Media = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/handoffs/${v1Body.id}/media`),
+      ON,
+    );
+    expect(new TextDecoder().decode(await v1Media.arrayBuffer())).toBe(
+      "v1-media",
+    );
+    const v2Media = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/handoffs/${v2Body.id}/media`),
+      ON,
+    );
+    expect(new TextDecoder().decode(await v2Media.arrayBuffer())).toBe(
+      "v2-media",
+    );
+  });
+
+  it("the host page inlines the recording matching the viewed version", async () => {
+    const { id, writeToken } = await createArtifact(ON);
+    // Record at v1.
+    await fetchWith(
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "v1-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 0, y: 0 }],
+        {
+          durationMs: 1000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 1,
+        },
+      ),
+      ON,
+    );
+    // Publish v2 with different content.
+    await fetchWith(
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${id}`,
+        {
+          content: "<h1>Hello v2</h1>",
+        },
+        { Authorization: `Bearer ${writeToken}` },
+      ),
+      ON,
+    );
+    // Record at v2.
+    const v2Post = await fetchWith(
+      handoffPostRequest(
+        id,
+        writeToken,
+        {
+          bytes: "v2-media",
+          type: "video/webm",
+        },
+        [{ t: 0, kind: "move", x: 0, y: 0 }],
+        {
+          durationMs: 2000,
+          hasVideo: true,
+          hasAudio: true,
+          author: "recorder",
+          version: 2,
+        },
+      ),
+      ON,
+    );
+    const v2Body = (await v2Post.json()) as { id: string };
+
+    // Viewing v1 inlines the v1 recording (durationMs 1000), not v2.
+    const v1Host = await fetchWith(new Request(`${BASE}/a/${id}?v=1`), ON);
+    const v1Html = await v1Host.text();
+    expect(v1Html).toContain('"durationMs":1000');
+    expect(v1Html).not.toContain('"durationMs":2000');
+
+    // Viewing v2 inlines the v2 recording (durationMs 2000), not v1.
+    const v2Host = await fetchWith(new Request(`${BASE}/a/${id}?v=2`), ON);
+    const v2Html = await v2Host.text();
+    expect(v2Html).toContain('"durationMs":2000');
+    expect(v2Html).not.toContain('"durationMs":1000');
+    expect(v2Html).toContain(v2Body.id);
   });
 });
 

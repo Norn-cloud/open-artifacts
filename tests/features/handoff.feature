@@ -1,10 +1,11 @@
-Feature: Handoff recording (one per artifact, overwrite)
+Feature: Handoff recording (one per version)
   A deploy that sets OPEN_ARTIFACTS_HANDOFF=1 lets a user with write access
   record a handoff: webcam + mic plus in-artifact mouse/click/scroll, stored as
-  an R2 media blob + events JSON with D1 metadata. Each artifact keeps exactly
-  ONE handoff; recording again overwrites the previous (old media + events +
-  row are deleted first). Any viewer can play it back. A deploy without the flag
-  keeps today's viewer.
+  an R2 media blob + events JSON with D1 metadata. Each artifact VERSION keeps
+  its own handoff; recording again for the SAME version overwrites that
+  version's handoff in place, while recording for a DIFFERENT version keeps
+  both. Any viewer can play it back. A deploy without the flag keeps today's
+  viewer.
 
   Background:
     Given an instance with an artifact published at /a/<id>
@@ -34,17 +35,31 @@ Feature: Handoff recording (one per artifact, overwrite)
     And the media blob is stored in R2 under handoff/<id>/<hid>/media
     And the events JSON is stored in R2 under handoff/<id>/<hid>/events
     And a handoffs row is inserted in D1
-    And GET /api/artifacts/<id>/handoffs returns the single handoff
+    And GET /api/artifacts/<id>/handoffs returns the handoff
     And GET /api/artifacts/<id>/handoffs/<hid>/media returns the bytes with the recorded content-type
     And GET /api/artifacts/<id>/handoffs/<hid>/events returns the events JSON
 
-  Scenario: Recording again overwrites the previous handoff
-    When the owner has already recorded a handoff for /a/<id>
-    And the owner POSTs a second multipart handoff to /api/artifacts/<id>/handoffs
-    Then the response is 201 with a new {id, deleteToken}
+  Scenario: Recording again for the SAME version overwrites in place
+    When the owner has already recorded a handoff for /a/<id> at version 1
+    And the owner POSTs a second multipart handoff for version 1 to /api/artifacts/<id>/handoffs
+    Then the response is 201 with the same {id} (version-scoped, reused)
     And GET /api/artifacts/<id>/handoffs returns only the second handoff
-    And the first handoff's media and events are removed from R2
-    And the first handoff's D1 row is gone
+    And the first handoff's media and events are overwritten at the same R2 keys
+
+  Scenario: Recording for a DIFFERENT version keeps both handoffs
+    When the owner has recorded a handoff for /a/<id> at version 1
+    And the owner publishes a second version of the artifact
+    And the owner POSTs a handoff for version 2 to /api/artifacts/<id>/handoffs
+    Then the response is 201 with a distinct {id} from the version-1 handoff
+    And GET /api/artifacts/<id>/handoffs returns both handoffs
+    And the version-1 handoff's media is untouched at its R2 keys
+
+  Scenario: The host page inlines the recording matching the viewed version
+    When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
+    And handoffs exist for versions 1 and 2 of the artifact
+    Then GET /a/<id>?v=1 embeds the version-1 handoff metadata as JSON
+    And GET /a/<id>?v=2 embeds the version-2 handoff metadata as JSON
+    So the play UI offers the right recording with no runtime fetch from the sandboxed frame
 
   Scenario: A portrait-blur recording stores the hasBlur flag
     When the owner POSTs a handoff whose meta includes hasBlur:true
@@ -65,13 +80,8 @@ Feature: Handoff recording (one per artifact, overwrite)
     But a stranger DELETE without a token gets 401
     And a stranger DELETE with a wrong token gets 403
 
-  Scenario: Deleting the artifact sweeps its handoff
+  Scenario: Deleting the artifact sweeps all its versions' handoffs
     When the owner DELETEs the artifact
-    Then the handoff media and events are removed from R2
-    And the handoffs row is removed from D1
+    Then every version's handoff media and events are removed from R2
+    And every handoffs row is removed from D1
 
-  Scenario: The host page inlines the single handoff at serve time
-    When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
-    And a handoff exists for the artifact
-    Then the /a/<id> host page embeds the handoff metadata as JSON
-    So the play UI can offer it without a runtime fetch from the sandboxed frame

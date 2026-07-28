@@ -429,6 +429,8 @@ const STOP_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 const PLAY_SVG =
   '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>';
+const SHARE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
 
 function versionPickerHtml(
   versions: VersionMeta[],
@@ -1614,6 +1616,16 @@ const HANDOFF_CSS = `
 .oa-handoff-mic{display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0;width:36px;height:18px}
 .oa-handoff-mic-bar{display:block;width:100%;height:4px;border-radius:2px;background:color-mix(in oklab,var(--oa-fg),transparent 82%);transform:scaleX(.02);transform-origin:left center;transition:transform .08s linear}
 .oa-handoff-mic-bar.oa-handoff-mic-silent{background:color-mix(in oklab,var(--oa-danger),transparent 60%)}
+#oa-handoff-countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:2147483647;pointer-events:none;font-family:var(--oa-font);font-size:12rem;font-weight:300;color:var(--oa-fg);text-shadow:0 4px 24px rgba(0,0,0,.4);background:rgba(0,0,0,.35);backdrop-filter:blur(2px)}
+#oa-handoff-countdown[data-on]{display:flex}
+#oa-handoff-countdown[data-num="1"]{color:var(--oa-accent)}
+@media (prefers-reduced-motion:reduce){#oa-handoff-countdown{animation:none}}
+@keyframes oa-handoff-pop{0%{transform:scale(.6);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
+#oa-handoff-countdown[data-on]>*{animation:oa-handoff-pop .5s ease-out}
+@media (prefers-reduced-motion:reduce){#oa-handoff-countdown[data-on]>*{animation:none}}
+.oa-handoff-speed{min-height:28px;padding:.1rem 1.2rem .1rem .3rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.72rem;font-family:inherit;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;flex-shrink:0}
+.oa-handoff-speed:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+#oa-handoff-share.oa-dock-btn--copied{color:var(--oa-accent);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%)}
 `;
 
 // The inlined handoff list is serve-time JSON (the comments/version-picker
@@ -1622,12 +1634,15 @@ const HANDOFF_CSS = `
 function handoffChromeHtml(
   artifactId: string,
   handoffs: HandoffMeta[],
+  currentVersion: number,
 ): string {
-  // One handoff per artifact: inline the single current handoff (or null) so
-  // the dock renders Record-when-absent / Play-Re-record-when-present with no
-  // list. The shape stays an array server-side for a forward-compatible API,
-  // but the host only ever reads handoffs[0].
-  const current = handoffs[0] ?? null;
+  // One handoff per artifact+version: inline the recording pinned to the
+  // viewed version (or null) so the dock renders Record-when-absent /
+  // Play-Re-record-when-present for that version. The version picker does a
+  // full page reload, so the host re-inlines on each version switch and the
+  // dock shows the right recording. The array stays server-side for the
+  // list API; the host only inlines the viewed version's recording.
+  const current = handoffs.find((h) => h.version === currentVersion) ?? null;
   const publicSingle = current
     ? {
         id: current.id,
@@ -1647,6 +1662,7 @@ function handoffChromeHtml(
   </div>
   <video id="oa-handoff-cam" hidden playsinline></video>
   <canvas id="oa-handoff-cam-canvas" hidden></canvas>
+  <div id="oa-handoff-countdown" aria-hidden="true"></div>
   <script type="application/json" id="oa-handoff-data" data-artifact-id="${escapeHtml(artifactId)}">${jsonForInlineScript(publicSingle)}</script>
 </div>`;
 }
@@ -1680,6 +1696,10 @@ const HANDOFF_SCRIPT = `
   var state='IDLE';
   var mr=null, chunks=[], stream=null, recStart=0, events=[], timerInt=null;
   var playDur=0, scrubbing=false;
+  // 3-2-1 countdown overlay state (module-level so cancelRecord can clear it).
+  var countdownEl=document.getElementById('oa-handoff-countdown');
+  var countdownTimer=null;
+  function hideCountdown(){ if(countdownEl){countdownEl.removeAttribute('data-on'); countdownEl.removeAttribute('data-num'); countdownEl.innerHTML='';} if(countdownTimer){clearTimeout(countdownTimer); countdownTimer=null;} }
   // Live mic level meter so a silent recording is diagnosed at record time,
   // not after. A flat bar means the mic track has no signal (muted by the OS,
   // wrong input device, or permissions) and the recorded audio will be silent.
@@ -1845,6 +1865,12 @@ const HANDOFF_SCRIPT = `
   function getName(){ try{return localStorage.getItem('oa-cm-name')||''}catch(e){return ''} }
   function saveDelToken(hid,t){ try{localStorage.setItem('oa-handoff-dt-'+hid,t)}catch(e){} }
   function getDelToken(hid){ try{return localStorage.getItem('oa-handoff-dt-'+hid)}catch(e){return null} }
+  // Playback speed persists across views (Loom defaults to 1.2x; our short
+  // walkthroughs default to 1x). Applied to cam.playbackRate on play and on
+  // change. Stored as the numeric string ("1","1.5","2").
+  var SPEED_KEY='oa-handoff-speed';
+  function loadSpeed(){ var v=1; try{ var s=localStorage.getItem(SPEED_KEY); if(s){var n=parseFloat(s); if(n>=0.5&&n<=2.5)v=n;} }catch(e){} return v; }
+  function saveSpeed(v){ try{localStorage.setItem(SPEED_KEY, String(v));}catch(e){} }
   // X-OA-CSRF: a SaaS deploy (coda0) gates session-based writes on this header
   // (requireCsrf); self-host admits via the bearer wt_ instead. Send both so
   // the upload/delete work either way.
@@ -1896,15 +1922,21 @@ const HANDOFF_SCRIPT = `
     else if(state==='RECORDING')renderRec();
     else if(state==='PLAYING')renderPlay();
   }
-  // One handoff per artifact. Owner IDLE: Record (none) or Re-record + Play +
-  // Delete (exists). Viewer IDLE: Play-only (no Record/Delete) when one exists.
+  // One handoff per artifact+version. Owner IDLE: Record (none) or Re-record +
+  // Play + Copy link + Delete (exists). Viewer IDLE: Play + Copy link (no
+  // Record/Delete) when one exists for the viewed version.
   function renderIdle(){
     if(handoff){
       var play=dockBtn('oa-dock-btn--primary', ${JSON.stringify(PLAY_SVG)}, 'Play'); play.onclick=function(){startPlay(handoff.id);};
       var dur=el('span','oa-handoff-dur', fmt(handoff.durationMs));
-      controls.appendChild(play); controls.appendChild(dur);
+      // Post-record Share affordance (Loom emphasizes Share after a recording).
+      // Copies /a/<id>?v=<handoff.version> so the link lands on the exact
+      // version the recording was made against.
+      var share=dockBtn('', ${JSON.stringify(SHARE_SVG)}, 'Copy link', {title:'Copy a link to this version', id:'oa-handoff-share'});
+      share.onclick=function(){ copyShareLink(handoff.version); };
+      controls.appendChild(play); controls.appendChild(dur); controls.appendChild(share);
       if(canManage){
-        var rerec=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Re-record', {title:'Record a new handoff (replaces the current one)'}); rerec.onclick=startRecord;
+        var rerec=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Re-record', {title:'Record a new handoff for this version (replaces the current one)'}); rerec.onclick=startRecord;
         controls.appendChild(rerec);
         if(getDelToken(handoff.id)||ownerToken()){
           var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
@@ -1943,7 +1975,13 @@ const HANDOFF_SCRIPT = `
     scrub.oninput=function(){ scrubbing=true; var t=Number(scrub.value); if(cam){try{cam.currentTime=t/1000}catch(e){}} toFrame({type:'oa:handoff:seek',t:t}); };
     scrub.onchange=function(){ scrubbing=false; };
     var time=el('span','oa-handoff-time','0:00'); time.id='oa-handoff-time';
-    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(mkBlurBtn());
+    // Playback speed: a compact <select> (Loom lets viewers override the
+    // creator's default). Persisted so the choice sticks across views.
+    var curSpeed=loadSpeed();
+    var speed=el('select','oa-handoff-speed'); speed.setAttribute('aria-label','Playback speed');
+    [1,1.5,2].forEach(function(r){ var o=el('option',''); o.value=String(r); o.textContent=r+'x'; if(Math.abs(r-curSpeed)<0.01)o.setAttribute('selected','selected'); speed.appendChild(o); });
+    speed.onchange=function(){ var v=parseFloat(speed.value); saveSpeed(v); if(cam){try{cam.playbackRate=v}catch(e){}} };
+    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(speed); controls.appendChild(mkBlurBtn());
     // Owner: persistent Exit closes the dock (stops playback first). Non-owner:
     // a Stop button exits playback to IDLE (no toggle to reopen a closed dock).
     if(canManage){ controls.appendChild(mkExit()); }
@@ -2025,12 +2063,42 @@ const HANDOFF_SCRIPT = `
     try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
     catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
     chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
-    mr.start(250);
-    recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
-    recStart=performance.now(); events=[]; state='RECORDING';
-    toFrame({type:'oa:handoff:record:arm'});
-    if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
-    render();
+    // 3-2-1 countdown overlay before the recorder starts (Loom's de-facto
+    // recorder convention): gives the creator a beat to compose before capture
+    // begins, and keeps the initial Record click as the user-gesture that
+    // authorizes later autoplay. Reduced-motion skips straight to recording.
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    if(reduced){ startRecordingNow(); }
+    else { runCountdown(3, startRecordingNow); }
+    function startRecordingNow(){
+      mr.start(250);
+      recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
+      recStart=performance.now(); events=[]; state='RECORDING';
+      toFrame({type:'oa:handoff:record:arm'});
+      if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
+      render();
+    }
+    // runCountdown(n, done): show n..1 in the fullscreen overlay, then call
+    // done. Cleared on cancel so a cancelled countdown never starts recording.
+    function runCountdown(n, done){
+      if(!countdownEl){ done(); return; }
+      var cur=n;
+      function showNum(){
+        countdownEl.innerHTML='';
+        var span=document.createElement('span');
+        span.textContent=String(cur);
+        countdownEl.appendChild(span);
+        countdownEl.setAttribute('data-num',String(cur));
+        countdownEl.setAttribute('data-on','');
+      }
+      function step(){
+        if(cur<=0){ hideCountdown(); done(); return; }
+        showNum();
+        cur-=1;
+        countdownTimer=setTimeout(step,800);
+      }
+      step();
+    }
   }
   // Live RMS meter on the mic track. Writes micLevel (0..1) sampled each rAF
   // tick by renderRec's level bar. Belt-and-suspenders against the static
@@ -2055,7 +2123,7 @@ const HANDOFF_SCRIPT = `
     return '';
   }
   function stopRecord(){ if(mr&&mr.state!=='inactive')mr.stop(); }
-  function cancelRecord(){ events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); stopSeg(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); }
+  function cancelRecord(){ hideCountdown(); events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); stopSeg(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); }
   function cleanupStream(){ if(stream){stream.getTracks().forEach(function(tr){tr.stop();}); stream=null;} if(cam){cam.srcObject=null; cam.hidden=true; cam.removeAttribute('data-rec');} }
   function onRecStop(){
     var dur=performance.now()-recStart;
@@ -2111,7 +2179,10 @@ const HANDOFF_SCRIPT = `
       // recorded audio plays. Re-assert on loadedmetadata in case a new src
       // load resets the muted state, and set volume too.
       cam.muted=false; cam.volume=1;
-      cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; }catch(e){} };
+      // Apply the persisted playback speed to the <video> on load and on each
+      // new metadata load (a new src resets playbackRate to 1).
+      var sp=loadSpeed(); try{ cam.playbackRate=sp; }catch(e){}
+      cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; cam.playbackRate=loadSpeed(); }catch(e){} };
       cam.onclick=null;
       cam.ontimeupdate=function(){ var t=cam.currentTime*1000; var tm=document.getElementById('oa-handoff-time'); if(tm)tm.textContent=fmt(t); if(!scrubbing){var s=controls.querySelector('.oa-handoff-scrub'); if(s)s.value=t;} };
       cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} cam.onclick=null; state='IDLE'; render(); };
@@ -2135,6 +2206,19 @@ const HANDOFF_SCRIPT = `
     var dt=getDelToken(hid); var headers=dt?{Authorization:'Bearer '+dt}:authHeaders(); headers['X-OA-CSRF']='1';
     fetch('/api/artifacts/'+ID+'/handoffs/'+hid, {method:'DELETE', headers:headers}).then(function(r){ if(!r.ok)throw new Error('Delete failed ('+r.status+')'); return r.json(); }).then(function(){ handoff=null; try{localStorage.removeItem('oa-handoff-dt-'+hid);}catch(e){} render(); }).catch(function(err){ setStatus(esc(err.message)); });
   }
+  // Copy a share link to the version the recording was made against. Loom
+  // emphasizes Share after a recording; here it's a persistent Copy-link button
+  // in IDLE so the link is available any time the dock is open. Shows a
+  // "Copied" state on the button for 1.5s.
+  function copyShareLink(version){
+    var link=window.location.origin+'/a/'+ID+'?v='+version;
+    var btn=document.getElementById('oa-handoff-share');
+    var lb=btn&&btn.querySelector('.oa-dock-label');
+    var done=function(){ if(btn)btn.classList.add('oa-dock-btn--copied'); if(lb)lb.textContent='Copied'; setTimeout(function(){ if(btn)btn.classList.remove('oa-dock-btn--copied'); if(lb)lb.textContent='Copy link'; },1500); };
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(done).catch(function(){ legacyCopy(link); done(); }); }
+    else { legacyCopy(link); done(); }
+  }
+  function legacyCopy(text){ var t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(t); }
 
   // Frame -> host: buffer interaction events during RECORDING.
   window.addEventListener('message', function(e){
@@ -2204,7 +2288,7 @@ ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion,
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
-${handoffEnabled ? handoffChromeHtml(artifactId, handoffList) : ""}
+${handoffEnabled ? handoffChromeHtml(artifactId, handoffList, Number(currentVersion ?? 1)) : ""}
 ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};window.__oaCanManage=${canManage};</script>
 <script nonce="${nonce}">${TOAST_SCRIPT}</script>

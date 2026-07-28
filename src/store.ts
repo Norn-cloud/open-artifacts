@@ -226,6 +226,14 @@ const MIGRATIONS = [
   // column. The ALTER is idempotent (duplicate-column error swallowed by
   // isExpectedMigrationError). Fresh DBs already have it from SCHEMA.
   `ALTER TABLE handoffs ADD COLUMN has_blur INTEGER NOT NULL DEFAULT 0`,
+  // Per-version handoffs: the id is now scoped by version
+  // (h<artifactId>_v<version>) so each version keeps its own recording. Legacy
+  // single-handoff rows (h<artifactId>, no _v suffix) are wiped so a stale
+  // one-per-artifact row can't shadow the new version-scoped recording for the
+  // same version. Idempotent - a second run matches zero rows. R2 media for the
+  // wiped rows is NOT swept here (SQL can't touch R2); the artifact-delete
+  // prefix sweep handoff/<artifactId>/ covers them when the artifact goes.
+  `DELETE FROM handoffs WHERE id NOT LIKE '%\\_v%' ESCAPE '\\'`,
 ];
 
 // After the ALTERs above add columns to existing rows with empty defaults,
@@ -366,13 +374,18 @@ const defaultOwnership = (): OwnershipGrant => ({
 
 const contentKey = (id: string, version: number) => `content/${id}/${version}`;
 
-// Derive a stable, deterministic handoff id from the artifact id so re-records
-// overwrite the same D1 row + R2 keys (one-per-artifact, race-free). The "h"
+// Derive a stable, deterministic handoff id from the artifact id + version so
+// re-records of the SAME version overwrite the same D1 row + R2 keys in place
+// (race-free), while different versions keep independent recordings. The "h"
 // prefix keeps the handoff id visually distinct from the artifact id while
-// staying in the same URL-safe alphabet. Two concurrent POSTs to the same
-// artifact resolve to the same id and the ON CONFLICT DO UPDATE makes the last
-// COMMIT win - no list/delete/create window, no orphaned media.
-const handoffIdFor = (artifactId: string): string => `h${artifactId}`;
+// staying in the same URL-safe alphabet; the `_v<N>` suffix scopes the row.
+// Two concurrent POSTs for the same artifact+version resolve to the same id
+// and the ON CONFLICT DO UPDATE makes the last COMMIT win - no
+// list/delete/create window, no orphaned media. Legacy single-handoff rows
+// (h<artifactId>, no suffix) are wiped by a MIGRATIONS DELETE on first deploy
+// of this change; their R2 media is swept by the artifact-delete prefix sweep.
+const handoffIdFor = (artifactId: string, version: number): string =>
+  `h${artifactId}_v${version}`;
 
 interface Envelope extends EncryptionParams {
   v: 1;
@@ -792,12 +805,15 @@ export class D1R2Store implements ArtifactStore {
     deleteTokenHash: string | null,
   ): Promise<HandoffMeta> {
     await ensureSchema(this.db);
-    // One handoff per artifact: derive a stable id from the artifactId so a
-    // re-record UPSERTs the same D1 row and overwrites the same R2 keys in
-    // place - no list/delete/create window, no race, no orphaned media under
-    // a discarded id. Concurrent POSTs converge on the same id and the last
-    // COMMIT wins (INSERT ... ON CONFLICT DO UPDATE), exactly one row survives.
-    const id = handoffIdFor(artifactId);
+    // One handoff per artifact+version: derive a stable id from the
+    // artifactId + version so a re-record of the same version UPSERTs the
+    // same D1 row and overwrites the same R2 keys in place - no
+    // list/delete/create window, no race, no orphaned media under a
+    // discarded id. Concurrent POSTs for the same version converge on the
+    // same id and the last COMMIT wins (INSERT ... ON CONFLICT DO UPDATE),
+    // exactly one row survives. Different versions get distinct ids, so
+    // their recordings coexist independently.
+    const id = handoffIdFor(artifactId, input.version);
     const now = new Date().toISOString();
     const mediaKey = `handoff/${artifactId}/${id}/media`;
     const eventsKey = `handoff/${artifactId}/${id}/events`;
