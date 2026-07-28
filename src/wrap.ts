@@ -1948,6 +1948,7 @@ const HANDOFF_SCRIPT = `
   function startRecord(){
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('Camera/mic not supported here'); return; }
     if(!window.MediaRecorder){ setStatus('Recording not supported in this browser'); return; }
+    if(stream)return;
     navigator.mediaDevices.getUserMedia({
       video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
       audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
@@ -2852,12 +2853,9 @@ const HOST_UI_SCRIPT = `
   var drawerErrEl=document.getElementById("oa-cm-drawer-err");
   var drawerErrTimer=null;
 
-  // Cache header height
-  var cachedHeaderH=0;
   function headerH(){
     if(!header)return 40;
-    if(!cachedHeaderH)cachedHeaderH=Math.round(header.getBoundingClientRect().height);
-    return cachedHeaderH;
+    return Math.round(header.getBoundingClientRect().height);
   }
 
   // Unified localStorage access with error handling
