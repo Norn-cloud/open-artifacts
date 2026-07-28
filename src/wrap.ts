@@ -235,6 +235,17 @@ img,video,canvas{max-width:100%}
 @media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
 `;
 
+const TOAST_CSS = `
+.oa-toast-container{position:fixed;top:calc(var(--oa-header-h) + 1rem);right:1rem;z-index:2147483647;display:flex;flex-direction:column;gap:.5rem;max-width:min(24rem,calc(100vw - 2rem));pointer-events:none}
+.oa-toast{padding:.75rem 1rem;border-radius:8px;background:var(--oa-bg);border:1px solid var(--oa-border);box-shadow:0 4px 16px -4px color-mix(in oklab,var(--oa-fg),transparent 85%);font-family:var(--oa-font);font-size:.85rem;line-height:1.4;color:var(--oa-fg);pointer-events:auto;animation:oa-toast-in .2s ease-out}
+.oa-toast[data-type="error"]{border-color:var(--oa-danger);background:color-mix(in oklab,var(--oa-danger),var(--oa-bg) 92%);color:var(--oa-danger)}
+.oa-toast[data-type="success"]{border-color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),var(--oa-bg) 92%);color:var(--oa-accent)}
+.oa-toast[data-removing]{animation:oa-toast-out .2s ease-in forwards}
+@keyframes oa-toast-in{from{opacity:0;transform:translateX(100%)}}
+@keyframes oa-toast-out{to{opacity:0;transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.oa-toast{animation:none}.oa-toast[data-removing]{opacity:.5}}
+`;
+
 const MARKDOWN_CSS = `
 .oa-md{max-width:72ch;margin:0 auto;padding:2.5rem 1.25rem 5rem}
 .oa-md h1,.oa-md h2,.oa-md h3{line-height:1.25;text-wrap:balance}
@@ -511,7 +522,7 @@ function headerHtml(
   // write-gated server-side too; the button is just hidden for non-owners.
   const live =
     liveEnabled && canManage
-      ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-global-bar"><span aria-hidden="true">${LIVE_SVG}</span></button>`
+      ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span></button>`
       : "";
   // The Handoff toggle opens the record/play dock. Record is owner-only
   // (write-gated server-side); Play is open to any viewer. The button is shown
@@ -582,12 +593,39 @@ function commentsDrawerHtml(
 </aside>`;
 }
 
+const TOAST_SCRIPT = `
+(function(){
+  var container=document.getElementById('oa-toast-container');
+  if(!container)return;
+  function show(msg,type){
+    var el=document.createElement('div');
+    el.className='oa-toast';
+    el.textContent=msg;
+    if(type)el.setAttribute('data-type',type);
+    container.appendChild(el);
+    setTimeout(function(){
+      el.setAttribute('data-removing','');
+      setTimeout(function(){el.remove()},200);
+    },5000);
+  }
+  window.__oaShowError=function(msg){show(msg,'error')};
+  window.__oaShowSuccess=function(msg){show(msg,'success')};
+  window.__oaShowInfo=function(msg){show(msg,'info')};
+})();
+`;
+
 const VERSION_SCRIPT = `
 (function(){
   var sel=document.getElementById('oa-version-select');
   if(!sel)return;
   sel.addEventListener('change',function(){
-    if(sel.value)location.search='?'+sel.value.split('?')[1];
+    if(!sel.value)return;
+    try{
+      var url=new URL(sel.value,location.origin);
+      location.search=url.search;
+    }catch(e){
+      location.href=sel.value;
+    }
   });
 })();
 `;
@@ -601,10 +639,21 @@ const VISIBILITY_SCRIPT = `
   var prev=sel.value;
   sel.addEventListener('change',function(){
     var next=sel.value;
+    sel.disabled=true;
+    sel.setAttribute('aria-busy','true');
     fetch('/api/artifacts/'+id,{method:'PATCH',headers:{'content-type':'application/json','X-OA-CSRF':'1'},body:JSON.stringify({visibility:next})})
-      .then(function(r){if(!r.ok)throw r.status;return r.json()})
+      .then(function(r){if(!r.ok)throw new Error('Failed to update visibility');return r.json()})
       .then(function(){prev=next})
-      .catch(function(){sel.value=prev});
+      .catch(function(e){
+        sel.value=prev;
+        var msg=e.message||'Failed to update visibility. Please try again.';
+        if(window.__oaShowError)window.__oaShowError(msg);
+        else if(console&&console.error)console.error(msg);
+      })
+      .finally(function(){
+        sel.disabled=false;
+        sel.removeAttribute('aria-busy');
+      });
   });
 })();
 `;
@@ -696,6 +745,28 @@ const LAYOUT_SCRIPT = `
 // bar is a centered pill that floats next to the picked element and morphs
 // Pick -> Configure -> Generating -> Confirmed. Quiet chrome, single
 // --accent, both themes, no decorative motion.
+// Shared dock-button vocabulary used by both the Live and Handoff toolbars so
+// the two docks read as one chrome: one 30px ghost-button base (.oa-dock-btn)
+// with an icon span + label span, and three variants --primary (accent fill,
+// the CTA: Submit / Play), --record (danger fill: Record / Stop), and --exit
+// (margin-left:auto, the right-aligned close affordance). [aria-pressed="true"]
+// tints toward the accent for toggle states (Pick, Blur). Emitted when either
+// dock is enabled; supersedes the per-dock .oa-live-icon / .oa-handoff-btn rules.
+const DOCK_CSS = `
+.oa-dock-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s;flex-shrink:0}
+.oa-dock-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-dock-btn:not(.oa-dock-btn--indicator):active{transform:translateY(1px)}
+.oa-dock-btn .oa-dock-icon{display:inline-flex;align-items:center}
+.oa-dock-btn .oa-dock-icon svg{width:14px;height:14px;display:block}
+.oa-dock-btn .oa-dock-label{white-space:nowrap}
+.oa-dock-btn[aria-pressed="true"],.oa-dock-btn--active{background:color-mix(in oklab,var(--oa-accent),transparent 88%);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%);color:var(--oa-accent);opacity:1}
+.oa-dock-btn--primary{background:var(--oa-accent);color:var(--oa-accent-on);border-color:transparent;opacity:1;font-weight:600}
+.oa-dock-btn--record{background:var(--oa-danger);color:#fff;border-color:transparent;opacity:1}
+.oa-dock-btn--exit{margin-left:auto}
+.oa-dock-btn--indicator{cursor:default}
+@media (hover:hover) and (pointer:fine){.oa-dock-btn:not(.oa-dock-btn--record):not(.oa-dock-btn--primary):not(.oa-dock-btn--indicator):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}.oa-dock-btn--primary:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
+`;
+
 const LIVE_CSS = `
 .oa-live-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
 .oa-live-toggle::before{content:"";position:absolute;inset:-6px}
@@ -721,20 +792,8 @@ const LIVE_CSS = `
 #oa-live-chips .oa-live-chip-rm:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 #oa-live-controls{display:flex;align-items:center;gap:.35rem;flex-shrink:0;padding-bottom:.5rem;border-bottom:1px solid color-mix(in oklab,var(--oa-border),transparent 50%)}
 #oa-live-dock:not(:has(#oa-live-chips:not(:empty))) #oa-live-controls{padding-bottom:0;border-bottom:0}
-#oa-live-controls button{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .5rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.7;transition:opacity .15s,background .15s,border-color .15s}
-#oa-live-controls button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-controls button:active{transform:translateY(1px)}
-#oa-live-controls button .oa-live-icon{display:inline-flex;align-items:center}
-#oa-live-controls button .oa-live-icon svg{width:14px;height:14px;display:block}
-#oa-live-controls button[aria-pressed="true"]{background:color-mix(in oklab,var(--oa-accent),transparent 88%);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%);color:var(--oa-accent);opacity:1}
-@media (hover:hover) and (pointer:fine){#oa-live-controls button:hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-#oa-live-exit{margin-left:auto}
 #oa-live-submit-wrap{margin-left:.35rem}
 #oa-live-submit-wrap:empty{display:none}
-#oa-live-submit-wrap .oa-live-submit{height:32px;padding:0 1rem;border:0;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-weight:600;font-size:.85rem;cursor:pointer;transition:background .15s,transform .06s}
-#oa-live-submit-wrap .oa-live-submit:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 8%)}
-#oa-live-submit-wrap .oa-live-submit:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-#oa-live-submit-wrap .oa-live-submit:active{transform:translateY(1px)}
 #oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + 5rem);display:flex;pointer-events:auto;z-index:2147483645}
 #oa-live-action-bar[hidden]{display:none}
 #oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.35rem;padding:.4rem .45rem;border-radius:12px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 6px 24px -4px color-mix(in oklab,var(--oa-fg),transparent 88%)}
@@ -774,6 +833,9 @@ const HOST_FRAME_CSS = `
 const ACCOUNT_CSS = `
 .oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px;margin-left:.5rem}
 .oa-account-slot:empty{display:none}
+.oa-account-loading{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 85%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-spin .8s linear infinite}
+@keyframes oa-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.oa-account-loading{animation:none;opacity:.5}}
 .oa-account-btn{position:relative;display:inline-flex;align-items:center;gap:.4rem;height:28px;padding:0 .35rem 0 .3rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-size:.75rem;line-height:1;cursor:pointer;transition:color .15s,background .15s}
 .oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-account-btn:active{transform:translateY(1px)}
@@ -801,6 +863,7 @@ const ACCOUNT_SCRIPT = `
   if(!slot)return;
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function initial(name){var ch=[...String(name||'').trim()][0];return ch?ch.toUpperCase():'?';}
+  function showLoading(){slot.innerHTML='<div class="oa-account-loading" role="status" aria-label="Loading account"></div>';}
   function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';}
   function renderUser(name){
     var btn=document.createElement('button');btn.type='button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');
@@ -817,9 +880,10 @@ const ACCOUNT_SCRIPT = `
     document.addEventListener('click',function(){menu.hidden=true;btn.setAttribute('aria-expanded','false');});
     slot.innerHTML='';slot.appendChild(btn);
   }
-  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();return null;}return r.json();}).then(function(me){
+  showLoading();
+  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else slot.innerHTML='';return null;}return r.json();}).then(function(me){
     if(!me)return;var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
-  }).catch(function(){});
+  }).catch(function(){slot.innerHTML=''});
 })();
 `;
 
@@ -1212,8 +1276,8 @@ function liveChromeHtml(wsUrl: string, artifactId: string): string {
   <div id="oa-live-dock">
     <div id="oa-live-status" role="status" aria-live="polite"></div>
     <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
-      <button type="button" id="oa-live-pick-toggle" data-active="false" aria-pressed="false" title="Pick an element"><span class="oa-live-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-live-label">Pick</span></button>
-      <button type="button" id="oa-live-exit" title="Exit live editor"><span class="oa-live-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-live-label">Exit</span></button>
+      <span class="oa-dock-btn oa-dock-btn--active oa-dock-btn--indicator" id="oa-live-pick-toggle" title="Pick mode is on"><span class="oa-dock-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-dock-label">Pick</span></span>
+      <button type="button" class="oa-dock-btn oa-dock-btn--exit" id="oa-live-exit" title="Exit live editor"><span class="oa-dock-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-dock-label">Exit</span></button>
       <div id="oa-live-submit-wrap"></div>
     </div>
     <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
@@ -1222,6 +1286,50 @@ function liveChromeHtml(wsUrl: string, artifactId: string): string {
   <script type="application/json" id="oa-live-config">${jsonForInlineScript({ wsUrl, artifactId })}</script>
 </div>`;
 }
+
+// Shared dock manager for the Live and Handoff docks. Both are bottom-center
+// pills that inherit the icon-button vocabulary, and DESIGN.md pins them as
+// mutually exclusive - opening one closes the other. Rather than each script
+// reaching across to the other's exit hook (__oaExitLive / __oaCloseHandoff),
+// both register an {open, close, restoreFocus, refuseMessage} API here and a
+// single owner tracks the active dock, enforces exclusion, wires one
+// Escape-to-close handler, and places focus on open / restores it on close.
+// close() returns false (and the manager toasts refuseMessage) when a dock
+// holds irreplaceable in-flight work - Handoff mid-record/playback. Live always
+// yields. Runs before LIVE_SCRIPT and HANDOFF_SCRIPT; __oaShowError (TOAST_SCRIPT)
+// is already defined by then.
+const DOCK_SCRIPT = `
+(function(){
+  var docks={}, active=null;
+  function refuse(d){ if(d&&d.refuseMessage&&window.__oaShowError){ var m=d.refuseMessage(); if(m)window.__oaShowError(m); } }
+  function open(name){
+    var d=docks[name]; if(!d)return false;
+    if(active===name)return true;
+    if(active){ var o=docks[active]; if(o&&!o.close()){ refuse(o); return false; } }
+    d.open(); active=name; return true;
+  }
+  function close(name){
+    var d=docks[name]; if(!d||active!==name)return false;
+    if(!d.close()){ refuse(d); return false; }
+    active=null; if(d.restoreFocus)d.restoreFocus(); return true;
+  }
+  window.__oaDock={
+    register:function(name,api){docks[name]=api;},
+    open:open,
+    close:close,
+    toggle:function(name){ var d=docks[name]; if(!d)return false; return active===name?close(name):open(name); },
+    isActive:function(name){return active===name;}
+  };
+  // One Escape closes the active dock (after any open comments surface - drawer,
+  // compose, menu - has had its turn), restoring focus to its toggle. A refused
+  // close (Handoff recording/playing) surfaces the dock's refuseMessage instead.
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape'||!active)return;
+    if(document.querySelector('.oa-cm-drawer[data-open], #oa-cm-compose:not([hidden]), .oa-cm-menu:not([hidden])'))return;
+    close(active);
+  });
+})();
+`;
 
 const LIVE_SCRIPT = `
 (function(){
@@ -1234,38 +1342,53 @@ const LIVE_SCRIPT = `
   var chipsEl=document.getElementById('oa-live-chips');
   var submitEl=document.getElementById('oa-live-submit-wrap');
   var abar=document.getElementById('oa-live-action-bar');
-  var pickBtn=document.getElementById('oa-live-pick-toggle');
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
   var liveToggle=document.querySelector('.oa-live-toggle');
-  if(!root||!dock||!statusEl||!chipsEl||!submitEl||!abar||!pickBtn||!exitBtn||!frame) return;
+  if(!root||!dock||!statusEl||!chipsEl||!submitEl||!abar||!exitBtn||!frame) return;
 
+  function openLive(){
+    // Reconnect if the ws died (a prior Exit, or Handoff tore Live down).
+    // onclose only auto-reconnects while non-IDLE, so an IDLE-time close
+    // leaves it dead - reopen has to re-establish it explicitly.
+    if(!ws || ws.readyState>=2) connect();
+    root.removeAttribute('hidden');
+    if(liveToggle) liveToggle.setAttribute('aria-expanded','true');
+    // Clicking Live = enter pick mode immediately. The dock's Pick control is
+    // a display-only indicator, so arming happens here on open - pick stays
+    // armed for the whole live session. Arm unconditionally (not gated on
+    // state==='IDLE') so a stale non-IDLE state left by an in-flight ws
+    // message after Exit can't strand the user with pick disarmed and no way
+    // to re-arm.
+    setState('PICKING');
+    toFrame({type:'oa:live:pick:arm'});
+  }
+  function closeLive(){
+    // Live has no irreplaceable in-flight work, so it always yields.
+    if(root.hidden) return true;
+    send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true;
+    if(liveToggle) liveToggle.setAttribute('aria-expanded','false');
+    return true;
+  }
+  if(window.__oaDock){
+    window.__oaDock.register('live', {
+      open: openLive,
+      close: closeLive,
+      restoreFocus: function(){ if(liveToggle) liveToggle.focus(); }
+    });
+  }
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
-      // Live and Handoff are mutually exclusive: opening Live closes the
-      // Handoff dock first. __oaCloseHandoff returns false while a handoff is
-      // recording/playing (it refuses to yield) - then bail out rather than
-      // run both at once; stop the handoff first, then open Live.
-      if(window.__oaCloseHandoff && !window.__oaCloseHandoff()) return;
-      // Reconnect if the ws died (a prior Exit, or Handoff tore Live down).
-      // onclose only auto-reconnects while non-IDLE, so an IDLE-time close
-      // leaves it dead - reopen has to re-establish it explicitly.
-      if(!ws || ws.readyState>=2) connect();
-      root.removeAttribute('hidden');
-      liveToggle.setAttribute('aria-expanded','true');
-      // Clicking Live = enter pick mode immediately. The global bar's Pick
-      // button is the same affordance; arming here saves a click and matches
-      // the user's mental model (Live on -> go pick what to change).
-      if(state==='IDLE'){
-        pickBtn.setAttribute('aria-pressed','true');
-        pickBtn.dataset.active='true';
-        setState('PICKING');
-        toFrame({type:'oa:live:pick:arm'});
-      }
+      // Toggle (open/close) through the dock manager, like the comments toggle
+      // (.oa-cm-toggle) opens/closes its drawer. The manager enforces mutual
+      // exclusion with Handoff and toasts when Handoff refuses to yield
+      // (mid-recording/playback). Fallback toggles directly if the manager is
+      // absent.
+      if(window.__oaDock) window.__oaDock.toggle('live'); else if(root.hidden) openLive(); else closeLive();
     });
   }
 
-  var ws=null, wsReady=false, sessionId=null, state='IDLE';
+  var ws=null, wsReady=false, sessionId=null, state='IDLE', pendingRearm=false;
   // Multi-element batch: the user picks N elements, types a prompt for each
   // (Enter commits that pair), then hits Submit to send one generate event
   // with the full list. draft is the element currently awaiting a prompt.
@@ -1342,7 +1465,8 @@ const LIVE_SCRIPT = `
       chip.appendChild(rm);
       chipsEl.appendChild(chip);
     });
-    var sub=el('button','oa-live-submit','Submit ('+items.length+')'); sub.type='button'; sub.onclick=handleSubmit;
+    var sub=el('button','oa-dock-btn oa-dock-btn--primary'); sub.type='button'; sub.onclick=handleSubmit;
+    sub.appendChild(el('span','oa-dock-label','Submit ('+items.length+')'));
     submitEl.appendChild(sub);
   }
   function buildComposeRow(){
@@ -1391,7 +1515,7 @@ const LIVE_SCRIPT = `
       // 'ack' = agent picked up the event, is editing. Clear the stall timer.
       if(msg.type==='ack'){ clearTimeout(ackTimer); setState('WORKING'); }
       // 'done' = the agent finished editing + republished. Reload the frame.
-      else if(msg.type==='done'){ clearTimeout(ackTimer); setState('CONFIRMED'); setTimeout(function(){ reloadFrame(); reset(); },1200); }
+      else if(msg.type==='done'){ clearTimeout(ackTimer); setState('CONFIRMED'); setTimeout(restartAfterEdit,1200); }
       else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
@@ -1405,30 +1529,35 @@ const LIVE_SCRIPT = `
     if(e.source!==frame.contentWindow) return;
     var d=e.data;
     if(d.type==='oa:element:picked'){ draft={element:d.element, rect:(d.element&&d.element.rect)||d.rect||null}; setState('COMPOSE'); }
+    // The frame reports oa:ready on every load. After an edit we reloaded it to
+    // show the new version; arm pick now that its listener is back (a fresh
+    // frame defaults to disarmed, and arming synchronously would race the
+    // reload and be lost).
+    else if(d.type==='oa:ready' && pendingRearm){ pendingRearm=false; if(!root.hidden) toFrame({type:'oa:live:pick:arm'}); }
   });
 
   // --- global bar ---
-  // Pick button toggles the picker on/off. When off (IDLE/CONFIRMED), turn it
-  // on and arm; when on, turn off and disarm back to IDLE.
-  pickBtn.onclick=function(){
-    var on=pickBtn.getAttribute('aria-pressed')==='true';
-    pickBtn.setAttribute('aria-pressed',String(!on));
-    pickBtn.dataset.active=String(!on);
-    if(!on){ setState('PICKING'); toFrame({type:'oa:live:pick:arm'}); }
-    else{ setState('IDLE'); toFrame({type:'oa:live:pick:disarm'}); }
-  };
+  // The Pick control (#oa-live-pick-toggle) is a display-only indicator, not a
+  // button - no click handler. Pick is armed on open and re-armed after each
+  // edit; the indicator's static --active tint reflects that.
   function exitLive(){
-    // No-op when Live isn't open. The Handoff dock calls this on open to tear
-    // Live down (mutual exclusion); a no-op preserves the idle websocket so
-    // Live still works if opened afterwards. Tearing down is otherwise safe -
-    // Live has no irreplaceable in-flight work, so it always yields when open.
-    if(root.hidden) return;
-    send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true; if(liveToggle) liveToggle.setAttribute('aria-expanded','false');
+    // Route through the dock manager so active-state, focus restore, and
+    // mutual-exclusion bookkeeping stay consistent with the header toggle.
+    // closeLive is a no-op when already closed.
+    if(window.__oaDock) window.__oaDock.close('live'); else closeLive();
   }
   exitBtn.onclick=exitLive;
-  window.__oaExitLive=exitLive;
 
-  function reset(){ state='IDLE'; items=[]; draft=null; renderBar(); abar.hidden=true; pickBtn.setAttribute('aria-pressed','false'); pickBtn.dataset.active='false'; toFrame({type:'oa:live:pick:disarm'}); }
+  function reset(){ state='IDLE'; items=[]; draft=null; pendingRearm=false; renderBar(); abar.hidden=true; toFrame({type:'oa:live:pick:disarm'}); }
+  // After a successful edit the frame reloads to show the new version. Pick
+  // stays armed for the whole live session, so instead of dropping to IDLE we
+  // clear the batch and return to PICKING - arming once the reloaded frame
+  // reports ready (a fresh frame defaults to disarmed; arming synchronously
+  // would race the reload and be lost). If the user exited during the
+  // CONFIRMED window the dock is hidden: still reload (to show the new
+  // version) but skip the re-arm - state stays IDLE from closeLive, so
+  // reopening arms cleanly instead of stranding on a stale PICKING state.
+  function restartAfterEdit(){ reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
 
   connect();
 })();
@@ -1454,28 +1583,17 @@ const HANDOFF_CSS = `
 @media (hover:hover) and (pointer:fine){.oa-handoff-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 #oa-handoff-root[hidden]{display:none}
 #oa-handoff-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-handoff-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(30rem,92vw);display:flex;flex-direction:column;gap:.4rem;padding:.6rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%);pointer-events:auto}
-#oa-handoff-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;min-height:1.1rem}
+#oa-handoff-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
+#oa-handoff-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;padding:0 .15rem .5rem;display:flex;align-items:center;gap:.35rem;min-height:1.2rem}
 #oa-handoff-status[hidden]{display:none}
 #oa-handoff-status .oa-handoff-spin{display:inline-block;width:11px;height:11px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-handoff-spin .7s linear infinite;vertical-align:-1px;margin-right:.3rem}
 @keyframes oa-handoff-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-handoff-status .oa-handoff-spin{animation:none}}
 #oa-handoff-controls{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
-.oa-handoff-btn{position:relative;display:inline-flex;align-items:center;gap:.35rem;height:30px;padding:0 .6rem;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-fg);font:inherit;font-weight:500;line-height:1;cursor:pointer;opacity:.85;transition:opacity .15s,background .15s,border-color .15s}
-.oa-handoff-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-handoff-btn:active{transform:translateY(1px)}
-.oa-handoff-btn svg{width:13px;height:13px;display:block}
-.oa-handoff-record,.oa-handoff-stop{background:var(--oa-danger);color:#fff;border-color:transparent;opacity:1}
 .oa-handoff-timer{display:inline-flex;align-items:center;gap:.3rem;color:var(--oa-fg);font-variant-numeric:tabular-nums;font-size:.8rem}
 .oa-handoff-rec-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--oa-danger);animation:oa-handoff-blink 1s infinite}
 @keyframes oa-handoff-blink{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.oa-handoff-rec-dot{animation:none}}
-@media (hover:hover) and (pointer:fine){.oa-handoff-btn:not(.oa-handoff-record):not(.oa-handoff-stop):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
-.oa-handoff-play{height:30px;padding:0 .6rem;border:0;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0}
-.oa-handoff-play svg{width:13px;height:13px}
-.oa-handoff-play:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-handoff-play:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-handoff-play:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
 .oa-handoff-dur{font-size:.78rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:center}
 .oa-handoff-del{height:30px;width:30px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
 .oa-handoff-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
@@ -1596,7 +1714,7 @@ const HANDOFF_SCRIPT = `
   function visibleCam(){ return (camBlur&&segCanvas&&!segCanvas.hidden) ? segCanvas : cam; }
   function applyBlur(){ /* state applied in startSeg/stopSeg, called from showCam */ }
   function toggleBlur(){ camBlur=!camBlur; saveBlur(camBlur); var b=document.getElementById('oa-handoff-blur'); if(b){ b.setAttribute('aria-pressed',String(camBlur)); } if(state==='RECORDING'||state==='PLAYING'){ syncCamDisplay(); } }
-  function mkBlurBtn(){ var b=el('button','oa-handoff-btn','Blur'); b.type='button'; b.id='oa-handoff-blur'; b.setAttribute('aria-pressed',String(camBlur)); b.title='Blur the webcam background'; b.onclick=toggleBlur; return b; }
+  function mkBlurBtn(){ var b=dockBtn('', null, 'Blur', {id:'oa-handoff-blur', pressed:camBlur, title:'Blur the webcam background'}); b.onclick=toggleBlur; return b; }
   loadBlur();
   // Lazy-load MediaPipe once. Returns a promise resolving to the segmenter.
   function loadSeg(){
@@ -1696,6 +1814,29 @@ const HANDOFF_SCRIPT = `
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function el(t,c,h){ var d=document.createElement(t); if(c)d.className=c; if(h!=null)d.innerHTML=h; return d; }
+  // Shared dock-button builder: the same .oa-dock-btn anatomy the Live toolbar
+  // uses (icon span + label span), so the two docks' controls are the same
+  // element. iconSvg is a trusted constant SVG string; label is textContent.
+  function dockBtn(cls, iconSvg, label, opts){
+    opts=opts||{};
+    var b=el('button', 'oa-dock-btn'+(cls?' '+cls:''));
+    b.type='button';
+    if(opts.id)b.id=opts.id;
+    if(opts.title)b.title=opts.title;
+    if(opts.ariaLabel)b.setAttribute('aria-label',opts.ariaLabel);
+    if(opts.pressed!=null)b.setAttribute('aria-pressed',String(opts.pressed));
+    if(iconSvg){var ic=el('span','oa-dock-icon');ic.setAttribute('aria-hidden','true');ic.innerHTML=iconSvg;b.appendChild(ic);}
+    if(label){var lb=el('span','oa-dock-label');lb.textContent=label;b.appendChild(lb);}
+    return b;
+  }
+  // Persistent right-aligned Exit (close-dock) control, present in every owner
+  // state - the same affordance as Live's Exit. Stops playback first (safe);
+  // recording refuses at the manager layer with a toast.
+  function requestClose(){
+    if(state==='PLAYING') exitPlay();
+    if(window.__oaDock) window.__oaDock.close('handoff'); else closeDock();
+  }
+  function mkExit(){ var b=dockBtn('oa-dock-btn--exit', ${JSON.stringify(CLOSE_SVG)}, 'Exit', {title:'Close handoff dock'}); b.onclick=requestClose; return b; }
   function fmt(ms){ ms=Math.max(0,ms||0); var s=Math.floor(ms/1000), m=Math.floor(s/60); s=s%60; return m+':'+(s<10?'0':'')+s; }
   function ownerToken(){ try{return localStorage.getItem('oa-cm-wt-'+ID)}catch(e){return null} }
   function getName(){ try{return localStorage.getItem('oa-cm-name')||''}catch(e){return ''} }
@@ -1711,19 +1852,38 @@ const HANDOFF_SCRIPT = `
   // owner viewer can still Play, so the dock auto-opens a Play-only view when a
   // handoff exists and there's no owner toggle button to click.
   var canManage = window.__oaCanManage === true;
-  function openDock(){ root.removeAttribute('hidden'); if(toggle)toggle.setAttribute('aria-expanded','true'); render(); }
-  function closeDock(){ if(state!=='IDLE')return false; root.hidden=true; if(toggle)toggle.setAttribute('aria-expanded','false'); return true; }
-  // Exposed so the Live editor can ask the Handoff dock to yield when Live
-  // opens (mutual exclusion). Returns true when closed (or already closed),
-  // false while recording/playing - those have irreplaceable in-flight work.
-  window.__oaCloseHandoff=function(){ return root.hidden ? true : closeDock(); };
-  if(toggle)toggle.addEventListener('click',function(){
-    if(root.hidden){
-      // Live and Handoff are mutually exclusive: opening Handoff tears Live
-      // down first via its exposed exit (a clean, safe teardown).
-      if(window.__oaExitLive) window.__oaExitLive();
-      openDock();
-    } else closeDock();
+  function openDock(){
+    root.removeAttribute('hidden');
+    if(toggle) toggle.setAttribute('aria-expanded','true');
+    render();
+    // Move focus into the dock toolbar so keyboard users land on the primary
+    // action (Record / Play). Deferred so render() has populated controls.
+    setTimeout(function(){ var b=controls.querySelector('button'); if(b) b.focus(); },0);
+  }
+  function closeDock(){
+    // Recording/playing hold irreplaceable in-flight work - refuse to yield.
+    if(state!=='IDLE') return false;
+    root.hidden=true;
+    if(toggle) toggle.setAttribute('aria-expanded','false');
+    return true;
+  }
+  // Register with the dock manager only when there is a header toggle (owners).
+  // Non-owner viewers get an ambient Play-only dock with no toggle and no
+  // manager entry, so Escape and mutual exclusion leave it alone.
+  if(window.__oaDock && canManage){
+    window.__oaDock.register('handoff', {
+      open: openDock,
+      close: closeDock,
+      restoreFocus: function(){ if(toggle) toggle.focus(); },
+      refuseMessage: function(){
+        return state==='RECORDING' ? 'Stop the recording before closing.' : 'Stop playback before closing.';
+      }
+    });
+  }
+  if(toggle) toggle.addEventListener('click', function(){
+    // Toggle (open/close) through the dock manager: it tears Live down first
+    // (mutual exclusion) and toasts when this dock refuses to yield.
+    if(window.__oaDock) window.__oaDock.toggle('handoff'); else { root.hidden ? openDock() : closeDock(); }
   });
 
   function render(){ if(!controls)return; controls.innerHTML='';
@@ -1735,22 +1895,24 @@ const HANDOFF_SCRIPT = `
   // Delete (exists). Viewer IDLE: Play-only (no Record/Delete) when one exists.
   function renderIdle(){
     if(handoff){
-      var play=el('button','oa-handoff-btn oa-handoff-play', ${JSON.stringify(PLAY_SVG)}+'<span>Play</span>'); play.type='button'; play.onclick=function(){startPlay(handoff.id);};
+      var play=dockBtn('oa-dock-btn--primary', ${JSON.stringify(PLAY_SVG)}, 'Play'); play.onclick=function(){startPlay(handoff.id);};
       var dur=el('span','oa-handoff-dur', fmt(handoff.durationMs));
       controls.appendChild(play); controls.appendChild(dur);
       if(canManage){
-        var rerec=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Re-record</span>'); rerec.type='button'; rerec.onclick=startRecord; rerec.title='Record a new handoff (replaces the current one)';
+        var rerec=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Re-record', {title:'Record a new handoff (replaces the current one)'}); rerec.onclick=startRecord;
         controls.appendChild(rerec);
         if(getDelToken(handoff.id)||ownerToken()){
           var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
           del.onclick=function(){delHandoff(handoff.id);};
           controls.appendChild(del);
         }
+        controls.appendChild(mkExit());
       }
       setStatus('');
     }else if(canManage){
-      var b=el('button','oa-handoff-btn oa-handoff-record', ${JSON.stringify(RECORD_DOT_SVG)}+'<span>Record</span>'); b.type='button'; b.onclick=startRecord;
+      var b=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Record'); b.onclick=startRecord;
       controls.appendChild(b);
+      controls.appendChild(mkExit());
       setStatus('Record a handoff walkthrough');
     }else{
       setStatus('No handoff recording yet');
@@ -1759,25 +1921,28 @@ const HANDOFF_SCRIPT = `
   // Auto-open a Play-only dock for non-owners when a handoff is inlined.
   if(!canManage && handoff){ openDock(); }
   function renderRec(){
-    var stop=el('button','oa-handoff-btn oa-handoff-stop', ${JSON.stringify(STOP_SVG)}+'<span>Stop</span>'); stop.type='button'; stop.onclick=stopRecord;
+    var stop=dockBtn('oa-dock-btn--record', ${JSON.stringify(STOP_SVG)}, 'Stop'); stop.onclick=stopRecord;
     var timer=el('span','oa-handoff-timer','<span class="oa-handoff-rec-dot"></span><span id="oa-handoff-timer-txt">0:00</span>');
-    var cancel=el('button','oa-handoff-btn','Cancel'); cancel.type='button'; cancel.onclick=cancelRecord;
+    var cancel=dockBtn('', null, 'Cancel'); cancel.onclick=cancelRecord;
     var micWrap=el('label','oa-handoff-mic'); micWrap.title='Microphone level';
     micWrap.setAttribute('aria-label','Microphone level');
     var meter=el('span','oa-handoff-mic-bar'); meter.id='oa-handoff-mic-bar';
-    micWrap.appendChild(meter); controls.appendChild(stop); controls.appendChild(timer); controls.appendChild(micWrap); controls.appendChild(mkBlurBtn()); controls.appendChild(cancel);
+    micWrap.appendChild(meter); controls.appendChild(stop); controls.appendChild(timer); controls.appendChild(micWrap); controls.appendChild(mkBlurBtn()); controls.appendChild(cancel); controls.appendChild(mkExit());
     if(micRAF)requestAnimationFrame(updateMicBar);
   }
   function updateMicBar(){ var bar=document.getElementById('oa-handoff-mic-bar'); if(!bar)return; if(!micRAF)return; bar.style.transform='scaleX('+Math.min(1,Math.max(0.02,micLevel*3))+')'; if(micLevel>0.003)bar.classList.remove('oa-handoff-mic-silent'); else bar.classList.add('oa-handoff-mic-silent'); requestAnimationFrame(updateMicBar); }
   function tickTimer(){ var t=document.getElementById('oa-handoff-timer-txt'); if(t)t.textContent=fmt(performance.now()-recStart); }
   function renderPlay(){
-    var pp=el('button','oa-handoff-btn','Pause'); pp.type='button'; pp.id='oa-handoff-pp'; pp.onclick=togglePause;
+    var pp=dockBtn('', null, 'Pause', {id:'oa-handoff-pp'}); pp.onclick=togglePause;
     var scrub=el('input','oa-handoff-scrub'); scrub.type='range'; scrub.min=0; scrub.max=Math.max(1000,playDur); scrub.value=0; scrub.step=100;
     scrub.oninput=function(){ scrubbing=true; var t=Number(scrub.value); if(cam){try{cam.currentTime=t/1000}catch(e){}} toFrame({type:'oa:handoff:seek',t:t}); };
     scrub.onchange=function(){ scrubbing=false; };
     var time=el('span','oa-handoff-time','0:00'); time.id='oa-handoff-time';
-    var exit=el('button','oa-handoff-btn','Exit'); exit.type='button'; exit.onclick=exitPlay;
-    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(mkBlurBtn()); controls.appendChild(exit);
+    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(mkBlurBtn());
+    // Owner: persistent Exit closes the dock (stops playback first). Non-owner:
+    // a Stop button exits playback to IDLE (no toggle to reopen a closed dock).
+    if(canManage){ controls.appendChild(mkExit()); }
+    else { var stopBtn=dockBtn('', null, 'Stop', {title:'Stop playback'}); stopBtn.onclick=exitPlay; controls.appendChild(stopBtn); }
   }
 
   function startRecord(){
@@ -1788,14 +1953,33 @@ const HANDOFF_SCRIPT = `
       audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
     }).then(function(s){
       stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable();
-      // syncCamDisplay (which runs startSeg when camBlur is on, assigning
-      // segCanvas + kicking off the composite rAF loop) MUST resolve before we
-      // pick the recorder stream below — otherwise segCanvas is null on the
-      // FIRST recording in a session and recStream falls back to the raw camera,
-      // silently recording an unblurred background while hasBlur=true. So the
-      // recorder setup waits for cam.play() + syncCamDisplay to land.
-      cam.play().then(function(){ syncCamDisplay(); beginRecord(s); }).catch(function(){ syncCamDisplay(); beginRecord(s); });
+      // syncCamDisplay starts the MediaPipe composite loop when blur is on, but
+      // the canvas only begins producing BLURRED frames once segFirstFrame flips
+      // (async - after MediaPipe loads + the first inference). beginRecord must
+      // wait for that before picking the recorder stream, otherwise it captures
+      // the raw camera and the saved file is unblurred despite the blurred
+      // preview - the privacy bug. maybeWaitForBlur bounds the wait and falls
+      // back to raw + hasBlur=false if MediaPipe is slow or fails to load.
+      cam.play().then(function(){ syncCamDisplay(); maybeWaitForBlur(s); }).catch(function(){ syncCamDisplay(); maybeWaitForBlur(s); });
     }).catch(function(err){ setStatus('Camera/mic denied: '+(err&&err.message?err.message:'permission needed')); });
+  }
+  // Wait until the blur composite is actually producing frames before recording,
+  // so the encoded stream is the composited canvas (crisp person + blurred bg),
+  // not the raw camera. Time-bounded: a slow/broken MediaPipe load falls back to
+  // raw camera with hasBlur=false so playback re-composites rather than trusting
+  // a blur that never made it into the file.
+  function maybeWaitForBlur(s){
+    if(!camBlur || segFirstFrame){ beginRecord(s); return; }
+    setStatus('<span class="oa-handoff-spin"></span>Starting blur…');
+    var waited=0;
+    function tick(){
+      if(!camBlur){ beginRecord(s); return; }
+      if(segFirstFrame){ setStatus(''); beginRecord(s); return; }
+      waited+=60;
+      if(waited>=4000){ setStatus('Blur unavailable - recording raw'); beginRecord(s); return; }
+      setTimeout(tick,60);
+    }
+    setTimeout(tick,60);
   }
   function beginRecord(s){
     // Diagnose a silent-mic track now: a track that is muted at the OS level
@@ -1810,12 +1994,12 @@ const HANDOFF_SCRIPT = `
     var mime=pickMime();
     // When blur is on AND the composite canvas is live, record the canvas
     // stream (crisp person + blurred bg) so the saved file carries the blur;
-    // splice in the mic track since captureStream() carries video only. When
-    // blur is off OR the canvas isn't ready yet (MediaPipe still loading on the
-    // very first record), record the raw camera stream and store hasBlur=false
-    // so playback re-composites live rather than trusting a blur that isn't in
-    // the file. This guards against the privacy bug where a blurred intent
-    // silently recorded raw and the hasBlur=true flag suppressed re-composite.
+    // splice in the mic track since captureStream() carries video only.
+    // maybeWaitForBlur (called before this) ensures segFirstFrame is already
+    // true when blur is on, so this branch is taken and the blur is persisted
+    // into the file. The raw-camera fallback (hasBlur=false) only fires when
+    // blur is off or MediaPipe failed/timed out - playback then re-composites
+    // live rather than trusting a blur that isn't in the file.
     var recStream = stream;
     var usedBlur = false;
     if(camBlur && segCanvas && !segCanvas.hidden && segFirstFrame){
@@ -1935,8 +2119,9 @@ const HANDOFF_SCRIPT = `
     }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); });
   }
   function togglePause(){ if(!cam)return;
-    if(cam.paused){ cam.play(); toFrame({type:'oa:handoff:resume'}); var pp=document.getElementById('oa-handoff-pp'); if(pp)pp.textContent='Pause'; }
-    else { cam.pause(); toFrame({type:'oa:handoff:pause'}); var pp=document.getElementById('oa-handoff-pp'); if(pp)pp.textContent='Play'; }
+    var pp=document.getElementById('oa-handoff-pp'); var lb=pp&&pp.querySelector('.oa-dock-label');
+    if(cam.paused){ cam.play(); toFrame({type:'oa:handoff:resume'}); if(lb)lb.textContent='Pause'; }
+    else { cam.pause(); toFrame({type:'oa:handoff:pause'}); if(lb)lb.textContent='Play'; }
   }
   function exitPlay(){ toFrame({type:'oa:handoff:stop'}); stopSeg(); if(cam){cam.pause(); cam.removeAttribute('src'); cam.srcObject=null; cam.hidden=true; cam.onclick=null;} if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} state='IDLE'; render();
     var curV=window.__oaViewedVersion||1; frame.src='/a/'+ID+'/frame?v='+curV; }
@@ -2005,9 +2190,10 @@ export function hostShell(options: HostShellOptions): string {
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
 <meta name="twitter:image" content="${escapeHtml(ogImage)}">
-<style>${RESET_CSS}${COMMENTS_CSS}${liveEnabled ? LIVE_CSS : ""}${handoffEnabled ? HANDOFF_CSS : ""}${ACCOUNT_CSS}${HOST_FRAME_CSS}</style>
+<style>${RESET_CSS}${TOAST_CSS}${COMMENTS_CSS}${liveEnabled || handoffEnabled ? DOCK_CSS : ""}${liveEnabled ? LIVE_CSS : ""}${handoffEnabled ? HANDOFF_CSS : ""}${ACCOUNT_CSS}${HOST_FRAME_CSS}</style>
 </head>
 <body>
+<div class="oa-toast-container" id="oa-toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
@@ -2015,6 +2201,7 @@ ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
 ${handoffEnabled ? handoffChromeHtml(artifactId, handoffList) : ""}
 ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};window.__oaCanManage=${canManage};</script>
+<script nonce="${nonce}">${TOAST_SCRIPT}</script>
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
@@ -2023,6 +2210,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(HOST_UI_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(ACCOUNT_SCRIPT)}</script>
+${liveEnabled || handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(DOCK_SCRIPT)}</script>` : ""}
 ${liveEnabled ? `<script nonce="${nonce}">${escapeInlineScript(LIVE_SCRIPT)}</script>` : ""}
 ${handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(HANDOFF_SCRIPT)}</script>` : ""}
 </body>
@@ -2036,8 +2224,23 @@ const COMMENTS_SCRIPT = `
   var drawer=document.getElementById('oa-cm-drawer');
   if(!toggle||!drawer)return;
   var closeBtn=drawer.querySelector('.oa-cm-close');
-  function open(){drawer.setAttribute('data-open','');drawer.setAttribute('aria-hidden','false');toggle.setAttribute('aria-expanded','true')}
-  function shut(){drawer.removeAttribute('data-open');drawer.setAttribute('aria-hidden','true');toggle.setAttribute('aria-expanded','false')}
+  var transitioning=false;
+  function open(){
+    if(transitioning)return;
+    transitioning=true;
+    drawer.setAttribute('data-open','');
+    drawer.setAttribute('aria-hidden','false');
+    toggle.setAttribute('aria-expanded','true');
+    setTimeout(function(){transitioning=false},180);
+  }
+  function shut(){
+    if(transitioning)return;
+    transitioning=true;
+    drawer.removeAttribute('data-open');
+    drawer.setAttribute('aria-hidden','true');
+    toggle.setAttribute('aria-expanded','false');
+    setTimeout(function(){transitioning=false},180);
+  }
   toggle.addEventListener('click',function(){drawer.hasAttribute('data-open')?shut():open()});
   if(closeBtn)closeBtn.addEventListener('click',shut);
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawer.hasAttribute('data-open'))shut()});
@@ -2637,6 +2840,7 @@ function commentsDataScript(comments: CommentMeta[]): string {
 // rendered with textContent (never innerHTML) — author/body/quote are untrusted.
 const HOST_UI_SCRIPT = `
 (function(){
+  // Cache DOM references
   var frame=document.getElementById("oa-frame");
   var header=document.querySelector(".oa-header");
   var drawer=document.getElementById("oa-cm-drawer");
@@ -2647,27 +2851,42 @@ const HOST_UI_SCRIPT = `
   if(!frame||!ID)return;
   var drawerErrEl=document.getElementById("oa-cm-drawer-err");
   var drawerErrTimer=null;
+
+  // Cache header height
+  var cachedHeaderH=0;
+  function headerH(){
+    if(!header)return 40;
+    if(!cachedHeaderH)cachedHeaderH=Math.round(header.getBoundingClientRect().height);
+    return cachedHeaderH;
+  }
+
+  // Unified localStorage access with error handling
+  var storage={
+    get:function(key){try{return localStorage.getItem(key)}catch(e){return null}},
+    set:function(key,val){try{localStorage.setItem(key,val)}catch(e){}},
+    remove:function(key){try{localStorage.removeItem(key)}catch(e){}}
+  };
+
   function drawerErr(msg){
     if(!drawerErrEl)return;
     drawerErrEl.textContent=msg;drawerErrEl.removeAttribute("hidden");
     if(drawerErrTimer)clearTimeout(drawerErrTimer);
     drawerErrTimer=setTimeout(function(){drawerErrEl.setAttribute("hidden","")},5000);
   }
-  function headerH(){return header?Math.round(header.getBoundingClientRect().height):40}
-  function getName(){try{return localStorage.getItem("oa-cm-name")||""}catch(e){return""}}
-  function setName(v){try{localStorage.setItem("oa-cm-name",v)}catch(e){}}
-  function saveToken(id,t){try{localStorage.setItem("oa-cm-dt-"+id,t)}catch(e){}}
-  function getToken(id){try{return localStorage.getItem("oa-cm-dt-"+id)}catch(e){return null}}
-  function dropToken(id){try{localStorage.removeItem("oa-cm-dt-"+id)}catch(e){}}
+  function getName(){return storage.get("oa-cm-name")||""}
+  function setName(v){storage.set("oa-cm-name",v)}
+  function saveToken(id,t){storage.set("oa-cm-dt-"+id,t)}
+  function getToken(id){return storage.get("oa-cm-dt-"+id)}
+  function dropToken(id){storage.remove("oa-cm-dt-"+id)}
   // Owner moderation: /a/:id?wt=<artifact write token> grants delete on every
   // comment (the server already accepts the write token on DELETE). The token is
   // moved straight into storage and stripped from the URL so it stays out of
   // history, and it never crosses into the frame.
-  function ownerToken(){try{return localStorage.getItem("oa-cm-wt-"+ID)}catch(e){return null}}
+  function ownerToken(){return storage.get("oa-cm-wt-"+ID)}
   (function(){try{
     var u=new URL(location.href),wt=u.searchParams.get("wt");
     if(!wt)return;
-    try{localStorage.setItem("oa-cm-wt-"+ID,wt)}catch(e){}
+    storage.set("oa-cm-wt-"+ID,wt);
     u.searchParams.delete("wt");
     history.replaceState(null,"",u.pathname+(u.search||"")+u.hash);
   }catch(e){}})();
