@@ -8,6 +8,8 @@ import type {
   VersionMeta,
 } from "./domain";
 import { MARKED_SOURCE } from "./generated/marked-source";
+import { CLOSE_SVG, HANDOFF_SVG, HANDOFF_SVGS, handoffScript } from "./handoff";
+import { HANDOFF_CSS } from "./handoff/styles";
 import type { Brand } from "./home";
 
 export function escapeHtml(value: string): string {
@@ -421,16 +423,6 @@ const LIVE_SVG =
 // Handoff toggle: a video camera (the record-a-walkthrough affordance), stroke
 // to match the toolbar's other outline controls (Live/comments). The record
 // action itself uses a filled dot; stop uses a square; play uses a triangle.
-const HANDOFF_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>';
-const RECORD_DOT_SVG =
-  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="6"/></svg>';
-const STOP_SVG =
-  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
-const PLAY_SVG =
-  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/></svg>';
-const SHARE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
 
 function versionPickerHtml(
   versions: VersionMeta[],
@@ -766,7 +758,7 @@ const DOCK_CSS = `
 .oa-dock-btn--record{background:var(--oa-danger);color:#fff;border-color:transparent;opacity:1}
 .oa-dock-btn--exit{margin-left:auto}
 .oa-dock-btn--indicator{cursor:default}
-@media (hover:hover) and (pointer:fine){.oa-dock-btn:not(.oa-dock-btn--record):not(.oa-dock-btn--primary):not(.oa-dock-btn--indicator):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}.oa-dock-btn--primary:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
+@media (hover:hover) and (pointer:fine){.oa-dock-btn:not(.oa-dock-btn--record):not(.oa-dock-btn--primary):not(.oa-dock-btn--indicator):not(.oa-dock-btn--blur):not(.oa-dock-btn--discard):hover{opacity:1;background:color-mix(in oklab,var(--oa-fg),transparent 94%)}.oa-dock-btn--primary:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}}
 `;
 
 const LIVE_CSS = `
@@ -1569,8 +1561,7 @@ const LIVE_SCRIPT = `
 `;
 
 // Close-X glyph for the live global bar's Exit button.
-const CLOSE_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+// (CLOSE_SVG is imported from ./handoff/svgs and shared with the handoff dock.)
 
 // Handoff record/play chrome. The dock (bottom-center pill, the Live dock
 // language) holds the Record button + handoff list in IDLE, Stop/timer/Cancel
@@ -1578,55 +1569,8 @@ const CLOSE_SVG =
 // is a fixed corner overlay - mirrored during recording (selfie), unmirrored
 // during playback. Quiet chrome, single --accent + --danger, both themes,
 // visible focus rings, no decorative motion (the rec dot blink is informational).
-const HANDOFF_CSS = `
-.oa-handoff-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
-.oa-handoff-toggle::before{content:"";position:absolute;inset:-6px}
-.oa-handoff-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-handoff-toggle:active{transform:translateY(1px)}
-.oa-handoff-toggle svg{display:block;width:16px;height:16px}
-.oa-handoff-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
-@media (hover:hover) and (pointer:fine){.oa-handoff-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
-#oa-handoff-root[hidden]{display:none}
-#oa-handoff-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-handoff-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
-#oa-handoff-status{color:var(--oa-muted);font-size:.78rem;line-height:1.4;padding:0 .15rem .5rem;display:flex;align-items:center;gap:.35rem;min-height:1.2rem}
-#oa-handoff-status[hidden]{display:none}
-#oa-handoff-status .oa-handoff-spin{display:inline-block;width:11px;height:11px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-handoff-spin .7s linear infinite;vertical-align:-1px;margin-right:.3rem}
-@keyframes oa-handoff-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#oa-handoff-status .oa-handoff-spin{animation:none}}
-#oa-handoff-controls{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
-.oa-handoff-timer{display:inline-flex;align-items:center;gap:.3rem;color:var(--oa-fg);font-variant-numeric:tabular-nums;font-size:.8rem}
-.oa-handoff-rec-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--oa-danger);animation:oa-handoff-blink 1s infinite}
-@keyframes oa-handoff-blink{50%{opacity:.25}}
-@media (prefers-reduced-motion:reduce){.oa-handoff-rec-dot{animation:none}}
-.oa-handoff-dur{font-size:.78rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:center}
-.oa-handoff-del{height:30px;width:30px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--oa-muted);cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
-.oa-handoff-del:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-@media (hover:hover) and (pointer:fine){.oa-handoff-del:hover{color:var(--oa-danger);border-color:color-mix(in oklab,var(--oa-danger),transparent 50%)}}
-.oa-handoff-scrub{flex:1;min-width:80px;height:4px;-webkit-appearance:none;appearance:none;background:var(--oa-border);border-radius:2px;outline:none;cursor:pointer}
-.oa-handoff-scrub::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--oa-accent);border:0}
-.oa-handoff-scrub::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--oa-accent);border:0}
-.oa-handoff-time{font-size:.72rem;color:var(--oa-muted);font-variant-numeric:tabular-nums;min-width:2.5rem;text-align:right;flex-shrink:0}
-#oa-handoff-cam{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-bg),#000 0%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 28px -6px rgba(0,0,0,.5),0 0 0 1px var(--oa-border);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
-#oa-handoff-cam[hidden]{display:none}
-#oa-handoff-cam[data-rec]{transform:scaleX(-1)}
-#oa-handoff-cam-canvas{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-bg),#000 0%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 28px -6px rgba(0,0,0,.5),0 0 0 1px var(--oa-border);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
-#oa-handoff-cam-canvas[hidden]{display:none}
-#oa-handoff-cam[data-dragging]{cursor:grabbing}
-.oa-handoff-mic{display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0;width:36px;height:18px}
-.oa-handoff-mic-bar{display:block;width:100%;height:4px;border-radius:2px;background:color-mix(in oklab,var(--oa-fg),transparent 82%);transform:scaleX(.02);transform-origin:left center;transition:transform .08s linear}
-.oa-handoff-mic-bar.oa-handoff-mic-silent{background:color-mix(in oklab,var(--oa-danger),transparent 60%)}
-#oa-handoff-countdown{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:2147483647;pointer-events:none;font-family:var(--oa-font);font-size:12rem;font-weight:300;color:var(--oa-fg);text-shadow:0 4px 24px rgba(0,0,0,.4);background:rgba(0,0,0,.35);backdrop-filter:blur(2px)}
-#oa-handoff-countdown[data-on]{display:flex}
-#oa-handoff-countdown[data-num="1"]{color:var(--oa-accent)}
-@media (prefers-reduced-motion:reduce){#oa-handoff-countdown{animation:none}}
-@keyframes oa-handoff-pop{0%{transform:scale(.6);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
-#oa-handoff-countdown[data-on]>*{animation:oa-handoff-pop .5s ease-out}
-@media (prefers-reduced-motion:reduce){#oa-handoff-countdown[data-on]>*{animation:none}}
-.oa-handoff-speed{min-height:28px;padding:.1rem 1.2rem .1rem .3rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.72rem;font-family:inherit;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;flex-shrink:0}
-.oa-handoff-speed:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-#oa-handoff-share.oa-dock-btn--copied{color:var(--oa-accent);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%)}
-`;
+// The CSS lives in src/handoff/styles.ts so the dock's styles and its JS share
+// one home; B1 (Deploy Console restyle) replaces the generic rules there.
 
 // The inlined handoff list is serve-time JSON (the comments/version-picker
 // pattern) so the play UI can list recordings with no runtime fetch from the
@@ -1656,8 +1600,8 @@ function handoffChromeHtml(
       }
     : null;
   return `<div id="oa-handoff-root" hidden>
+  <div id="oa-handoff-status" role="status" aria-live="polite" hidden></div>
   <div id="oa-handoff-dock">
-    <div id="oa-handoff-status" role="status" aria-live="polite" hidden></div>
     <div id="oa-handoff-controls" role="toolbar" aria-label="Handoff recording"></div>
   </div>
   <video id="oa-handoff-cam" hidden playsinline></video>
@@ -1676,559 +1620,10 @@ function handoffChromeHtml(
 // is stored per handoff (oa-handoff-dt-<hid>) so the recorder can delete their
 // own. Visual-only playback: the frame draws a synthetic cursor + ripples +
 // scroll, never real DOM events.
-const HANDOFF_SCRIPT = `
-(function(){
-  var dataEl=document.getElementById('oa-handoff-data');
-  if(!dataEl)return;
-  // One handoff per artifact: a single object (or null), inlined at serve time.
-  var handoff=null;
-  try{handoff=JSON.parse(dataEl.textContent||'null')}catch(e){handoff=null}
-  var root=document.getElementById('oa-handoff-root');
-  var dock=document.getElementById('oa-handoff-dock');
-  var statusEl=document.getElementById('oa-handoff-status');
-  var controls=document.getElementById('oa-handoff-controls');
-  var cam=document.getElementById('oa-handoff-cam');
-  var toggle=document.querySelector('.oa-handoff-toggle');
-  var frame=document.getElementById('oa-frame');
-  var ID=window.__oaBridgeId;
-  if(!root||!dock||!controls||!cam||!frame||!ID)return;
-
-  var state='IDLE';
-  var mr=null, chunks=[], stream=null, recStart=0, events=[], timerInt=null;
-  var playDur=0, scrubbing=false;
-  // 3-2-1 countdown overlay state (module-level so cancelRecord can clear it).
-  var countdownEl=document.getElementById('oa-handoff-countdown');
-  var countdownTimer=null;
-  function hideCountdown(){ if(countdownEl){countdownEl.removeAttribute('data-on'); countdownEl.removeAttribute('data-num'); countdownEl.innerHTML='';} if(countdownTimer){clearTimeout(countdownTimer); countdownTimer=null;} }
-  // Live mic level meter so a silent recording is diagnosed at record time,
-  // not after. A flat bar means the mic track has no signal (muted by the OS,
-  // wrong input device, or permissions) and the recorded audio will be silent.
-  var audioCtx=null, analyser=null, micLevel=0, micRAF=0;
-  // Client-side ceilings so a long recording uploads cleanly instead of
-  // hitting the server's 64 MiB 413 and wasting the clip. 10 min / 60 MiB.
-  var MAX_REC_MS=600000, MAX_REC_BYTES=60*1024*1024, recBytes=0, recTimeout=0, playUrl=null;
-  // Whether the in-progress recording actually captured the composited
-  // (blurred) canvas stream, set in beginRecord. Decoupled from the camBlur
-  // *preference* because the canvas may not be live yet on the first record
-  // (MediaPipe still loading) — recording raw + flagging hasBlur=false keeps
-  // playback honest (it re-composites live instead of trusting a missing blur).
-  var recUsedBlur=false;
-
-  // Drag the webcam overlay to any of the four screen corners during record
-  // (selfie preview) and play (playback). Position is kept as {left,top} so it
-  // survives between record and play; defaults to bottom-right. Pointer-event
-  // based so it works for mouse, touch, and pen. The corner the closest edge
-  // snaps toward is irrelevant - the overlay goes wherever you drop it.
-  var CAM_KEY='oa-handoff-cam-pos', camDragBound=false;
-  function loadCamPos(){ try{ var s=localStorage.getItem(CAM_KEY); if(s){var p=JSON.parse(s); if(p&&typeof p.left==='number'&&typeof p.top==='number')return p;}}catch(e){} return null; }
-  function saveCamPos(p){ try{localStorage.setItem(CAM_KEY, JSON.stringify(p));}catch(e){} }
-  function applyCamPos(){ var p=loadCamPos(); if(!p)return; var t=visibleCam(); if(!t)return; t.style.left=p.left+'px'; t.style.top=p.top+'px'; t.style.right='auto'; t.style.bottom='auto'; }
-  // Portrait-segmentation background blur via MediaPipe Selfie Segmentation
-  // (self-hosted same-origin at /vendor/mediapipe/*, no CSP widening). When on,
-  // a hidden <video> feeds MediaPipe per frame; the visible overlay becomes a
-  // <canvas> composited crisp-person + blurred-background. When off, the raw
-  // <video> is the overlay (today's behavior). Persisted so record and play
-  // share the choice; the recorded file carries hasBlur so playback knows not
-  // to double-process an already-blurred clip.
-  var BLUR_KEY='oa-handoff-blur', camBlur=false;
-  var seg=null, segReady=false, segLoading=false, segRAF=0, segCanvas=null, segCtx=null, segOnResults=null, segFirstFrame=false;
-  function loadBlur(){ try{ camBlur=localStorage.getItem(BLUR_KEY)==='1'; }catch(e){} }
-  function saveBlur(v){ try{localStorage.setItem(BLUR_KEY, v?'1':'0');}catch(e){} }
-  function visibleCam(){ return (camBlur&&segCanvas&&!segCanvas.hidden) ? segCanvas : cam; }
-  function applyBlur(){ /* state applied in startSeg/stopSeg, called from showCam */ }
-  function toggleBlur(){ camBlur=!camBlur; saveBlur(camBlur); var b=document.getElementById('oa-handoff-blur'); if(b){ b.setAttribute('aria-pressed',String(camBlur)); } if(state==='RECORDING'||state==='PLAYING'){ syncCamDisplay(); } }
-  function mkBlurBtn(){ var b=dockBtn('', null, 'Blur', {id:'oa-handoff-blur', pressed:camBlur, title:'Blur the webcam background'}); b.onclick=toggleBlur; return b; }
-  loadBlur();
-  // Lazy-load MediaPipe once. Returns a promise resolving to the segmenter.
-  function loadSeg(){
-    if(segReady) return Promise.resolve(seg);
-    if(segLoading) return segLoading;
-    segLoading = new Promise(function(res, rej){
-      var s=document.createElement('script');
-      s.src='/vendor/mediapipe/selfie_segmentation.js';
-      s.onload=function(){
-        try{
-          // @ts-ignore - global injected by the vendored IIFE.
-          var SS=window.SelfieSegmentation;
-          seg=new SS({locateFile:function(p){ return '/vendor/mediapipe/'+p; }});
-          seg.onResults(function(r){ if(segOnResults)segOnResults(r); });
-          seg.setOptions({modelSelection:1});
-          seg.initialize().then(function(){ segReady=true; res(seg); }).catch(rej);
-        }catch(e){ rej(e); }
-      };
-      s.onerror=function(){ rej(new Error('MediaPipe failed to load')); };
-      document.head.appendChild(s);
-    });
-    segLoading.catch(function(){ segLoading=null; });
-    return segLoading;
-  }
-  // Composite one frame: crisp person + blurred background, using the mask as
-  // the alpha stencil. Standard MediaPipe composite idiom.
-  function composite(video, mask){
-    var c=segCanvas, ctx=segCtx; if(!c||!ctx)return;
-    var vw=video.videoWidth, vh=video.videoHeight; if(!vw||!vh)return;
-    if(c.width!==vw){ c.width=vw; c.height=vh; }
-    ctx.save();
-    ctx.globalCompositeOperation='source-over';
-    ctx.filter='blur(12px)';
-    ctx.drawImage(video, 0, 0, vw, vh);
-    ctx.filter='none';
-    // Cut the person hole out of the blurred bg, then draw crisp person behind.
-    ctx.globalCompositeOperation='destination-out';
-    ctx.drawImage(mask, 0, 0, vw, vh);
-    ctx.globalCompositeOperation='destination-over';
-    ctx.drawImage(video, 0, 0, vw, vh);
-    ctx.restore();
-  }
-  // Drive MediaPipe at rAF while the overlay is visible + blur is on.
-  function segLoop(){
-    if(!segRAF)return;
-    var v=cam;
-    if(v.readyState>=2){
-      // Until MediaPipe is ready, draw the raw video onto the canvas so the
-      // bubble shows the camera (unblurred) instead of collapsing to empty.
-      // Once ready, seg.send() fires onResults -> composite (blurred bg).
-      if(segReady){ try{ seg.send({image:v}); }catch(e){} }
-      else if(segCtx && segCanvas && !segCanvas.hidden){
-        var vw=v.videoWidth, vh=v.videoHeight;
-        if(vw&&vh){ if(segCanvas.width!==vw){segCanvas.width=vw; segCanvas.height=vh;} segCtx.globalCompositeOperation='source-over'; segCtx.filter='none'; segCtx.drawImage(v,0,0,vw,vh); }
-      }
-    }
-    segRAF=requestAnimationFrame(segLoop);
-  }
-  function startSeg(){
-    if(!camBlur)return;
-    if(!segCanvas){ segCanvas=document.getElementById('oa-handoff-cam-canvas'); segCtx=segCanvas?segCanvas.getContext('2d'):null; }
-    if(!segCanvas)return;
-    // Show the canvas overlay with the raw video drawn as a fallback so the
-    // circular bubble stays visible while MediaPipe loads + before the first
-    // segmentation lands (otherwise a 0x0 canvas collapses and the bubble
-    // vanishes). The video is NOT hidden until the first composite succeeds;
-    // it is just covered by the canvas. Once MediaPipe returns a frame, the
-    // composite path takes over and the video is hidden.
-    segCanvas.hidden=false; applyCamPos();
-    segFirstFrame=false;
-    setStatus('<span class="oa-handoff-spin"></span>Loading blur…');
-    segOnResults=function(r){ if(r&&r.segmentationMask&&r.image){ composite(cam, r.segmentationMask); if(!segFirstFrame){ segFirstFrame=true; cam.hidden=true; } setStatus(''); } };
-    loadSeg().then(function(){ if(!segRAF && camBlur){ segRAF=requestAnimationFrame(segLoop); } }).catch(function(e){ setStatus('Blur load failed: '+(e&&e.message||'')); });
-  }
-  function stopSeg(){
-    if(segRAF)cancelAnimationFrame(segRAF); segRAF=0; segOnResults=null;
-    if(segCanvas){ segCanvas.hidden=true; }
-  }
-  // Re-sync which element is the visible overlay after a blur toggle or show.
-  function syncCamDisplay(){
-    if(!camBlur){ stopSeg(); cam.hidden=false; applyCamPos(); return; }
-    startSeg();
-  }
-  function makeCamDraggable(){
-    if(camDragBound)return; camDragBound=true;
-    var sx=0, sy=0, ox=0, oy=0, w=0, h=0, dragging=false;
-    function down(e){ dragging=true; var t=visibleCam(); if(t)t.setAttribute('data-dragging',''); var pt=e.touches?e.touches[0]:e; sx=pt.clientX; sy=pt.clientY; var r=(visibleCam()||cam).getBoundingClientRect(); w=r.width; h=r.height; ox=r.left; oy=r.top; e.preventDefault(); }
-    function move(e){ if(!dragging)return; var t=visibleCam()||cam; var pt=e.touches?e.touches[0]:e; var nx=Math.max(0,Math.min(window.innerWidth-w, ox+(pt.clientX-sx))); var ny=Math.max(0,Math.min(window.innerHeight-h, oy+(pt.clientY-sy))); t.style.left=nx+'px'; t.style.top=ny+'px'; t.style.right='auto'; t.style.bottom='auto'; e.preventDefault(); }
-    function up(e){ if(!dragging)return; dragging=false; var t=visibleCam(); if(t)t.removeAttribute('data-dragging'); var r=(visibleCam()||cam).getBoundingClientRect(); var p={left:Math.max(0,Math.min(window.innerWidth-w,r.left)), top:Math.max(0,Math.min(window.innerHeight-h,r.top))}; saveCamPos(p); }
-    cam.addEventListener('pointerdown',down);
-    window.addEventListener('pointermove',move);
-    window.addEventListener('pointerup',up);
-    window.addEventListener('pointercancel',up);
-    applyCamPos();
-  }
-
-  function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
-  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function el(t,c,h){ var d=document.createElement(t); if(c)d.className=c; if(h!=null)d.innerHTML=h; return d; }
-  // Shared dock-button builder: the same .oa-dock-btn anatomy the Live toolbar
-  // uses (icon span + label span), so the two docks' controls are the same
-  // element. iconSvg is a trusted constant SVG string; label is textContent.
-  function dockBtn(cls, iconSvg, label, opts){
-    opts=opts||{};
-    var b=el('button', 'oa-dock-btn'+(cls?' '+cls:''));
-    b.type='button';
-    if(opts.id)b.id=opts.id;
-    if(opts.title)b.title=opts.title;
-    if(opts.ariaLabel)b.setAttribute('aria-label',opts.ariaLabel);
-    if(opts.pressed!=null)b.setAttribute('aria-pressed',String(opts.pressed));
-    if(iconSvg){var ic=el('span','oa-dock-icon');ic.setAttribute('aria-hidden','true');ic.innerHTML=iconSvg;b.appendChild(ic);}
-    if(label){var lb=el('span','oa-dock-label');lb.textContent=label;b.appendChild(lb);}
-    return b;
-  }
-  // Persistent right-aligned Exit (close-dock) control, present in every owner
-  // state - the same affordance as Live's Exit. Stops playback first (safe);
-  // recording refuses at the manager layer with a toast.
-  function requestClose(){
-    if(state==='PLAYING') exitPlay();
-    if(window.__oaDock) window.__oaDock.close('handoff'); else closeDock();
-  }
-  function mkExit(){ var b=dockBtn('oa-dock-btn--exit', ${JSON.stringify(CLOSE_SVG)}, 'Exit', {title:'Close handoff dock'}); b.onclick=requestClose; return b; }
-  function fmt(ms){ ms=Math.max(0,ms||0); var s=Math.floor(ms/1000), m=Math.floor(s/60); s=s%60; return m+':'+(s<10?'0':'')+s; }
-  function ownerToken(){ try{return localStorage.getItem('oa-cm-wt-'+ID)}catch(e){return null} }
-  function getName(){ try{return localStorage.getItem('oa-cm-name')||''}catch(e){return ''} }
-  function saveDelToken(hid,t){ try{localStorage.setItem('oa-handoff-dt-'+hid,t)}catch(e){} }
-  function getDelToken(hid){ try{return localStorage.getItem('oa-handoff-dt-'+hid)}catch(e){return null} }
-  // Playback speed persists across views (Loom defaults to 1.2x; our short
-  // walkthroughs default to 1x). Applied to cam.playbackRate on play and on
-  // change. Stored as the numeric string ("1","1.5","2").
-  var SPEED_KEY='oa-handoff-speed';
-  function loadSpeed(){ var v=1; try{ var s=localStorage.getItem(SPEED_KEY); if(s){var n=parseFloat(s); if(n>=0.5&&n<=2.5)v=n;} }catch(e){} return v; }
-  function saveSpeed(v){ try{localStorage.setItem(SPEED_KEY, String(v));}catch(e){} }
-  // X-OA-CSRF: a SaaS deploy (coda0) gates session-based writes on this header
-  // (requireCsrf); self-host admits via the bearer wt_ instead. Send both so
-  // the upload/delete work either way.
-  function authHeaders(){ var wt=ownerToken(); var h=wt?{Authorization:'Bearer '+wt}:{}; h['X-OA-CSRF']='1'; return h; }
-  function setStatus(s){ if(!statusEl)return; statusEl.innerHTML=s||''; statusEl.hidden=!s; }
-
-  // canManage gates Record/Re-record/Delete (write-gated server-side). A non-
-  // owner viewer can still Play, so the dock auto-opens a Play-only view when a
-  // handoff exists and there's no owner toggle button to click.
-  var canManage = window.__oaCanManage === true;
-  function openDock(){
-    root.removeAttribute('hidden');
-    if(toggle) toggle.setAttribute('aria-expanded','true');
-    render();
-    // Move focus into the dock toolbar so keyboard users land on the primary
-    // action (Record / Play). Deferred so render() has populated controls.
-    setTimeout(function(){ var b=controls.querySelector('button'); if(b) b.focus(); },0);
-  }
-  function closeDock(){
-    // Recording/playing hold irreplaceable in-flight work - refuse to yield.
-    if(state!=='IDLE') return false;
-    root.hidden=true;
-    if(toggle) toggle.setAttribute('aria-expanded','false');
-    return true;
-  }
-  // Register with the dock manager only when there is a header toggle (owners).
-  // Non-owner viewers get an ambient Play-only dock with no toggle and no
-  // manager entry, so Escape and mutual exclusion leave it alone.
-  if(window.__oaDock && canManage){
-    window.__oaDock.register('handoff', {
-      open: openDock,
-      close: closeDock,
-      restoreFocus: function(){ if(toggle) toggle.focus(); },
-      refuseMessage: function(){
-        if(state==='RECORDING') return 'Stop the recording before closing.';
-        if(state==='SAVING') return 'Saving the handoff - please wait...';
-        return 'Stop playback before closing.';
-      }
-    });
-  }
-  if(toggle) toggle.addEventListener('click', function(){
-    // Toggle (open/close) through the dock manager: it tears Live down first
-    // (mutual exclusion) and toasts when this dock refuses to yield.
-    if(window.__oaDock) window.__oaDock.toggle('handoff'); else { root.hidden ? openDock() : closeDock(); }
-  });
-
-  function render(){ if(!controls)return; controls.innerHTML='';
-    if(state==='IDLE')renderIdle();
-    else if(state==='RECORDING')renderRec();
-    else if(state==='PLAYING')renderPlay();
-  }
-  // One handoff per artifact+version. Owner IDLE: Record (none) or Re-record +
-  // Play + Copy link + Delete (exists). Viewer IDLE: Play + Copy link (no
-  // Record/Delete) when one exists for the viewed version.
-  function renderIdle(){
-    if(handoff){
-      var play=dockBtn('oa-dock-btn--primary', ${JSON.stringify(PLAY_SVG)}, 'Play'); play.onclick=function(){startPlay(handoff.id);};
-      var dur=el('span','oa-handoff-dur', fmt(handoff.durationMs));
-      // Post-record Share affordance (Loom emphasizes Share after a recording).
-      // Copies /a/<id>?v=<handoff.version> so the link lands on the exact
-      // version the recording was made against.
-      var share=dockBtn('', ${JSON.stringify(SHARE_SVG)}, 'Copy link', {title:'Copy a link to this version', id:'oa-handoff-share'});
-      share.onclick=function(){ copyShareLink(handoff.version); };
-      controls.appendChild(play); controls.appendChild(dur); controls.appendChild(share);
-      if(canManage){
-        var rerec=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Re-record', {title:'Record a new handoff for this version (replaces the current one)'}); rerec.onclick=startRecord;
-        controls.appendChild(rerec);
-        if(getDelToken(handoff.id)||ownerToken()){
-          var del=el('button','oa-handoff-del','\\u00d7'); del.type='button'; del.title='Delete handoff'; del.setAttribute('aria-label','Delete handoff');
-          del.onclick=function(){delHandoff(handoff.id);};
-          controls.appendChild(del);
-        }
-        controls.appendChild(mkExit());
-      }
-      setStatus('');
-    }else if(canManage){
-      var b=dockBtn('oa-dock-btn--record', ${JSON.stringify(RECORD_DOT_SVG)}, 'Record'); b.onclick=startRecord;
-      controls.appendChild(b);
-      controls.appendChild(mkExit());
-      setStatus('Record a handoff walkthrough');
-    }else{
-      setStatus('No handoff recording yet');
-    }
-  }
-  // Auto-open a Play-only dock for non-owners when a handoff is inlined.
-  if(!canManage && handoff){ openDock(); }
-  function renderRec(){
-    var stop=dockBtn('oa-dock-btn--record', ${JSON.stringify(STOP_SVG)}, 'Stop'); stop.onclick=stopRecord;
-    var timer=el('span','oa-handoff-timer','<span class="oa-handoff-rec-dot"></span><span id="oa-handoff-timer-txt">0:00</span>');
-    var cancel=dockBtn('', null, 'Cancel'); cancel.onclick=cancelRecord;
-    var micWrap=el('label','oa-handoff-mic'); micWrap.title='Microphone level';
-    micWrap.setAttribute('aria-label','Microphone level');
-    var meter=el('span','oa-handoff-mic-bar'); meter.id='oa-handoff-mic-bar';
-    micWrap.appendChild(meter); controls.appendChild(stop); controls.appendChild(timer); controls.appendChild(micWrap); controls.appendChild(mkBlurBtn()); controls.appendChild(cancel); controls.appendChild(mkExit());
-    if(micRAF)requestAnimationFrame(updateMicBar);
-  }
-  function updateMicBar(){ var bar=document.getElementById('oa-handoff-mic-bar'); if(!bar)return; if(!micRAF)return; bar.style.transform='scaleX('+Math.min(1,Math.max(0.02,micLevel*3))+')'; if(micLevel>0.003)bar.classList.remove('oa-handoff-mic-silent'); else bar.classList.add('oa-handoff-mic-silent'); requestAnimationFrame(updateMicBar); }
-  function tickTimer(){ var t=document.getElementById('oa-handoff-timer-txt'); if(t)t.textContent=fmt(performance.now()-recStart); }
-  function renderPlay(){
-    var pp=dockBtn('', null, 'Pause', {id:'oa-handoff-pp'}); pp.onclick=togglePause;
-    var scrub=el('input','oa-handoff-scrub'); scrub.type='range'; scrub.min=0; scrub.max=Math.max(1000,playDur); scrub.value=0; scrub.step=100;
-    scrub.oninput=function(){ scrubbing=true; var t=Number(scrub.value); if(cam){try{cam.currentTime=t/1000}catch(e){}} toFrame({type:'oa:handoff:seek',t:t}); };
-    scrub.onchange=function(){ scrubbing=false; };
-    var time=el('span','oa-handoff-time','0:00'); time.id='oa-handoff-time';
-    // Playback speed: a compact <select> (Loom lets viewers override the
-    // creator's default). Persisted so the choice sticks across views.
-    var curSpeed=loadSpeed();
-    var speed=el('select','oa-handoff-speed'); speed.setAttribute('aria-label','Playback speed');
-    [1,1.5,2].forEach(function(r){ var o=el('option',''); o.value=String(r); o.textContent=r+'x'; if(Math.abs(r-curSpeed)<0.01)o.setAttribute('selected','selected'); speed.appendChild(o); });
-    speed.onchange=function(){ var v=parseFloat(speed.value); saveSpeed(v); if(cam){try{cam.playbackRate=v}catch(e){}} };
-    controls.appendChild(pp); controls.appendChild(scrub); controls.appendChild(time); controls.appendChild(speed); controls.appendChild(mkBlurBtn());
-    // Owner: persistent Exit closes the dock (stops playback first). Non-owner:
-    // a Stop button exits playback to IDLE (no toggle to reopen a closed dock).
-    if(canManage){ controls.appendChild(mkExit()); }
-    else { var stopBtn=dockBtn('', null, 'Stop', {title:'Stop playback'}); stopBtn.onclick=exitPlay; controls.appendChild(stopBtn); }
-  }
-
-  function startRecord(){
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('Camera/mic not supported here'); return; }
-    if(!window.MediaRecorder){ setStatus('Recording not supported in this browser'); return; }
-    if(stream)return;
-    navigator.mediaDevices.getUserMedia({
-      video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
-      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-    }).then(function(s){
-      stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable();
-      // syncCamDisplay starts the MediaPipe composite loop when blur is on, but
-      // the canvas only begins producing BLURRED frames once segFirstFrame flips
-      // (async - after MediaPipe loads + the first inference). beginRecord must
-      // wait for that before picking the recorder stream, otherwise it captures
-      // the raw camera and the saved file is unblurred despite the blurred
-      // preview - the privacy bug. maybeWaitForBlur bounds the wait and falls
-      // back to raw + hasBlur=false if MediaPipe is slow or fails to load.
-      cam.play().then(function(){ syncCamDisplay(); maybeWaitForBlur(s); }).catch(function(){ syncCamDisplay(); maybeWaitForBlur(s); });
-    }).catch(function(err){ setStatus('Camera/mic denied: '+(err&&err.message?err.message:'permission needed')); });
-  }
-  // Wait until the blur composite is actually producing frames before recording,
-  // so the encoded stream is the composited canvas (crisp person + blurred bg),
-  // not the raw camera. Time-bounded: a slow/broken MediaPipe load falls back to
-  // raw camera with hasBlur=false so playback re-composites rather than trusting
-  // a blur that never made it into the file.
-  function maybeWaitForBlur(s){
-    if(!camBlur || segFirstFrame){ beginRecord(s); return; }
-    setStatus('<span class="oa-handoff-spin"></span>Starting blur…');
-    var waited=0;
-    function tick(){
-      if(!camBlur){ setStatus(''); beginRecord(s); return; }
-      if(segFirstFrame){ setStatus(''); beginRecord(s); return; }
-      waited+=60;
-      if(waited>=4000){ setStatus('Blur unavailable - recording raw'); beginRecord(s); return; }
-      setTimeout(tick,60);
-    }
-    setTimeout(tick,60);
-  }
-  function beginRecord(s){
-    // Diagnose a silent-mic track now: a track that is muted at the OS level
-    // or reports readyState 'ended' captures zero audio. Surface it so the
-    // user sees "Mic muted by system" instead of a silent clip after Stop.
-    var aTracks=s.getAudioTracks();
-    if(!aTracks.length){ setStatus('No audio track - mic unavailable'); }
-    else if(aTracks.some(function(t){return t.muted||t.readyState==='ended';})){
-      setStatus('Mic muted by system - check your OS mic permissions');
-    }
-    startMicMeter(s);
-    var mime=pickMime();
-    // When blur is on AND the composite canvas is live, record the canvas
-    // stream (crisp person + blurred bg) so the saved file carries the blur;
-    // splice in the mic track since captureStream() carries video only.
-    // maybeWaitForBlur (called before this) ensures segFirstFrame is already
-    // true when blur is on, so this branch is taken and the blur is persisted
-    // into the file. The raw-camera fallback (hasBlur=false) only fires when
-    // blur is off or MediaPipe failed/timed out - playback then re-composites
-    // live rather than trusting a blur that isn't in the file.
-    var recStream = stream;
-    var usedBlur = false;
-    if(camBlur && segCanvas && !segCanvas.hidden && segFirstFrame){
-      var cs = segCanvas.captureStream ? segCanvas.captureStream(30) : null;
-      if(cs){
-        var at = s.getAudioTracks()[0];
-        if(at) try{ cs.addTrack(at); }catch(e){}
-        recStream = cs;
-        usedBlur = true;
-      }
-    }
-    recUsedBlur = usedBlur;
-    // 2.5 Mbps VP8 / 64 kbps opus: 720p is sharp without blowing the 64 MiB
-    // server cap (2.5Mbps * 600s ~= 188 MiB, so the 10-min client ceiling is
-    // the real limiter; a 1-min clip is ~19 MiB). A 250ms timeslice keeps
-    // motion from compressing into blocky 1s chunks.
-    try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
-    catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
-    chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
-    // 3-2-1 countdown overlay before the recorder starts (Loom's de-facto
-    // recorder convention): gives the creator a beat to compose before capture
-    // begins, and keeps the initial Record click as the user-gesture that
-    // authorizes later autoplay. Reduced-motion skips straight to recording.
-    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-    if(reduced){ startRecordingNow(); }
-    else { runCountdown(3, startRecordingNow); }
-    function startRecordingNow(){
-      mr.start(250);
-      recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
-      recStart=performance.now(); events=[]; state='RECORDING';
-      toFrame({type:'oa:handoff:record:arm'});
-      if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
-      render();
-    }
-    // runCountdown(n, done): show n..1 in the fullscreen overlay, then call
-    // done. Cleared on cancel so a cancelled countdown never starts recording.
-    function runCountdown(n, done){
-      if(!countdownEl){ done(); return; }
-      var cur=n;
-      function showNum(){
-        countdownEl.innerHTML='';
-        var span=document.createElement('span');
-        span.textContent=String(cur);
-        countdownEl.appendChild(span);
-        countdownEl.setAttribute('data-num',String(cur));
-        countdownEl.setAttribute('data-on','');
-      }
-      function step(){
-        if(cur<=0){ hideCountdown(); done(); return; }
-        showNum();
-        cur-=1;
-        countdownTimer=setTimeout(step,800);
-      }
-      step();
-    }
-  }
-  // Live RMS meter on the mic track. Writes micLevel (0..1) sampled each rAF
-  // tick by renderRec's level bar. Belt-and-suspenders against the static
-  // readyState check: a track can report live but still deliver zero frames.
-  function startMicMeter(s){
-    try{
-      var AC=window.AudioContext||window.webkitAudioContext; if(!AC)return;
-      audioCtx=new AC(); var src=audioCtx.createMediaStreamSource(s);
-      analyser=audioCtx.createAnalyser(); analyser.fftSize=256; analyser.smoothingTimeConstant=0.7;
-      src.connect(analyser); var buf=new Uint8Array(analyser.frequencyBinCount); var sum=0;
-      function tick(){ if(!analyser){return;} analyser.getByteTimeDomainData(buf); var s=0; for(var i=0;i<buf.length;i++){var v=(buf[i]-128)/128; s+=v*v;} micLevel=Math.sqrt(s/buf.length); micRAF=requestAnimationFrame(tick); }
-      tick();
-    }catch(e){ /* meter optional */ }
-  }
-  function stopMicMeter(){ if(micRAF)cancelAnimationFrame(micRAF); micRAF=0; if(audioCtx){audioCtx.close().catch(function(){}); audioCtx=null;} analyser=null; micLevel=0; }
-  function pickMime(){
-    // vp8+opus first: vp9+opus is known to record silent audio on some Chrome
-    // builds (the very symptom this fix targets). vp8+opus is the reliable
-    // default across Chrome/Firefox; mp4 is the Safari fallback.
-    var cands=['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4'];
-    for(var i=0;i<cands.length;i++){ if(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(cands[i]))return cands[i]; }
-    return '';
-  }
-  function stopRecord(){ if(mr&&mr.state!=='inactive')mr.stop(); }
-  function cancelRecord(){ hideCountdown(); events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); stopSeg(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); }
-  function cleanupStream(){ if(stream){stream.getTracks().forEach(function(tr){tr.stop();}); stream=null;} if(cam){cam.srcObject=null; cam.hidden=true; cam.removeAttribute('data-rec');} }
-  function onRecStop(){
-    var dur=performance.now()-recStart;
-    toFrame({type:'oa:handoff:record:disarm'});
-    stopMicMeter();
-    stopSeg();
-    cleanupStream();
-    if(timerInt)clearInterval(timerInt);
-    if(recTimeout)clearTimeout(recTimeout);
-    var blob=new Blob(chunks, {type:(mr&&mr.mimeType)||'video/webm'});
-    var eventsJson=JSON.stringify(events);
-    var meta={durationMs:Math.round(dur),hasVideo:true,hasAudio:true,hasBlur:recUsedBlur,author:getName()||null,version:window.__oaViewedVersion||1};
-    var fd=new FormData();
-    fd.append('media', blob, 'media.webm');
-    fd.append('events', eventsJson);
-    fd.append('meta', JSON.stringify(meta));
-    setStatus('<span class="oa-handoff-spin"></span>Saving handoff…');
-    state='SAVING';
-    fetch('/api/artifacts/'+ID+'/handoffs', {method:'POST', headers:authHeaders(), body:fd}).then(function(r){
-      if(r.status===401||r.status===403) throw new Error('You need owner access to record');
-      if(!r.ok) throw new Error('Upload failed ('+r.status+')');
-      return r.json();
-    }).then(function(h){
-      if(h.deleteToken)saveDelToken(h.id, h.deleteToken);
-      handoff={id:h.id,version:h.version,durationMs:h.durationMs,hasVideo:h.hasVideo,hasAudio:h.hasAudio,hasBlur:!!h.hasBlur,author:h.author,createdAt:h.createdAt};
-      state='IDLE'; setStatus('Handoff saved'); render();
-      try{frame.contentWindow.location.reload();}catch(e){frame.src=frame.src;}
-    }).catch(function(err){ state='IDLE'; setStatus(esc(err.message||'Upload failed')); render(); });
-  }
-
-  function startPlay(hid){
-    var h=handoff; if(!h||h.id!==hid)return;
-    state='PLAYING'; playDur=h.durationMs||0; scrubbing=false; render();
-    setStatus('<span class="oa-handoff-spin"></span>Loading handoff…');
-    var wantV=h.version, curV=window.__oaViewedVersion||1;
-    var loadP;
-    if(wantV!==curV){ loadP=new Promise(function(res){ frame.addEventListener('load',function(){res();},{once:true}); }); frame.src='/a/'+ID+'/frame?v='+wantV; }
-    else loadP=Promise.resolve();
-    Promise.all([
-      loadP,
-      fetch('/api/artifacts/'+ID+'/handoffs/'+hid+'/events').then(function(r){return r.ok?r.json():Promise.reject(new Error('events '+r.status));}),
-      fetch('/api/artifacts/'+ID+'/handoffs/'+hid+'/media').then(function(r){return r.ok?r.blob():Promise.reject(new Error('media '+r.status));})
-    ]).then(function(arr){
-      var evs=arr[1]||[]; if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} playUrl=URL.createObjectURL(arr[2]); var url=playUrl;
-      cam.srcObject=null; cam.removeAttribute('data-rec'); makeCamDraggable(); cam.src=url;
-      // If the clip was recorded with blur, the background is already blurred
-      // in the file - don't re-composite (would double-blur). If it was
-      // recorded without blur but the viewer toggled Blur on, re-composite live.
-      var recHasBlur = !!(handoff && handoff.hasBlur);
-      cam.hidden=false;
-      if(camBlur && !recHasBlur){ startSeg(); } else { stopSeg(); }
-      // Explicit unmute: the <video> carries no muted content attribute, so the
-      // recorded audio plays. Re-assert on loadedmetadata in case a new src
-      // load resets the muted state, and set volume too.
-      cam.muted=false; cam.volume=1;
-      // Apply the persisted playback speed to the <video> on load and on each
-      // new metadata load (a new src resets playbackRate to 1).
-      var sp=loadSpeed(); try{ cam.playbackRate=sp; }catch(e){}
-      cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; cam.playbackRate=loadSpeed(); }catch(e){} };
-      cam.onclick=null;
-      cam.ontimeupdate=function(){ var t=cam.currentTime*1000; var tm=document.getElementById('oa-handoff-time'); if(tm)tm.textContent=fmt(t); if(!scrubbing){var s=controls.querySelector('.oa-handoff-scrub'); if(s)s.value=t;} };
-      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} cam.onclick=null; state='IDLE'; render(); };
-      cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:evs, durationMs:playDur}); setStatus(''); }).catch(function(){
-        // Unmuted autoplay can be blocked when the async media fetch outlasts
-        // the Play click's user activation. Fall back to muted autoplay
-        // (always allowed) and let the user tap the video to enable sound.
-        cam.muted=true;
-        cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:evs, durationMs:playDur}); setStatus('Tap the video to unmute'); cam.onclick=function(){ cam.muted=false; cam.onclick=null; setStatus(''); }; }).catch(function(e2){ setStatus('Playback failed: '+(e2&&e2.message||'')); });
-      });
-    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); });
-  }
-  function togglePause(){ if(!cam)return;
-    var pp=document.getElementById('oa-handoff-pp'); var lb=pp&&pp.querySelector('.oa-dock-label');
-    if(cam.paused){ cam.play(); toFrame({type:'oa:handoff:resume'}); if(lb)lb.textContent='Pause'; }
-    else { cam.pause(); toFrame({type:'oa:handoff:pause'}); if(lb)lb.textContent='Play'; }
-  }
-  function exitPlay(){ toFrame({type:'oa:handoff:stop'}); stopSeg(); if(cam){cam.pause(); cam.removeAttribute('src'); cam.srcObject=null; cam.hidden=true; cam.onclick=null;} if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} state='IDLE'; render();
-    var curV=window.__oaViewedVersion||1; frame.src='/a/'+ID+'/frame?v='+curV; }
-  function delHandoff(hid){
-    var dt=getDelToken(hid); var headers=dt?{Authorization:'Bearer '+dt}:authHeaders(); headers['X-OA-CSRF']='1';
-    fetch('/api/artifacts/'+ID+'/handoffs/'+hid, {method:'DELETE', headers:headers}).then(function(r){ if(!r.ok)throw new Error('Delete failed ('+r.status+')'); return r.json(); }).then(function(){ handoff=null; try{localStorage.removeItem('oa-handoff-dt-'+hid);}catch(e){} render(); }).catch(function(err){ setStatus(esc(err.message)); });
-  }
-  // Copy a share link to the version the recording was made against. Loom
-  // emphasizes Share after a recording; here it's a persistent Copy-link button
-  // in IDLE so the link is available any time the dock is open. Shows a
-  // "Copied" state on the button for 1.5s.
-  function copyShareLink(version){
-    var link=window.location.origin+'/a/'+ID+'?v='+version;
-    var btn=document.getElementById('oa-handoff-share');
-    var lb=btn&&btn.querySelector('.oa-dock-label');
-    var done=function(){ if(btn)btn.classList.add('oa-dock-btn--copied'); if(lb)lb.textContent='Copied'; setTimeout(function(){ if(btn)btn.classList.remove('oa-dock-btn--copied'); if(lb)lb.textContent='Copy link'; },1500); };
-    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(done).catch(function(){ legacyCopy(link); done(); }); }
-    else { legacyCopy(link); done(); }
-  }
-  function legacyCopy(text){ var t=document.createElement('textarea'); t.value=text; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(t); }
-
-  // Frame -> host: buffer interaction events during RECORDING.
-  window.addEventListener('message', function(e){
-    if(!e.data||typeof e.data.type!=='string')return;
-    if(e.source!==frame.contentWindow)return;
-    var d=e.data;
-    if(d.type==='oa:handoff:event'&&state==='RECORDING'){ events.push({t:d.t, kind:d.kind, x:d.x, y:d.y, sx:d.sx, sy:d.sy}); }
-  });
-})();
-`;
+// The host-side handoff controller now lives in src/handoff/ (split into
+// focused modules) and is assembled by handoffScript(). The original inline
+// ~550-line HANDOFF_SCRIPT template literal was moved there so each concern is
+// small and individually syntax-checkable (tests/worker/handoff-script.test.ts).
 
 // crawler-facing <head>, the reused header + comments drawer chrome, and an
 // <iframe> embedding the sandboxed artifact frame below the header. It never
@@ -2302,7 +1697,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${escapeInlineScript(ACCOUNT_SCRIPT)}</script>
 ${liveEnabled || handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(DOCK_SCRIPT)}</script>` : ""}
 ${liveEnabled ? `<script nonce="${nonce}">${escapeInlineScript(LIVE_SCRIPT)}</script>` : ""}
-${handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(HANDOFF_SCRIPT)}</script>` : ""}
+${handoffEnabled ? `<script nonce="${nonce}">${escapeInlineScript(handoffScript(HANDOFF_SVGS))}</script>` : ""}
 </body>
 </html>
 `;
@@ -2572,7 +1967,7 @@ const FRAME_HANDOFF_PLAY_SCRIPT = `
   if(!window.__oaSend)return;
   var events=[], cursor=null, raf=0, offset=0, lastResume=0, playing=false, idx=0;
   var st=document.createElement('style');
-  st.textContent='#oa-handoff-cursor{position:fixed;top:0;left:0;width:16px;height:16px;margin:-2px 0 0 -2px;border-radius:50%;background:rgba(100,87,240,.92);border:2px solid #fff;box-shadow:0 0 0 2px rgba(100,87,240,.35),0 2px 6px rgba(0,0,0,.3);pointer-events:none;z-index:2147483644;will-change:transform} .oa-handoff-ripple{position:fixed;border-radius:50%;border:2px solid var(--oa-accent,#6457f0);pointer-events:none;z-index:2147483643;animation:oa-handoff-ripple .6s ease-out forwards} @keyframes oa-handoff-ripple{0%{transform:scale(.5);opacity:.85}100%{transform:scale(2.4);opacity:0}} html.oa-handoff-recording{box-shadow:inset 0 3px 0 0 var(--oa-danger,#b42318)}';
+  st.textContent='#oa-handoff-cursor{position:fixed;top:0;left:0;width:16px;height:16px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--oa-accent,#6457f0);border:2px solid var(--oa-accent-on,#fff);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-accent,#6457f0),transparent 65%),0 2px 6px rgba(0,0,0,.3);pointer-events:none;z-index:2147483644;will-change:transform} .oa-handoff-ripple{position:fixed;border-radius:50%;border:2px solid var(--oa-accent,#6457f0);pointer-events:none;z-index:2147483643;animation:oa-handoff-ripple .6s ease-out forwards} @keyframes oa-handoff-ripple{0%{transform:scale(.5);opacity:.85}100%{transform:scale(2.4);opacity:0}} html.oa-handoff-recording{box-shadow:inset 0 3px 0 0 var(--oa-danger,#b42318)}';
   (document.head||document.documentElement).appendChild(st);
   function mkCursor(){ if(cursor)return; cursor=document.createElement('div'); cursor.id='oa-handoff-cursor'; document.body.appendChild(cursor); }
   function ripple(x,y){ var r=document.createElement('div'); r.className='oa-handoff-ripple'; r.style.left=(x-12)+'px'; r.style.top=(y-12)+'px'; r.style.width='24px'; r.style.height='24px'; document.body.appendChild(r); setTimeout(function(){ if(r.parentNode)r.parentNode.removeChild(r); },650); }
@@ -2608,11 +2003,18 @@ const FRAME_HANDOFF_PLAY_SCRIPT = `
       document.addEventListener('keydown',blockKey,{capture:true});
       // Freeze the recorded scroll position so the viewport does not jump.
       var r=lastScroll; if(r)window.scrollTo(r.sx,r.sy);
+      // Hide the scrollbar WITHOUT releasing its gutter, so the artifact
+      // content does not shift horizontally when scroll locks/unlocks on
+      // play/pause. scrollbar-gutter:stable reserves the column on the
+      // overflow:hidden state; restoring it on unlock keeps the same
+      // column, so no layout shift crosses the two states.
+      document.documentElement.style.scrollbarGutter='stable';
       document.documentElement.style.overflow='hidden';
     }else{
       document.removeEventListener('wheel',blockWheel,{capture:true});
       document.removeEventListener('touchmove',blockTouch,{capture:true});
       document.removeEventListener('keydown',blockKey,{capture:true});
+      document.documentElement.style.scrollbarGutter='stable';
       document.documentElement.style.overflow='';
     }
   }
