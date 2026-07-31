@@ -380,7 +380,7 @@ describe("GET /a/:id (plain HTML) — host page", () => {
       await exports.default.fetch(`${BASE}/a/${created.id}`)
     ).text();
     // The header element carries the reserved class, not the generic one.
-    expect(html).toContain('<span class="oa-header-title">');
+    expect(html).toContain('<span class="oa-header-title"');
     expect(html).not.toContain('<span class="oa-title">');
     // And the resident chrome describes its own type scale explicitly.
     const rule =
@@ -388,6 +388,47 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     expect(rule).toContain("font-size:.8rem");
     expect(rule).toContain("line-height:");
     expect(rule).toContain("margin:0");
+  });
+
+  it("keeps the title and primary actions usable when secondary controls collapse", async () => {
+    const title = "A deliberately long artifact title for a narrow viewport";
+    const created = await create({ content: "<p>first</p>", title });
+    const updated = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts/${created.id}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${created.writeToken}`,
+        },
+        body: JSON.stringify({ content: "<p>second</p>" }),
+      }),
+    );
+    expect(updated.status).toBe(200);
+
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+
+    expect(html).toContain(`<span class="oa-header-title" title="${title}">`);
+    expect(html).toContain('<span class="oa-header-fav" aria-hidden="true">');
+    expect(html).toContain(
+      `<span class="oa-header-title-text">${title}</span>`,
+    );
+    expect(html).toContain(
+      'id="oa-header-more" class="oa-header-more" type="button" aria-label="More artifact controls" aria-expanded="false" aria-controls="oa-header-panel"',
+    );
+    expect(html).toContain(
+      'id="oa-header-panel" class="oa-header-panel" role="group" aria-label="Artifact controls"',
+    );
+
+    const narrowRule =
+      html.match(/@media \(max-width:52rem\)\{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(narrowRule).toContain(".oa-header-panel{position:fixed");
+    expect(narrowRule).toContain(".oa-header-overflow[data-open]");
+    expect(narrowRule).toContain(".oa-header-title-text");
+    expect(html).toContain("window.__oaSyncHeaderOverflow");
+    expect(html).toContain("window.__oaRestoreHeaderControlFocus");
+    expect(html).toContain('e.key==="Escape"');
   });
 
   it("404s for an unknown artifact", async () => {

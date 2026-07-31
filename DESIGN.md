@@ -38,6 +38,7 @@ typography:
     lineHeight: 1
 rounded:
   button: "6px"
+  menu: "4px"
   item: "8px"
   badge: "999px"
   avatar: "50%"
@@ -170,17 +171,18 @@ artifact, not the frame.
 
 ## Layout
 
-- Sticky header (`--oa-header-h: 2.5rem`), flex row, `gap: 0.6rem`, padding
-  `0.375rem 1rem`, `backdrop-filter: blur(10px)` over an 8%-transparent bg.
+- Sticky header (`--oa-header-h: 2.5rem`), flex row, `gap: 0.75rem`, padding
+  `0.375rem 0.75rem`, `backdrop-filter: blur(10px)` over a 5%-transparent bg.
   Title (favicon + name, ellipsis) flexes to fill; controls trail right.
 - Drawers (comments) are `position: fixed`, top at `var(--oa-header-h)`, right
   edge, `max-width: 23rem`, sliding via `transform: translateX(100%)` ->
   `translateX(0)` over `.18s`.
 - The artifact frame fills the viewport below the header.
 - z-index scale: drawer `2147483645` < header `2147483646`. No arbitrary `999`.
-- Responsive: the header truncates the title and drops non-essential controls
-  on narrow viewports; the drawer goes full-width (`width: 100%`) below its
-  max-width.
+- Responsive: at `52rem` and below, favicon + truncated title, comment actions,
+  and theme remain inline. Version, visibility, brand, Live, Handoff, and
+  account controls move into a fixed More panel below the measured header; no
+  action disappears. The drawer goes full-width below its max-width.
 
 ## Elevation & Depth
 
@@ -238,7 +240,10 @@ SVG icons are `16×16`, `display: block`, centered.
 Sticky, backdrop-blurred, 2.5rem tall. Favicon + title (ellipsis, `0.8rem`/600)
 left; version picker, visibility, account chip, comments toggle, live toggle,
 handoff toggle, theme toggle trail right. `--oa-header-h` is exposed so artifact
-sticky bars and full-viewport sections clear it.
+sticky bars and full-viewport sections clear it. At `52rem` and below, a More
+button discloses the secondary controls in a labeled panel with outside-click
+and Escape dismissal; comments and theme stay one tap away. A dock launched
+from the panel returns focus to More when it closes, never to a hidden control.
 
 ### Select (version / visibility)
 `28px` min-height, `6px` radius, 1px border, `--oa-bg` fill (shadcn trigger),

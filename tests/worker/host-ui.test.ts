@@ -52,6 +52,13 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain('"oa-cm-dt-"+id');
   });
 
+  it("keeps the account menu beside its trigger and updates mobile overflow", async () => {
+    const html = await hostHtml();
+    expect(html).toContain("slot.appendChild(btn);slot.appendChild(menu)");
+    expect(html).not.toContain("btn.appendChild(menu)");
+    expect(html).toContain("window.__oaSyncHeaderOverflow");
+  });
+
   it("styles the compose and pin chrome with tokens and focus rings", async () => {
     const html = await hostHtml();
     expect(html).toContain(".oa-cm-compose");

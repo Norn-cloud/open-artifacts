@@ -179,6 +179,7 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
     expect(html).toContain('<button class="oa-handoff-toggle"');
     expect(html).toContain("oa-handoff-root");
     expect(html).toContain("window.__oaCanManage=true");
+    expect(html).toContain("window.__oaRestoreHeaderControlFocus(toggle)");
   });
 
   it("a non-owner viewer sees no Handoff toggle button", async () => {

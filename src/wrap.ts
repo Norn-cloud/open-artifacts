@@ -210,21 +210,27 @@ img,video,canvas{max-width:100%}
    need the offset. */
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
-.oa-header{position:sticky;top:0;z-index:2147483646;display:flex;align-items:center;gap:.6rem;padding:.375rem 1rem;background:color-mix(in oklab,var(--oa-bg),transparent 5%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
-.oa-header .oa-header-title{flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:-.01em;margin:0;color:var(--oa-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oa-header .oa-header-title .oa-header-fav{margin-right:.4rem;font-size:1em}
-.oa-header #oa-theme-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
-.oa-header #oa-theme-toggle::before{content:"";position:absolute;inset:-6px}
-.oa-header #oa-theme-toggle:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-header #oa-theme-toggle:active{transform:translateY(1px)}
-.oa-header #oa-theme-toggle svg{display:block;width:16px;height:16px}
-.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;margin-left:.5rem;padding:.2rem .5rem;border-radius:6px;background:transparent;transition:color .15s,background .15s}
+.oa-header{position:sticky;top:0;z-index:2147483646;isolation:isolate;display:flex;align-items:center;gap:.75rem;min-height:2.5rem;padding:.375rem .75rem;background:color-mix(in oklab,var(--oa-bg),transparent 5%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
+.oa-header .oa-header-title{display:flex;align-items:center;flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:-.01em;margin:0;color:var(--oa-fg);white-space:nowrap}
+.oa-header .oa-header-title .oa-header-fav{display:grid;place-items:center;flex-shrink:0;width:1.25rem;height:1.25rem;margin-right:.375rem;font-size:1em;line-height:1}
+.oa-header .oa-header-title .oa-header-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.oa-header-overflow{display:flex;align-items:center;min-width:0}
+.oa-header-panel{display:flex;align-items:center;gap:.75rem;min-width:0}
+.oa-header-control-label,.oa-header-action-label{display:none}
+.oa-header #oa-theme-toggle,.oa-header-more{position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid transparent;background:transparent;color:var(--oa-muted);border-radius:6px;cursor:pointer;transition:color .15s,background .15s;flex-shrink:0}
+.oa-header-more{display:none}
+.oa-header-more[hidden]{display:none}
+.oa-header #oa-theme-toggle::before,.oa-header-more::before{content:"";position:absolute;inset:-6px}
+.oa-header #oa-theme-toggle:focus-visible,.oa-header-more:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-header #oa-theme-toggle:active,.oa-header-more:active{transform:translateY(1px)}
+.oa-header #oa-theme-toggle svg,.oa-header-more svg{display:block;width:16px;height:16px}
+.oa-header-more[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
+.oa-brand{position:relative;display:inline-flex;align-items:center;gap:.35rem;min-height:28px;text-decoration:none;color:var(--oa-muted);font-size:.75rem;flex-shrink:0;padding:.2rem .5rem;border-radius:6px;background:transparent;transition:color .15s,background .15s}
 .oa-brand::before{content:"";position:absolute;inset:-6px 0}
 .oa-brand:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-brand:active{transform:translateY(1px)}
 .oa-brand svg{display:block;width:14px;height:14px}
-@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}.oa-brand:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
-@media (max-width:30rem){.oa-brand .oa-brand-text{display:none}.oa-account-name{display:none}}
+@media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header-more:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}.oa-brand:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 .oa-version,.oa-visibility{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
 .oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:background .15s,border-color .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 /* After the base rule, not before: same selector, same specificity, and a
@@ -235,6 +241,22 @@ img,video,canvas{max-width:100%}
 .oa-version .oa-version-select:focus-visible,.oa-visibility .oa-visibility-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-version .oa-version-select:active,.oa-visibility .oa-visibility-select:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
+@media (max-width:52rem){
+.oa-header{gap:.75rem;padding-inline:.75rem}
+.oa-header .oa-header-title .oa-header-title-text{display:block;min-width:0}
+.oa-header-overflow{position:relative;flex-shrink:0}
+.oa-header-more{display:inline-flex}
+.oa-header-panel{position:fixed;top:calc(var(--oa-header-h) + .5rem);right:.5rem;display:none;flex-direction:column;align-items:stretch;gap:.125rem;width:min(17rem,calc(100vw - 1rem));max-height:calc(100dvh - var(--oa-header-h) - 1rem);overflow-y:auto;padding:.375rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%)}
+.oa-header-overflow[data-open] .oa-header-panel{display:flex}
+.oa-header-panel .oa-version,.oa-header-panel .oa-visibility{justify-content:space-between;gap:1rem;width:100%;min-height:36px;padding:.25rem .375rem}
+.oa-header-panel .oa-version-select,.oa-header-panel .oa-visibility-select{max-width:9rem}
+.oa-header-panel .oa-header-control-label,.oa-header-panel .oa-header-action-label{display:inline;color:var(--oa-muted);font-size:.75rem;font-weight:400}
+.oa-header-panel .oa-brand{width:100%;min-height:36px;padding:.375rem}
+.oa-header-panel [data-oa-header-secondary]{justify-content:flex-start;gap:.5rem;width:100%;height:36px;padding:0 .375rem}
+.oa-header-panel .oa-account-slot{width:100%;margin:0}
+.oa-header-panel .oa-account-btn,.oa-header-panel .oa-account-signin{justify-content:flex-start;width:100%;height:36px;padding-inline:.375rem;border-radius:4px}
+.oa-header-panel .oa-account-menu{position:static;width:100%;margin-top:.25rem;padding:.25rem 0 0;border:0;border-top:1px solid var(--oa-border);border-radius:0;box-shadow:none}
+}
 `;
 
 const TOAST_CSS = `
@@ -451,7 +473,7 @@ function versionPickerHtml(
       return `<option value="${escapeHtml(target)}"${selected}${title}>${short}</option>`;
     })
     .join("");
-  return `<label class="oa-version" for="oa-version-select"><span class="oa-version-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
+  return `<label class="oa-version" for="oa-version-select"><span class="oa-header-control-label" aria-hidden="true">Version</span><select id="oa-version-select" class="oa-version-select" aria-label="Artifact version">${options}</select></label>`;
 }
 
 const VISIBILITY_LABELS: Record<Visibility, string> = {
@@ -467,7 +489,7 @@ function visibilityPickerHtml(visibility: Visibility): string {
       return `<option value="${value}"${selected}>${VISIBILITY_LABELS[value]}</option>`;
     })
     .join("");
-  return `<label class="oa-visibility" for="oa-visibility-select"><span class="oa-visibility-sr" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Visibility</span><select id="oa-visibility-select" class="oa-visibility-select" aria-label="Artifact visibility">${options}</select></label>`;
+  return `<label class="oa-visibility" for="oa-visibility-select"><span class="oa-header-control-label" aria-hidden="true">Visibility</span><select id="oa-visibility-select" class="oa-visibility-select" aria-label="Artifact visibility">${options}</select></label>`;
 }
 
 // The badge counts what the drawer's default view shows (open comments), so a
@@ -516,7 +538,7 @@ function headerHtml(
   // write-gated server-side too; the button is just hidden for non-owners.
   const live =
     liveEnabled && canManage
-      ? `<button class="oa-live-toggle" type="button" aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span></button>`
+      ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span></button>`
       : "";
   // The Handoff toggle opens the record/play dock. Record is owner-only
   // (write-gated server-side); Play is open to any viewer. The button is shown
@@ -527,17 +549,20 @@ function headerHtml(
   // Play-only affordance for non-owners when a handoff is inlined.
   const handoff =
     handoffEnabled && canManage
-      ? `<button class="oa-handoff-toggle" type="button" aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span></button>`
+      ? `<button class="oa-handoff-toggle" type="button" data-oa-header-secondary aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span><span class="oa-header-action-label">Handoff</span></button>`
       : "";
+  const secondaryControls = `${picker}${share}${chip}${live}${handoff}`;
+  const moreHidden = secondaryControls ? "" : " hidden";
   return `<header class="oa-header">
-  <span class="oa-header-title"><span class="oa-header-fav">${escapeHtml(favicon)}</span>${escapeHtml(title)}</span>
-  ${picker}
-  ${share}
-  ${chip}
+  <span class="oa-header-title" title="${escapeHtml(title)}"><span class="oa-header-fav" aria-hidden="true">${escapeHtml(favicon)}</span><span class="oa-header-title-text">${escapeHtml(title)}</span></span>
+  <div class="oa-header-overflow">
+    <button id="oa-header-more" class="oa-header-more" type="button" aria-label="More artifact controls" aria-expanded="false" aria-controls="oa-header-panel"${moreHidden}>${MORE_DOTS_SVG}</button>
+    <div id="oa-header-panel" class="oa-header-panel" role="group" aria-label="Artifact controls">
+      ${secondaryControls}
+      <span id="oa-account-slot" class="oa-account-slot"></span>
+    </div>
+  </div>
   ${comments}
-  ${live}
-  ${handoff}
-  <span id="oa-account-slot" class="oa-account-slot" aria-label="Account"></span>
   <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
@@ -732,6 +757,61 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
+// At compact widths, secondary header controls move into one floating panel so
+// the artifact identity and primary comment/theme actions never collapse. The
+// panel uses the same button and focus vocabulary as desktop chrome; this
+// script owns only disclosure state and keyboard/outside-click dismissal.
+const HEADER_SCRIPT = `
+(function(){
+  var root=document.querySelector('.oa-header-overflow');
+  var button=document.getElementById('oa-header-more');
+  var panel=document.getElementById('oa-header-panel');
+  if(!root||!button||!panel)return;
+  function hasControls(){
+    for(var i=0;i<panel.children.length;i++){
+      var child=panel.children[i];
+      if(child.id!=='oa-account-slot'||child.children.length>0)return true;
+    }
+    return false;
+  }
+  function close(restore){
+    root.removeAttribute('data-open');
+    button.setAttribute('aria-expanded','false');
+    var accountButton=panel.querySelector('.oa-account-btn');
+    var accountMenu=panel.querySelector('.oa-account-menu');
+    if(accountMenu)accountMenu.hidden=true;
+    if(accountButton)accountButton.setAttribute('aria-expanded','false');
+    if(restore&&!button.hidden)button.focus();
+  }
+  function sync(){
+    button.hidden=!hasControls();
+    if(button.hidden)close(false);
+  }
+  window.__oaSyncHeaderOverflow=sync;
+  window.__oaRestoreHeaderControlFocus=function(control){
+    if(control&&control.offsetParent!==null){control.focus();return}
+    if(!button.hidden&&button.offsetParent!==null)button.focus();
+  };
+  button.addEventListener('click',function(){
+    var open=!root.hasAttribute('data-open');
+    if(open){root.setAttribute('data-open','');button.setAttribute('aria-expanded','true')}
+    else close(false);
+  });
+  panel.addEventListener('click',function(e){
+    var action=e.target.closest&&e.target.closest('button,a');
+    if(action&&!action.classList.contains('oa-account-btn'))close(false);
+  });
+  document.addEventListener('click',function(e){if(!root.contains(e.target))close(false)});
+  document.addEventListener('keydown',function(e){if(e.key==="Escape"&&root.hasAttribute('data-open'))close(true)});
+  if(window.matchMedia){
+    var narrow=window.matchMedia('(max-width:52rem)');
+    var onChange=function(){if(!narrow.matches)close(false)};
+    if(narrow.addEventListener)narrow.addEventListener('change',onChange);
+  }
+  sync();
+})();
+`;
+
 // Live edit chrome styles. Mirrors the comments-toggle language
 // (.oa-cm-toggle: 28px square, surface bg, border, focus ring, hover lift)
 // so the Live button reads as a sibling of the comments toggle in the header.
@@ -825,7 +905,7 @@ const HOST_FRAME_CSS = `
 // stays empty - today's chrome unchanged. No external avatar image (name
 // initial only) so the host CSP img-src stays data: blob: - no CDN widening.
 const ACCOUNT_CSS = `
-.oa-account-slot{display:inline-flex;align-items:center;flex-shrink:0;min-height:28px;margin-left:.5rem}
+.oa-account-slot{position:relative;display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
 .oa-account-slot:empty{display:none}
 .oa-account-loading{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 85%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-spin .8s linear infinite}
 @keyframes oa-spin{to{transform:rotate(360deg)}}
@@ -855,29 +935,31 @@ const ACCOUNT_SCRIPT = `
 (function(){
   var slot=document.getElementById('oa-account-slot');
   if(!slot)return;
-  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
   function initial(name){var ch=[...String(name||'').trim()][0];return ch?ch.toUpperCase():'?';}
-  function showLoading(){slot.innerHTML='<div class="oa-account-loading" role="status" aria-label="Loading account"></div>';}
-  function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';}
+  function syncOverflow(){if(window.__oaSyncHeaderOverflow)window.__oaSyncHeaderOverflow();}
+  function clear(){slot.innerHTML='';syncOverflow();}
+  function showLoading(){slot.innerHTML='<div class="oa-account-loading" role="status" aria-label="Loading account"></div>';syncOverflow();}
+  function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';syncOverflow();}
   function renderUser(name){
-    var btn=document.createElement('button');btn.type='button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');
+    var btn=document.createElement('button');btn.type='button';btn.id='oa-account-button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-controls','oa-account-menu');
     var av=document.createElement('span');av.className='oa-account-av';av.setAttribute('aria-hidden','true');av.textContent=initial(name);
     var nm=document.createElement('span');nm.className='oa-account-name';nm.textContent=name||'Account';
     btn.appendChild(av);btn.appendChild(nm);
-    var menu=document.createElement('div');menu.className='oa-account-menu';menu.setAttribute('role','menu');menu.hidden=true;
+    var menu=document.createElement('div');menu.id='oa-account-menu';menu.className='oa-account-menu';menu.setAttribute('role','menu');menu.hidden=true;
     var dash=document.createElement('a');dash.href='/dashboard';dash.setAttribute('role','menuitem');dash.textContent='Dashboard';
     var lo=document.createElement('button');lo.type='button';lo.setAttribute('role','menuitem');lo.textContent='Sign out';
     lo.addEventListener('click',function(){fetch('/auth/logout',{method:'POST',credentials:'same-origin'}).then(function(){location.href='/';}).catch(function(){location.href='/';});});
     menu.appendChild(dash);menu.appendChild(lo);
-    btn.appendChild(menu);
-    btn.addEventListener('click',function(e){e.stopPropagation();var open=!menu.hidden;menu.hidden=open;btn.setAttribute('aria-expanded',String(!open));});
+    btn.addEventListener('click',function(e){e.stopPropagation();var open=menu.hidden;menu.hidden=!open;btn.setAttribute('aria-expanded',String(open));});
+    var closeMenu=function(e){if(e.key==='Escape'&&!menu.hidden){e.stopPropagation();menu.hidden=true;btn.setAttribute('aria-expanded','false');btn.focus();}};
+    btn.addEventListener('keydown',closeMenu);menu.addEventListener('keydown',closeMenu);
     document.addEventListener('click',function(){menu.hidden=true;btn.setAttribute('aria-expanded','false');});
-    slot.innerHTML='';slot.appendChild(btn);
+    slot.innerHTML='';slot.appendChild(btn);slot.appendChild(menu);syncOverflow();
   }
   showLoading();
-  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else slot.innerHTML='';return null;}return r.json();}).then(function(me){
-    if(!me){slot.innerHTML='';return;}var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
-  }).catch(function(){slot.innerHTML=''});
+  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else clear();return null;}return r.json();}).then(function(me){
+    if(!me){clear();return;}var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
+  }).catch(clear);
 })();
 `;
 
@@ -1371,7 +1453,7 @@ const LIVE_SCRIPT = `
     window.__oaDock.register('live', {
       open: openLive,
       close: closeLive,
-      restoreFocus: function(){ if(liveToggle) liveToggle.focus(); }
+      restoreFocus: function(){ if(window.__oaRestoreHeaderControlFocus)window.__oaRestoreHeaderControlFocus(liveToggle);else if(liveToggle)liveToggle.focus(); }
     });
   }
   if(liveToggle){
@@ -1690,6 +1772,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${HEADER_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>
@@ -2899,6 +2982,7 @@ ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">${VERSION_SCRIPT}</script>
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
 <script nonce="${nonce}">${LAYOUT_SCRIPT}</script>
+<script nonce="${nonce}">${HEADER_SCRIPT}</script>
 <script nonce="${nonce}">${escapeInlineScript(COMMENTS_SCRIPT)}</script>
 <script nonce="${nonce}">${escapeInlineScript(hostBridgeScript(artifactId))}</script>
 <script nonce="${nonce}">${VISIBILITY_SCRIPT}</script>

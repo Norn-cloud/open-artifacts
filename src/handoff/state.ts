@@ -65,7 +65,7 @@ export function state(_svgs: HandoffSvgs): string {
     window.__oaDock.register('handoff', {
       open: openDock,
       close: closeDock,
-      restoreFocus: function(){ if(toggle) toggle.focus(); },
+      restoreFocus: function(){ if(window.__oaRestoreHeaderControlFocus)window.__oaRestoreHeaderControlFocus(toggle);else if(toggle)toggle.focus(); },
       refuseMessage: function(){
         if(state==='RECORDING') return 'Stop the recording before closing.';
         if(state==='SAVING') return 'Saving the handoff - please wait...';

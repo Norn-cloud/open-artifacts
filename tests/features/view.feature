@@ -28,6 +28,14 @@ Feature: View an artifact
     Then the resident service header names its title with a reserved class
     So the generator only supplies data and cannot restyle the header
 
+  Scenario: Service header remains usable on a narrow viewport
+    Given a published artifact with a long title and secondary controls
+    When I view the artifact on a narrow viewport
+    Then the favicon and truncated title remain visible
+    And comments and theme remain directly available
+    And the remaining artifact controls are available from a More panel
+    And a secondary dock returns focus to the visible More trigger when closed
+
   Scenario: Unknown artifact id
     When I GET /a/doesnotexist
     Then the response status is 404

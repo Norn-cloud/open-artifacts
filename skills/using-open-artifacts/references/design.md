@@ -733,6 +733,10 @@ layout decisions:
   `top` of every `position: sticky` element to this value, so a canvas's zoom
   cluster (and any other floating control) must be `position: fixed`, never
   sticky — see `${CLAUDE_SKILL_DIR}/references/canvas.md`.
+- At `52rem` and below, secondary service controls move into the viewer's More
+  panel while the title, comment actions, and theme remain inline. Do not add
+  artifact-level spacing or duplicate controls to compensate for this chrome;
+  its measured height and overlay placement are runtime-owned.
 - The viewer stamps `data-theme="dark|light"` on `<html>` and ships a theme
   toggle — both theme blocks are mandatory, and the toggle must win over
   `prefers-color-scheme` in both directions (the token contract handles this
