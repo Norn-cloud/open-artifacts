@@ -194,7 +194,7 @@ If a Recipe is misplaced, validation reports both rules at once — the Recipe
 path and every fragment that must also move.
 
 **Run `validate`/`create` from the project root with a project-relative Recipe
-path** (e.g. `node artifact.mjs validate .artifacts/recipes/report.recipe.json`, not
+path** (e.g. `node "$ARTIFACT_CLI" validate .artifacts/recipes/report.recipe.json`, not
 `validate /abs/path/report.recipe.json`). The project root is your current
 working directory; an absolute Recipe path, or a path whose real location
 resolves outside the cwd, fails with `recipe must live inside the project
@@ -219,11 +219,11 @@ Manifest.
 ## Commands
 
 ```bash
-node scripts/artifact.mjs validate path/to/report.recipe.json
-node scripts/artifact.mjs build path/to/report.recipe.json \
+node "$ARTIFACT_CLI" validate path/to/report.recipe.json
+node "$ARTIFACT_CLI" build path/to/report.recipe.json \
   --output .artifacts/previews/report.html --standalone
-node scripts/artifact.mjs create path/to/report.recipe.json
-node scripts/artifact.mjs update <artifact-id>
+node "$ARTIFACT_CLI" create path/to/report.recipe.json
+node "$ARTIFACT_CLI" update <artifact-id>
 ```
 
 `validate` writes nothing. `build` writes only the explicitly requested

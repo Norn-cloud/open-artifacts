@@ -3,14 +3,15 @@
 An Open Artifacts instance is either **open** (anyone can create; optionally
 gated by a `CREATE_TOKEN` - see `deployment.md`) or **hosted/SaaS** (requires
 login, e.g. coda0.com). On a hosted instance your agent publishes *as you* by
-authenticating once with `node artifact.mjs login`, which stores a long-lived
+authenticating once with `node "$ARTIFACT_CLI" login`, which stores a long-lived
 `sk_` API key locally. The instance keeps only the key's hash, never the raw
 key.
 
-The CLI is `${CLAUDE_SKILL_DIR}/scripts/artifact.mjs`, run with `node` - the
-examples below assume the working directory is the skill's `scripts/` dir (or
-you prefix the path). Every `create`/`update`/`delete` is also
-`node artifact.mjs <command>`.
+The CLI is `scripts/artifact.mjs` next to the skill's `SKILL.md`. Resolve that
+directory as `SKILL_DIR`, set `ARTIFACT_CLI="$SKILL_DIR/scripts/artifact.mjs"`,
+and run `node "$ARTIFACT_CLI" <command>` from the project root. Do not `cd`
+into the skill directory for Recipe operations: the CLI resolves Recipes,
+fragments, manifests, and watch globs against the current project root.
 
 ## Give this to your coding agent
 
@@ -20,12 +21,12 @@ an API key:
 ```
 Authenticate to coda0.com so you can publish artifacts:
 1. Ensure OPEN_ARTIFACTS_URL=https://coda0.com (write {"apiUrl":"https://coda0.com"} to .artifacts/config.json if not set).
-2. Run: node artifact.mjs login --provider google
+2. Run: node "$ARTIFACT_CLI" login --provider google
 3. A browser opens to coda0.com - the user completes the Google sign-in there.
-4. The API key (sk_) is stored automatically in .artifacts/credentials.json. You can then publish with `node artifact.mjs create`.
+4. The API key (sk_) is stored automatically in .artifacts/credentials.json. You can then publish with `node "$ARTIFACT_CLI" create`.
 ```
 
-## What `node artifact.mjs login` does
+## What `node "$ARTIFACT_CLI" login` does
 
 1. The CLI starts a local callback server on `127.0.0.1` and opens a browser
    to `<instance>/auth/google/login?cli=1&redirect_uri=http://127.0.0.1:<port>/callback`.
@@ -42,11 +43,13 @@ attacker's server.
 
 ## After login
 
-`create`/`update`/`delete` send the stored `sk_` automatically - no env var
-needed. On a hosted instance, new artifacts default to **private**; set
+`create`, `show`, `whoami`, and `live` use the stored `sk_` when a hosted
+instance needs an account session. `update` and `delete` use the per-artifact
+write token saved in `.artifacts/credentials.json`; logging in does not replace
+that token. On a hosted instance, new artifacts default to **private**; set
 `artifact.visibility` to `org` or `public` in the Recipe to share within your
-org or with anyone who has the link. `node artifact.mjs whoami` confirms who
-you are logged in as; `node artifact.mjs logout` clears the key.
+org or with anyone who has the link. `node "$ARTIFACT_CLI" whoami` confirms
+who you are logged in as; `node "$ARTIFACT_CLI" logout` clears the local key.
 
 ## Token precedence (gotcha)
 

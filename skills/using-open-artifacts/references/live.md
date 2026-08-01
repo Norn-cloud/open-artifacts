@@ -13,9 +13,10 @@ Copy this block to your agent so it runs the live-edit loop on an artifact:
 
 ```
 Live-edit artifact <ID> at coda0.com:
-1. Ensure OPEN_ARTIFACTS_URL=https://coda0.com and logged in (node artifact.mjs whoami must succeed).
+1. Ensure OPEN_ARTIFACTS_URL=https://coda0.com and logged in
+   (`node "$ARTIFACT_CLI" whoami` must succeed).
 2. Start the watcher (stays online for the whole session):
-   node artifact.mjs live <ID> --watch
+   node "$ARTIFACT_CLI" live <ID> --watch
    - Prints one JSON line per event on stdout (blocks until next event).
    - Auto-replies `ack` on each `generate` so the host shows "agent is editing".
 3. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). The user picks one or more elements; for each, they type a freeform prompt describing the change, pressing Enter (or Add) to commit that element+prompt pair. When all elements are described, they hit Submit.
@@ -23,13 +24,16 @@ Live-edit artifact <ID> at coda0.com:
    {type:'generate', id, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
    - Each item carries its own `element` (full context) and `prompt` (the user's freeform description for that element).
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
-6. Publish: node artifact.mjs update <ID>   (use the artifact's recipe, or pass the new recipe)
-7. Ack: node artifact.mjs live <ID> --reply <eid> done --version <new-version>
+6. Publish: node "$ARTIFACT_CLI" update <ID>   (use the artifact's recipe, or pass the new recipe)
+7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <new-version>
    - The browser receives `done`, reloads the frame, and shows the republished content.
 8. The watcher keeps polling for the next event (another generate, or `exit` when the browser closes the session). Stop it with Ctrl-C.
 ```
 
-If you can't keep the watcher running, the one-shot `node artifact.mjs live <ID>` still works — but you must be polling before the user hits Submit, because a `generate` event you miss stays in the LiveObject's SQLite queue (survives hibernation) but won't wake you.
+If you can't keep the watcher running, the one-shot
+`node "$ARTIFACT_CLI" live <ID>` still works — but you must be polling before
+the user hits Submit, because a `generate` event you miss stays in the
+LiveObject's SQLite queue (survives hibernation) but won't wake you.
 
 ## Harness note
 

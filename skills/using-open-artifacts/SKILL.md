@@ -1,31 +1,38 @@
 ---
 name: using-open-artifacts
-description: "Use this skill when the user has finished something — a writeup, report, prototype, dashboard, data analysis, or markdown doc — and wants it turned into a web page with a shareable URL they can send to other people. The page is mobile-responsive, supports light/dark themes and optional password protection, keeps one URL across edits, and auto-refreshes when its source files change. Trigger on any phrasing where the real goal is a shareable link or page to give someone: \"make this into a page I can send a link to\", \"turn this writeup into a link\", \"publish this as a web page\", \"turn this data analysis into a shareable link\", \"make a web page I can send to others\", \"create an artifact to share with the team\", or when `.artifacts/manifest.json` exists and project files changed. Do NOT trigger for generic file uploads, image screenshots, or unrelated senses of \"artifact\" (SBOM scans, build tarballs, Linear tracking items, Claude API content blocks)."
+description: "Publish and maintain self-contained HTML, Markdown, or React artifacts as shareable URLs. Use when a user asks to publish a report, writeup, dashboard, prototype, visualization, or document; update an existing artifact; inspect a published artifact; or review watched-source drift in .artifacts/manifest.json or manifest.local.json. Artifacts support stable channel URLs, version history, light/dark themes, optional client-side password encryption, and deterministic Recipe builds. Source changes are detected by status and an optional Claude Code Stop hook; they are not edited or republished automatically. Do not trigger for generic file uploads, screenshots, SBOMs, build tarballs, Linear items, or Claude API content blocks."
 ---
 
-# Artifacts
+# Open Artifacts
 
-Publish a rendered web page the user can share by URL. The page is served with
-a strict sandboxing CSP, wrapped in a skeleton with a CSS reset, an emoji
-favicon, and light/dark theme support. Artifacts keep a stable URL across
-updates and a full version history.
+Publish a self-contained HTML, Markdown, or React artifact the user can share
+by URL. The viewer keeps the artifact body in a sandboxed iframe and owns the
+service chrome, theme switcher, version picker, comments, and optional Live or
+Handoff controls. Artifacts keep immutable versions; a channel can keep one URL
+across later publishes.
 
-The publishing CLI lives at `${CLAUDE_SKILL_DIR}/scripts/artifact.mjs`
-(referred to as `artifact.mjs` below). Run it with `node`.
+The publishing CLI is bundled at `scripts/artifact.mjs` next to this file. Skill
+install locations vary by agent (for example, `.claude/skills/` or another
+Agent Skills directory), so resolve the directory containing this `SKILL.md`
+as `SKILL_DIR`, then use a task-local `ARTIFACT_CLI="$SKILL_DIR/scripts/artifact.mjs"`.
+Run `node "$ARTIFACT_CLI" ...` from the project root. There is no globally
+installed `artifact` binary, and Recipe paths are resolved relative to the
+project-root working directory. The CLI requires Node.js 22 or newer.
 
 ## Setup (once per project)
 
 The CLI needs an instance URL, resolved in this order: `--api` flag,
-`OPEN_ARTIFACTS_URL` env var, `.artifacts/config.json` (`{"apiUrl": "..."}`),
-`~/.config/open-artifacts/config.json`. If none is set, ask the user for their
-instance URL and write `.artifacts/config.json`. If the instance requires a
-create token, put it in `OPEN_ARTIFACTS_TOKEN` or `config.json` `createToken`. If the instance requires login (a hosted/SaaS
-instance like coda0.com), run `node artifact.mjs login` instead - see
-`${CLAUDE_SKILL_DIR}/references/auth.md` for the flow and the copyable login
-instruction to give the user's coding agent.
+`OPEN_ARTIFACTS_URL`, project `.artifacts/config.json` or
+`.artifacts/config.local.json`, then `~/.config/open-artifacts/config.json`.
+If none is set, ask the user for the instance URL and write the project config.
+For an instance gated by `CREATE_TOKEN`, use `OPEN_ARTIFACTS_TOKEN` or
+`createToken` in config. For a hosted/SaaS instance such as coda0.com, run
+`node "$ARTIFACT_CLI" login`; see [auth.md](references/auth.md) for the
+browser flow. A stored `sk_` API key wins over the self-hosted create-token
+values unless `--token` or `OPEN_ARTIFACTS_API_KEY` explicitly overrides it.
 
 Every artifact is built from a JSON Recipe plus ordered fragments. Read
-`${CLAUDE_SKILL_DIR}/references/recipe.md` before creating or updating one.
+[recipe.md](references/recipe.md) before creating or updating one.
 Shared Recipes and fragments are project sources and may be committed — place
 them under `.artifacts/recipes/` and `.artifacts/fragments/`. Local or
 encrypted sources live under `.artifacts/recipes.local/` and
@@ -37,7 +44,9 @@ and previews are gitignored. On the **first `create` in a project**, ask
 whether the artifact should be local and **recommend local**. Record the
 choice in `artifact.local` and place the Recipe/fragments accordingly.
 
-**Run `create`/`update`/`delete`/`migrate` one at a time — never concurrently.**
+**Run state-mutating commands one at a time — never concurrently.** This
+includes `create`, `update`, `delete`, `migrate`, `ack`, `auto-update`,
+`login`, and `logout`; `install-hook` also writes project settings.
 `credentials.json` and the manifests are updated with an unlocked
 read-modify-write. The write re-reads immediately beforehand, which closes the
 window around each command's network round-trip, but two commands whose writes
@@ -46,13 +55,11 @@ endpoint re-issues one — so serialize them. This matters most for a
 "regenerate everything" pass: loop, don't fan out.
 
 If the user has no instance yet, point them at
-`${CLAUDE_SKILL_DIR}/references/deployment.md` — it has the three ways to get
-one (use the public shared instance with zero setup, self-host on their own
+[deployment.md](references/deployment.md) — it has the three ways to get
+one (use the public shared instance with zero deployment setup, self-host on their own
 Cloudflare account, or share a team instance) and a trust-model table to help
 them choose based on content sensitivity. Don't deploy on their behalf unless
 they ask.
-
-
 
 ## When to publish an artifact
 
@@ -62,24 +69,26 @@ Do not publish for short answers, code snippets, or content the user will
 read once in the conversation. When unsure, answer inline and offer to
 publish.
 
-## Isolate content generation in a sub-agent
+## Isolate content generation when the harness supports it
 
 Publishing or republishing means reading project resources and design
 references, authoring a Recipe and fragments, validating the deterministic
-build, and running the CLI. All of that is context a parent conversation
-doesn't need to keep.
+build, and running the CLI. If the host provides a sub-agent or task primitive,
+use it for this content-generation workflow so the parent conversation only
+needs the result. This is a workflow optimization, not a CLI requirement; when
+the host has no sub-agent facility, do the same workflow in the current agent.
 
-**Both `create` (first publish) and `update` (republish) — and everything
-in "How to design the page" that leads up to them — run inside an isolated
-sub-agent, never inline in the parent conversation.** In Claude Code,
-dispatch the Agent tool (a general-purpose agent is enough, no special type
-needed); in another harness, use its equivalent sub-task primitive.
+Use a separate task for both `create` (first publish) and `update` (republish),
+and for the design work that leads to them, when available. In Claude Code this
+can be an Agent task; other harnesses may provide an equivalent. Do not invent
+a fake isolation boundary when the current agent is the only available worker.
 
-Give the sub-agent everything it needs to work alone, then let it work:
+Give the worker everything it needs to work alone, then let it work:
 
 - The brief: what's being published or updated, for whom, and why.
-- If updating: the artifact id. The sub-agent runs `node artifact.mjs show
-  <id>` to read the current published version as its starting reference —
+- If updating: the artifact id. The worker runs
+  `node "$ARTIFACT_CLI" show <id>` to read the current published version as its
+  starting reference —
   for a locked design, the direction comment at the top of that page states
   what must not change. "Locked" means the **visual direction** (register,
   palette hue family, layout posture) must not change — it does **not** exempt
@@ -96,19 +105,19 @@ Give the sub-agent everything it needs to work alone, then let it work:
   scope, channel, watch globs, level, Canvas mode, locality, and auto-update
   in the Recipe. Keep passwords out of it.
 
-The sub-agent does the entire rest of the workflow itself — explore
-resources, plan, read `${CLAUDE_SKILL_DIR}/references/design.md`,
-`${CLAUDE_SKILL_DIR}/references/recipe.md`, and relevant mode references;
+The worker does the entire rest of the workflow itself — explore resources,
+plan, read [design.md](references/design.md), [recipe.md](references/recipe.md),
+and relevant mode references;
 write the Recipe and fragments; run `validate`; optionally build a preview;
 run `create`/`update`; verify; and return **only** a short summary: the URL,
 version number, and one line on what changed. The parent relays that to the
-user. It must not read generated output, run `create`/`update` itself, or
-carry the design reasoning in its own context.
+user and should not independently rerun the publish or carry the design
+reasoning in its own context.
 
 The lightweight bookkeeping commands — `status`, `ack <id>`,
-`auto-update <id> on|off`, `list`, `install-hook` — don't touch content and
-are fine to run directly in the parent conversation; only `create` and
-`update` need isolation.
+`auto-update <id> on|off`, `list`, `show <id>`, `whoami`, `logout`, and
+`install-hook` — don't author content and can run directly; only the
+content-generation part of `create` and `update` benefits from isolation.
 
 ## How to design the page
 
@@ -132,10 +141,10 @@ five-dimension critique (philosophy / hierarchy / execution / specificity /
 restraint) — fix anything under 3/5, re-score once, publish. Do not loop on
 renders.
 
-**Read `${CLAUDE_SKILL_DIR}/references/design.md` before writing a page.** It
+**Read [design.md](references/design.md) before writing a page.** It
 has the full design philosophy: the brand-vs-product register split (earned
 familiarity vs distinctiveness), the anti-AI-slop bans, the shared token
-contract (`${CLAUDE_SKILL_DIR}/references/tokens.css`, injected by the Recipe
+contract (`references/tokens.css`, injected by the Recipe
 builder; override identity tokens in the theme fragment), an
 installed-font specimen library (the CSP blocks *downloading* fonts, not the
 OS library — Iowan, Charter, Avenir, Optima and friends are available), a
@@ -161,12 +170,12 @@ it as `artifact.level: 1|2|3` in the Recipe:
   subtle transitions. Default when unsure **and the brief is interactive** —
   if the brief is mostly text to read, level 1 is the safer pick (it carries a
   structure baseline; L2's structure is author-supplied). Before building L2+,
-  read `${CLAUDE_SKILL_DIR}/references/interaction.md` for the eight-state
+  read `references/interaction.md` for the eight-state
   contract, focus visibility, hit targets, form patterns, and waiting states.
 - **Level 3 — rich:** landing/marketing pages, product showcases. Orchestrated
   motion — load sequences, scroll reveals, view transitions — **all native
   browser APIs, no external libraries** (the strict CSP blocks CDNs). Read
-  `${CLAUDE_SKILL_DIR}/references/motion.md` for the native motion pattern
+  `references/motion.md` for the native motion pattern
   library before building L3 (`interaction.md` applies here too).
 
 Don't gold-plate a doc as L3; don't ship a landing page as L1. The level
@@ -179,29 +188,39 @@ Orthogonal to level, `artifact.canvas: true` swaps the page *shell* for an
 infinite spatial plane of pan/zoom **frames**. It composes with any level:
 level 1 is spatial notes, level 2 a multi-frame prototype (the default use),
 and level 3 a canvas-as-showcase. Read
-`${CLAUDE_SKILL_DIR}/references/canvas.md` before building one -- it has the
+`references/canvas.md` before building one -- it has the
 complete vendored runtime (CSS + vanilla JS) with momentum and pinch physics,
 an optional presenter tour, connector spotlighting, and `#frame-id` deep
 links, plus the frame and freeform contracts and a canvas ship-gate.
 
+### Optional viewer workflows
+
+Live editing is available only when the instance binds `LIVE_DO`; it requires
+the artifact owner's `sk_` session and edits local Recipe sources before an
+ordinary `update`. Read [live.md](references/live.md) before starting a live
+session. A deploy with `OPEN_ARTIFACTS_HANDOFF=1` may also expose host-side
+webcam/microphone recording and playback; it is viewer chrome, not a Recipe
+format or an artifact-side API. Both surfaces are optional and may be absent
+on self-hosted instances.
+
 ## Authoring content — hard constraints
 
-The strict CSP blocks ALL external requests (CDN scripts, fonts, remote
-images, fetch/XHR/WebSockets):
+The artifact frame has a strict CSP: authored code cannot make external
+requests (CDN scripts, remote images, fetch/XHR/WebSockets):
 
 - Inline all CSS and JS; embed images and fonts as `data:` URIs. Use system
   font stacks or inline a face as a `@font-face` data URI. On a deploy that set
   `OPEN_ARTIFACTS_WEB_FONTS="1"`, a web font may also be loaded same-origin via
   the `/fonts/<family>--<weight>[--italic]` proxy or directly from an allowlisted
-  font CDN (Fontshare / Google Fonts), and mermaid via an allowlisted
-  `<script src="/vendor/mermaid.runtime.js">` (a regular, non-module script)
-  served same-origin —
-  see `references/fonts.md` and `references/scripts.md`. The build gate restricts
+  font CDN (Fontshare / Google Fonts). Mermaid is always served from the
+  self-hosted, allowlisted `<script src="/vendor/mermaid.runtime.js">` path
+  (a regular, non-module script) when used — it is not tied to the web-font
+  flag. See `references/fonts.md` and `references/scripts.md`. The build gate restricts
   `@font-face`/`@import` to those font hosts and `<script src>` to the
   allowlisted same-origin `/vendor/...` bundle, so no arbitrary external host is
   ever reachable.
 - **Icons: prefer [Remix Icon](https://remixicon.com/).** Read
-  `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon inline-SVG
+  `references/icons.md` for a vendored ~90-icon inline-SVG
   subset (navigation, actions, status, social, common UI). Copy the whole
   `<svg>` block inline — it uses `fill="currentColor"` so it inherits color.
   Never link the Remix Icon CDN (the CSP blocks it); only inline SVGs. To sit
@@ -221,7 +240,8 @@ images, fetch/XHR/WebSockets):
   measure cap, since the default is a full-width doc with browser-default
   spacing. Markdown needs nothing — the viewer wraps it in `.oa-md`
   automatically. The viewer chrome (service header, theme toggle, brand chip,
-  focus ring) is injected by the harness at serve time — never hand-author it.
+  version picker, comments, and any deploy-enabled Live/Handoff controls) is
+  injected by the host at serve time — never hand-author it.
   It follows your identity palette automatically via the token contract's
   chrome bridge, so do **not** override `--oa-*` viewer tokens in the theme
   fragment. L2/L3 may be full-bleed by design; author their structure
@@ -271,14 +291,14 @@ inline — `text-wrap: pretty/balance`, CSS Grid, container queries,
 
 ## Publishing
 
-*(Run this inside the isolated sub-agent — see "Isolate content generation
-in a sub-agent" above.)*
+*(Run this in the content-generation task when the harness provides one; run
+from the project root.)*
 
 Create a Recipe and ordered fragments, validate them, then publish:
 
 ```
-node artifact.mjs validate .artifacts/recipes/app-interactions.recipe.json
-node artifact.mjs create .artifacts/recipes/app-interactions.recipe.json
+node "$ARTIFACT_CLI" validate .artifacts/recipes/app-interactions.recipe.json
+node "$ARTIFACT_CLI" create .artifacts/recipes/app-interactions.recipe.json
 ```
 
 The Recipe owns favicon, scope, channel, watch globs, level, Canvas mode,
@@ -292,31 +312,39 @@ gitignored credentials file.
 
 ## Updating
 
-*(Run this inside the isolated sub-agent — see "Isolate content generation
-in a sub-agent" above.)*
+*(Run this in the content-generation task when the harness provides one; run
+from the project root.)*
 
 ```
-node artifact.mjs update <id> [recipe.json] [--label "what-changed"]
+node "$ARTIFACT_CLI" update <id> [recipe.json] [--label "what-changed"]
 ```
 
 Same URL, new version. Without a path, `update` uses the Recipe recorded in
 Manifest v2. Update its fragments after reading project sources and, when
 useful, compare with `show <id>`. The CLI rebuilds and validates in memory,
-then publishes once. A legacy Manifest v1 entry is migrated to Recipe sources
-when first updated. On a version conflict, review it before using `--force`.
-`list` shows known artifacts.
+then publishes once. The first positional argument is the short artifact id,
+not a Recipe path. A legacy Manifest v1 entry is migrated automatically; run
+`migrate <id>` first only when you want to inspect or edit the generated sources
+before publishing. A 409 version conflict means another writer published
+first; review the current version and use `--force` only when overwriting it is
+intentional. `--label` is capped at 60 UTF-8 bytes.
 
-## Keeping artifacts fresh (do this without being asked)
+`build <recipe> --output <path>` writes an explicit local preview; add
+`--standalone` only for an HTML Recipe. `list`, `show <id> [--v N]`, and
+`delete <id>` cover common read and cleanup operations. `delete` removes the
+server artifact and its local manifest entry.
 
-After the first `create` in a project, **ask the user** whether to install the
-staleness Stop hook — don't install it silently. If they agree, run
-`node artifact.mjs install-hook` (adds a `Stop` hook to `.claude/settings.json`
-that surfaces drift at the end of every turn). With the hook installed, at the
-end of a turn whose changes touched an artifact's watched files you are told
-which artifact drifted and why. Either way, you can check on demand:
+## Detecting stale artifacts (republish only with intent)
+
+Source changes never edit or republish an artifact by themselves. After the
+first `create` in a project, **ask the user** whether to install the optional
+Claude Code Stop hook — don't install it silently. If they agree, run
+`node "$ARTIFACT_CLI" install-hook`; it adds a `Stop` hook to
+`.claude/settings.json` that surfaces drift at the end of a turn. Other agent
+harnesses should use their own hook integration or run the manual check:
 
 ```
-node artifact.mjs status
+node "$ARTIFACT_CLI" status
 ```
 
 For each artifact reported stale, decide whether the changed files affect its
@@ -324,13 +352,13 @@ recorded scope:
 
 - **They affect it** → regenerate the page content to reflect the current state
   of the project and run `update`. That republishes and refreshes the snapshot.
-  Regenerating is content generation, so dispatch it to a sub-agent per
-  "Isolate content generation in a sub-agent" above — including when this
-  judgment call is made autonomously via the Stop hook, not just when a
-  human asks directly.
+  Regenerating is content generation, so use a separate task when the harness
+  provides one, per "Isolate content generation when the harness supports it"
+  above — including when this judgment call is made autonomously via the Stop
+  hook, not just when a human asks directly.
 - **They don't** (e.g. a refactor with no behavior change for a user-facing
   scope, or a design direction locked in the scope) → run
-  `node artifact.mjs ack <id>`. This advances the snapshot baseline offline —
+  `node "$ARTIFACT_CLI" ack <id>`. This advances the snapshot baseline offline —
   no republish — so the same unrelated change stops being reported every turn.
   `ack` is a pure manifest mutation, not content generation, so it's fine to
   run directly. Don't just leave it stale: with the hook installed it
@@ -345,7 +373,7 @@ unchanged. If the user wants the hook to stay quiet about most artifacts and
 only nudge about specific ones, turn on that artifact's auto-update flag:
 
 ```
-node artifact.mjs auto-update <id> on
+node "$ARTIFACT_CLI" auto-update <id> on
 ```
 
 This does not change how you decide what to do once an artifact is flagged —
@@ -356,7 +384,7 @@ it only changes **which artifacts the Stop hook is allowed to flag at all**:
   by default — artifacts never toggled (or created before this feature) are
   treated as off, and the hook stays completely silent about them even
   while stale.
-- A plain, human-run `node artifact.mjs status` (no `--hook`) is never
+- A plain, human-run `node "$ARTIFACT_CLI" status` (no `--hook`) is never
   filtered by this flag — it always reports every stale watched artifact.
   Only the autonomous, no-human-present Stop-hook path narrows to opted-in
   artifacts.
@@ -365,13 +393,13 @@ it only changes **which artifacts the Stop hook is allowed to flag at all**:
   isn't already present. Unlike `create`'s hook hint, which never installs
   anything for you, running `auto-update <id> on` *is* the user's consent to
   install it — go ahead, and the CLI prints a confirmation when it does.
-- Turning it **off** (`node artifact.mjs auto-update <id> off`) leaves any
+- Turning it **off** (`node "$ARTIFACT_CLI" auto-update <id> off`) leaves any
   installed hook in place; it just stops mentioning this artifact.
 
 ## Password protection
 
 ```
-node artifact.mjs create .artifacts/recipes.local/q3.recipe.json --password "..."
+node "$ARTIFACT_CLI" create .artifacts/recipes.local/q3.recipe.json --password "..."
 ```
 
 Set `security.encrypted: true` and a kebab-case
@@ -380,9 +408,11 @@ must use the private `.artifacts` source directories.
 
 Content is encrypted locally (PBKDF2 600k + AES-256-GCM); the server stores
 only ciphertext and viewers decrypt in the browser. Share the URL and the
-password through different channels. The CLI resolves the named credential
-from `--password`, its `OPEN_ARTIFACTS_PASSWORD_*` environment variable, or
-the gitignored credentials file. Passwords never enter Recipes or Manifests.
+password through different channels. Prefer the named environment variable or
+gitignored credentials file over a command-line password when shell history or
+process listings are a concern. The CLI resolves the named credential from
+`--password`, its `OPEN_ARTIFACTS_PASSWORD_*` environment variable, or the
+gitignored credentials file. Passwords never enter Recipes or Manifests.
 Title and favicon remain plaintext service metadata, so keep them
 non-sensitive.
 
@@ -399,5 +429,7 @@ content as published.
 `GET <instance>/api/artifacts/<id>/raw` returns the stored content
 (`?v=N` for older versions). For a non-encrypted artifact that is the page
 itself (`text/plain`); for an encrypted artifact it is a JSON ciphertext
-envelope — run `node artifact.mjs show <id>` instead, which decrypts locally
-using the password stored at create time. Viewer URLs also accept `?v=N`.
+envelope — run
+`node "$ARTIFACT_CLI" show <id> [--v N] [--password ...]` instead, which
+decrypts locally using the supplied or stored credential. Viewer URLs also
+accept `?v=N`.

@@ -4,7 +4,7 @@ The skill publishes to an **Open Artifacts instance** — a Cloudflare Worker
 that stores content and serves pages. You need to point the skill at one.
 Three ways to get an instance; pick based on your trust/storage needs.
 
-## A — Use coda0.com, the official hosted instance (zero setup)
+## A — Use coda0.com, the official hosted instance (zero deployment setup)
 
 [coda0.com](https://coda0.com) is the managed instance of Open Artifacts, run
 by the project. Point the skill at it and start publishing:
@@ -15,7 +15,7 @@ export OPEN_ARTIFACTS_URL=https://coda0.com
 
 - Nothing to deploy; works immediately.
 - Artifact content is stored on that instance's Cloudflare account.
-- To publish, authenticate with `node artifact.mjs login --provider google` (see `auth.md`). Reads of public artifacts are open. Use `--password` for sensitive content —
+- To publish, authenticate with `node "$ARTIFACT_CLI" login --provider google` (see `auth.md`). Reads of public artifacts are open. Use `--password` for sensitive content —
   encryption is client-side, so the server only ever holds ciphertext.
 - Best for: trying the skill out, non-sensitive content, quick shares.
 
@@ -56,6 +56,26 @@ URL (and create token, if set) with the team. Everyone else just sets
 `OPEN_ARTIFACTS_URL` (and `OPEN_ARTIFACTS_TOKEN` if gated). Updates are
 still per-artifact: each artifact's write token lives in each user's
 gitignored `.artifacts/credentials.json`.
+
+## Optional deploy surfaces
+
+The artifact format and CLI work without these features. A deployment may add
+them independently:
+
+- `OPEN_ARTIFACTS_WEB_FONTS=1` enables the `/fonts/*` proxy and allowlisted font
+  CDNs. The artifact frame remains opaque; this flag does not add
+  `allow-same-origin`.
+- `LIVE_DO` enables the host's Live editor and the `/api/artifacts/:id/live*`
+  routes. It requires a Durable Object binding for `LiveObject`; a normal
+  self-hosted `wrangler.jsonc` without that binding keeps Live disabled.
+- `OPEN_ARTIFACTS_HANDOFF=1` enables host-side webcam/microphone handoff
+  recording and playback. It uses the existing R2 binding and does not require
+  the Live Durable Object.
+
+For local development with Live and owner permissions, use the repository's
+`wrangler.dev.jsonc` (`wrangler dev -c wrangler.dev.jsonc`). A production
+deployment should configure the Durable Object migration and authorization
+explicitly rather than copying local-development shortcuts.
 
 ## Custom domain (canonical links)
 

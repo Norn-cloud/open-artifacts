@@ -19,12 +19,13 @@ is acceptable on its own — the `<link>` 404s and the page falls back to the
 next face in your `--font-display` / `--font-body` stack. Never let a web font
 be load-bearing for legibility; let it carry character the fallback can't.
 
-The opt-in trade-off is documented in `design.md`'s Hard constraints: opening
-the sandbox with `allow-same-origin` so the browser can cache fonts ends the
-opaque-origin guarantee. A malicious artifact on such a deploy can read the host
-origin's `localStorage`/`cookies`. `connect-src` stays `'none'`, so direct
-`fetch` exfiltration is still blocked, but DOM/side-channel reads become
-reachable. Self-hosters who do not want that surface simply leave the flag unset.
+The opt-in does **not** grant `allow-same-origin`: the artifact frame remains
+opaque, so it cannot read the host page's `localStorage`, cookies, or DOM. The
+frame CSP names the response origin explicitly so the same-host `/fonts` proxy
+can load from an opaque frame, and it adds only the bounded passive font CDN
+hosts. `connect-src` remains `'none'`; authored JavaScript still cannot make
+network requests. Self-hosters who do not need web fonts can leave the flag
+unset to keep the narrower font policy.
 
 ## Two delivery paths
 
