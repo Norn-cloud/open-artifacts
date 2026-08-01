@@ -23,6 +23,19 @@ Feature: Instance identity beyond the landing page
     When I GET /a/:id with BRAND_NAME set and BRAND_URL set to something else
     Then the header still shows a brand chip linking to "/", not to BRAND_URL
 
+  Scenario: An authenticated account avatar appears in the artifact header
+    Given a published artifact and an authenticated coda0 account with a picture URL
+    When I GET /a/:id
+    Then the account header uses the picture URL as its avatar image
+    And the account header keeps the user's initial as an image-load fallback
+    And the host CSP allows only coda0 identity-provider avatar hosts
+
+  Scenario: The artifact header keeps the account slot before the brand
+    Given a published branded artifact with account controls
+    When I GET /a/:id
+    Then the account slot appears immediately before the brand at the right edge
+    And the comments and theme controls appear before the account slot
+
   Scenario: Not-found reads "Go to" the configured brand
     When I GET /a/nonexistent with BRAND_NAME set to "coda0"
     Then the response status is 404
