@@ -472,6 +472,20 @@ describe("handoff recording is write-gated", () => {
 });
 
 describe("a recorded handoff is stored and round-trips", () => {
+  it("rejects an empty media file", async () => {
+    const { id, writeToken } = await createArtifact(ON);
+    const res = await fetchWith(
+      handoffPostRequest(id, writeToken, {
+        bytes: "",
+        type: "video/webm",
+      }),
+      ON,
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "media file is empty" });
+  });
+
   it("POST returns 201 with id + deleteToken and stores media+events+row", async () => {
     const { id, writeToken } = await createArtifact(ON);
     const res = await fetchWith(handoffPostRequest(id, writeToken), ON);
@@ -520,6 +534,39 @@ describe("a recorded handoff is stored and round-trips", () => {
     expect(media).not.toBeNull();
     expect(events).not.toBeNull();
     expect(await store.listHandoffs(id)).toHaveLength(1);
+  });
+
+  it("serves recorder codec metadata as a stable base media type", async () => {
+    const { id, writeToken } = await createArtifact(ON);
+    const postRes = await fetchWith(
+      handoffPostRequest(id, writeToken, {
+        bytes: "codec-labelled-webm",
+        type: "video/webm;codecs=vp8,opus",
+      }),
+      ON,
+    );
+    const { id: hid } = (await postRes.json()) as { id: string };
+    const listRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/handoffs`),
+      ON,
+    );
+    const list = (await listRes.json()) as {
+      handoffs: { mediaType: string }[];
+    };
+    expect(list.handoffs[0]?.mediaType).toBe("video/webm");
+
+    // Simulate a recording saved before base-type normalization shipped.
+    await env.DB.prepare("UPDATE handoffs SET media_type = ? WHERE id = ?")
+      .bind("video/webm;codecs=vp8,opus", hid)
+      .run();
+
+    const mediaRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/handoffs/${hid}/media`),
+      ON,
+    );
+
+    expect(postRes.status).toBe(201);
+    expect(mediaRes.headers.get("content-type")).toBe("video/webm");
   });
 });
 

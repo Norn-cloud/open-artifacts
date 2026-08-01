@@ -23,9 +23,10 @@ const PREVIEW_SCRIPT = `
   }
   function clearPreviewElement(){
     if(!cam)return;
+    cam.onclick=null; cam.onerror=null; cam.onloadedmetadata=null; cam.ontimeupdate=null; cam.onended=null;
     try{cam.pause();}catch(e){}
-    cam.srcObject=null; cam.removeAttribute('src'); cam.hidden=true;
-    cam.onclick=null; cam.onloadedmetadata=null; cam.ontimeupdate=null; cam.onended=null;
+    cam.srcObject=null; cam.removeAttribute('src');
+    cam.hidden=true;
     setBubbleFlag('data-mirror',false); setBubbleFlag('data-rec',false);
   }
   function attachPreview(s){

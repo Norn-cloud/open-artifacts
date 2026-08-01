@@ -36,8 +36,9 @@ Feature: Handoff recording (one per version)
     And the events JSON is stored in R2 under handoff/<id>/<hid>/events
     And a handoffs row is inserted in D1
     And GET /api/artifacts/<id>/handoffs returns the handoff
-    And GET /api/artifacts/<id>/handoffs/<hid>/media returns the bytes with the recorded content-type
+    And GET /api/artifacts/<id>/handoffs/<hid>/media returns the bytes with a stable base media content-type
     And GET /api/artifacts/<id>/handoffs/<hid>/events returns the events JSON
+    But an empty media file is rejected with 400 before anything is stored
 
   Scenario: Recording again for the SAME version overwrites in place
     When the owner has already recorded a handoff for /a/<id> at version 1
@@ -45,6 +46,13 @@ Feature: Handoff recording (one per version)
     Then the response is 201 with the same {id} (version-scoped, reused)
     And GET /api/artifacts/<id>/handoffs returns only the second handoff
     And the first handoff's media and events are overwritten at the same R2 keys
+
+  Scenario: Playback bypasses an overwritten recording's stale browser cache
+    Given the owner has re-recorded a handoff at the same media and events keys
+    When a viewer clicks Play for the replacement handoff
+    Then media and events requests include the replacement handoff's createdAt revision
+    And both requests use the browser no-store cache mode
+    And interaction replay starts only after the media element loads metadata
 
   Scenario: Recording for a DIFFERENT version keeps both handoffs
     When the owner has recorded a handoff for /a/<id> at version 1

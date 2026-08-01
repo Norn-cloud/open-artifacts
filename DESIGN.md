@@ -278,7 +278,9 @@ the owner opens a record-first dock with no saved handoff or explicitly chooses
 Re-record; only active capture adds the danger ring, and closing the dock
 releases every media track. Handoff timelines begin with the artifact's scroll
 position at `t=0`, so playback resets to the recorded viewport before its first
-animation frame.
+animation frame. Re-recording keeps stable R2 keys, so playback appends the
+handoff `createdAt` as a media/events revision and bypasses the browser cache;
+event replay waits for media metadata before it advances the artifact.
 
 ## Do's and Don'ts
 
