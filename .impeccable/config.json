@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "16px",
+        "createdAt": "2026-07-28T12:49:57.222Z",
+        "reason": "Icon glyph size for the delete button's centered x character in a 28px square button; not a UI text step"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "1px",
+        "createdAt": "2026-07-28T12:49:57.267Z",
+        "reason": "2px-wide scrubber tick marker; 2px radius (smallest documented) would render a 2px element as a circle, so 1px is structurally correct"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "8rem",
+        "createdAt": "2026-07-28T12:49:57.309Z",
+        "reason": "Full-screen countdown overlay display number, not product UI typography; 48px display step is too small for a viewport-filling countdown"
+      }
+    ]
+  }
+}
