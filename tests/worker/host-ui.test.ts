@@ -59,6 +59,32 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("window.__oaSyncHeaderOverflow");
   });
 
+  it("renders the coda0 account picture with an initial fallback", async () => {
+    const created = await exports.default.fetch(
+      new Request(`${BASE}/api/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: "<p>hello</p>",
+          title: "Avatar",
+          favicon: "📊",
+        }),
+      }),
+    );
+    const { id } = (await created.json()) as { id: string };
+    const response = await exports.default.fetch(`${BASE}/a/${id}`);
+    const html = await response.text();
+    const csp = response.headers.get("content-security-policy") ?? "";
+
+    expect(csp).toContain(
+      "img-src data: blob: https://lh3.googleusercontent.com https://avatars.githubusercontent.com",
+    );
+    expect(html).toContain("function renderUser(name,picture)");
+    expect(html).toContain("oa-account-av-image");
+    expect(html).toContain("img.addEventListener('error'");
+    expect(html).toContain("typeof user.picture");
+  });
+
   it("styles the compose and pin chrome with tokens and focus rings", async () => {
     const html = await hostHtml();
     expect(html).toContain(".oa-cm-compose");

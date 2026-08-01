@@ -158,6 +158,11 @@ export function userContentHeaders(options: {
 // just enough for same-origin API calls and the embed; everything else stays
 // locked down like the artifact frame.
 export function hostContentSecurityPolicy(nonce: string): string {
+  // coda0's account chip loads provider-hosted profile pictures. Keep the
+  // allowlist limited to the two identity providers that supply those URLs;
+  // the artifact frame below remains isolated from all external images.
+  const accountAvatarHosts =
+    "https://lh3.googleusercontent.com https://avatars.githubusercontent.com";
   return [
     "default-src 'none'",
     // script-src is nonce-only with 'self' (same-origin /vendor/... runtime
@@ -169,7 +174,7 @@ export function hostContentSecurityPolicy(nonce: string): string {
     // the WASM fetch anyway, and it never runs MediaPipe).
     `script-src ${scriptSrcForNonce("'self'", nonce)} 'wasm-unsafe-eval'`,
     "style-src 'unsafe-inline'",
-    "img-src data: blob:",
+    `img-src data: blob: ${accountAvatarHosts}`,
     "font-src data:",
     "media-src data: blob:",
     "connect-src 'self'",
@@ -550,19 +555,25 @@ function headerHtml(
     handoffEnabled && canManage
       ? `<button class="oa-handoff-toggle" type="button" data-oa-header-secondary aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span><span class="oa-header-action-label">Handoff</span></button>`
       : "";
-  const secondaryControls = `${picker}${share}${chip}${live}${handoff}`;
-  const moreHidden = secondaryControls ? "" : " hidden";
+  // Keep the service controls together, then place the account slot before
+  // branding so the brand stays at the panel's far right edge.
+  const secondaryControls = `${picker}${share}${live}${handoff}`;
+  const hasPanelControls = `${secondaryControls}${chip}`;
+  const moreHidden = hasPanelControls ? "" : " hidden";
+  // Comments and theme remain primary controls outside More, before the
+  // overflow group so they sit to the left of account and branding.
   return `<header class="oa-header">
   <span class="oa-header-title" title="${escapeHtml(title)}"><span class="oa-header-fav" aria-hidden="true">${escapeHtml(favicon)}</span><span class="oa-header-title-text">${escapeHtml(title)}</span></span>
+  ${comments}
+  <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
   <div class="oa-header-overflow">
     <button id="oa-header-more" class="oa-header-more" type="button" aria-label="More artifact controls" aria-expanded="false" aria-controls="oa-header-panel"${moreHidden}>${MORE_DOTS_SVG}</button>
     <div id="oa-header-panel" class="oa-header-panel" role="group" aria-label="Artifact controls">
       ${secondaryControls}
       <span id="oa-account-slot" class="oa-account-slot"></span>
+      ${chip}
     </div>
   </div>
-  ${comments}
-  <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
 </header>`;
 }
 
@@ -897,12 +908,11 @@ const HOST_FRAME_CSS = `
 #oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0}
 `;
 
-// Account chip in the service header: name-initial avatar + dropdown (dashboard
-// / sign out), or a "Sign in" link when no session. Driven by a same-origin
-// fetch('/api/me') so it works on any host that exposes a /api/me returning
-// {user:{name}} (coda0). A self-host with no /api/me gets a non-200 and the chip
-// stays empty - today's chrome unchanged. No external avatar image (name
-// initial only) so the host CSP img-src stays data: blob: - no CDN widening.
+// Account chip in the service header: provider avatar (with a name-initial
+// fallback) + dropdown (dashboard / sign out), or a "Sign in" link when no
+// session. Driven by a same-origin fetch('/api/me') so it works on any host
+// that exposes a /api/me returning {user:{name,picture}} (coda0). A self-host
+// with no /api/me gets a non-200 and the chip stays empty.
 const ACCOUNT_CSS = `
 .oa-account-slot{position:relative;display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
 .oa-account-slot:empty{display:none}
@@ -913,7 +923,8 @@ const ACCOUNT_CSS = `
 .oa-account-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-account-btn:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-account-btn:hover{background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
-.oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
+.oa-account-av{flex-shrink:0;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:color-mix(in oklab,var(--oa-fg),transparent 88%);color:var(--oa-fg);font-size:.7rem;font-weight:600;line-height:1;text-transform:uppercase;user-select:none}
+.oa-account-av-image{display:block;width:100%;height:100%;object-fit:cover}
 .oa-account-name{max-width:8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .oa-account-menu{position:absolute;top:calc(100% + 4px);right:0;min-width:9rem;padding:.25rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%);z-index:2147483646}
 .oa-account-menu[hidden]{display:none}
@@ -928,20 +939,27 @@ const ACCOUNT_CSS = `
 
 // Fetches /api/me (same-origin, connect-src 'self') and renders an account chip
 // into #oa-account-slot. Resilient: any non-200 hides the slot (a self-host with
-// no /api/me keeps today's chrome). On coda0 a session returns {user:{name}};
-// 401 renders a "Sign in" link to /login. Logout is POST /auth/logout (no body).
+// no /api/me keeps today's chrome). On coda0 a session returns
+// {user:{name,email,picture}}; 401 renders a "Sign in" link to /login. Logout
+// is POST /auth/logout (no body).
 const ACCOUNT_SCRIPT = `
 (function(){
   var slot=document.getElementById('oa-account-slot');
   if(!slot)return;
   function initial(name){var ch=[...String(name||'').trim()][0];return ch?ch.toUpperCase():'?';}
+  function initialAvatar(name){var fallback=document.createElement('span');fallback.className='oa-account-av';fallback.setAttribute('aria-hidden','true');fallback.textContent=initial(name);return fallback;}
   function syncOverflow(){if(window.__oaSyncHeaderOverflow)window.__oaSyncHeaderOverflow();}
   function clear(){slot.innerHTML='';syncOverflow();}
   function showLoading(){slot.innerHTML='<div class="oa-account-loading" role="status" aria-label="Loading account"></div>';syncOverflow();}
   function renderSignin(){slot.innerHTML='<a class="oa-account-signin" href="/login">Sign in</a>';syncOverflow();}
-  function renderUser(name){
+  function renderUser(name,picture){
     var btn=document.createElement('button');btn.type='button';btn.id='oa-account-button';btn.className='oa-account-btn';btn.setAttribute('aria-haspopup','menu');btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-controls','oa-account-menu');
-    var av=document.createElement('span');av.className='oa-account-av';av.setAttribute('aria-hidden','true');av.textContent=initial(name);
+    var av=initialAvatar(name);
+    if(picture){
+      var img=document.createElement('img');img.className='oa-account-av-image';img.src=picture;img.alt='';
+      img.addEventListener('error',function(){av.replaceWith(initialAvatar(name));});
+      av.textContent='';av.appendChild(img);
+    }
     var nm=document.createElement('span');nm.className='oa-account-name';nm.textContent=name||'Account';
     btn.appendChild(av);btn.appendChild(nm);
     var menu=document.createElement('div');menu.id='oa-account-menu';menu.className='oa-account-menu';menu.setAttribute('role','menu');menu.hidden=true;
@@ -957,7 +975,7 @@ const ACCOUNT_SCRIPT = `
   }
   showLoading();
   fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else clear();return null;}return r.json();}).then(function(me){
-    if(!me){clear();return;}var name=(me.user&&me.user.name)||me.user&&me.user.email||null;if(name)renderUser(name);else renderSignin();
+    if(!me){clear();return;}var user=me.user||{};var name=user.name||user.email||null;var picture=typeof user.picture==='string'?user.picture:null;if(name)renderUser(name,picture);else renderSignin();
   }).catch(clear);
 })();
 `;
