@@ -38,7 +38,7 @@ export function playback(svgs: HandoffSvgs): string {
       // in the file - don't re-composite (would double-blur). If it was
       // recorded without blur but the viewer toggled Blur on, re-composite live.
       var recHasBlur = !!(handoff && handoff.hasBlur);
-      cam.hidden=false;
+      cam.hidden=false; applyCamPos();
       if(camBlur && !recHasBlur){ startSeg(); } else { stopSeg(); }
       // Explicit unmute: the <video> carries no muted content attribute, so the
       // recorded audio plays. Re-assert on loadedmetadata in case a new src

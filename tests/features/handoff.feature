@@ -68,6 +68,14 @@ Feature: Handoff recording (one per version)
     And the /a/<id> host page inlines hasBlur in the handoff JSON
     So playback knows not to re-composite an already-blurred clip
 
+  Scenario: The circular camera preview stays stable while dragging
+    Given a recording or playback shows the circular camera preview
+    When the primary pointer drags the preview and another pointer also moves
+    Then the preview follows only the primary pointer until release or cancel
+    And switching between the raw camera and blur canvas does not steal the drag
+    And the recording mirror remains active throughout the drag
+    And the saved position is clamped inside the viewport after a resize
+
   Scenario: Playback reads are view-gated like the artifact
     When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
     And a handoff exists for a private artifact
@@ -84,4 +92,3 @@ Feature: Handoff recording (one per version)
     When the owner DELETEs the artifact
     Then every version's handoff media and events are removed from R2
     And every handoffs row is removed from D1
-

@@ -272,6 +272,10 @@ pinned top-right of its toggle. Hidden unless `[data-count]` is set.
 Bottom-center pills that inherit the icon-button vocabulary for their controls
 and the drawer's surface/border tokens for their panels. They are mutually
 exclusive (opening one closes the other) - a state rule, not a visual one.
+The circular camera preview captures one primary pointer for each drag and keeps
+that pointer bound to the overlay where the gesture began. Drag translation and
+the recording mirror use separate CSS variables so moving the preview never
+flips it; saved coordinates are clamped back inside the viewport after resize.
 
 ## Do's and Don'ts
 
