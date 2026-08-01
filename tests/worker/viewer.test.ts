@@ -787,6 +787,25 @@ describe("GET /a/:id version picker", () => {
     expect(narrowRule).toBeGreaterThan(baseRule);
   });
 
+  it("keeps custom select chevrons stable while opening the menu", async () => {
+    const created = await create({ content: "<p>v1</p>" });
+    await putVersion(created.id, created.writeToken, "<p>v2</p>");
+
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+
+    expect(html).toContain(
+      "transition:background-color .15s,border-color .15s",
+    );
+    expect(html).toContain(
+      ".oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background-color:",
+    );
+    expect(html).not.toContain(
+      ".oa-version .oa-version-select:active,.oa-visibility .oa-visibility-select:active{transform:",
+    );
+  });
+
   it("selecting an older version via ?v= serves that snapshot and keeps the picker", async () => {
     const created = await create({ content: "<p>v1</p>" });
     await putVersion(created.id, created.writeToken, "<p>v2</p>");

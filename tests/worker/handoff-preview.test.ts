@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { HANDOFF_SVGS } from "../../src/handoff";
+import { del } from "../../src/handoff/del";
 import { playback } from "../../src/handoff/playback";
 import { preview } from "../../src/handoff/preview";
 import { record } from "../../src/handoff/record";
 import { state as stateScript } from "../../src/handoff/state";
 import { HANDOFF_CSS } from "../../src/handoff/styles";
+import { upload } from "../../src/handoff/upload";
 
 interface TrackStub {
   stopped: boolean;
@@ -199,16 +201,25 @@ describe("handoff live camera preview", () => {
     expect(harness.camera.srcObject).toBe(second.stream);
   });
 
-  it("wires dock open/close and recording to the shared preview lifecycle", () => {
+  it("auto-opens recorded handoffs without starting the camera", () => {
     const dock = stateScript(HANDOFF_SVGS);
     const recorder = record(HANDOFF_SVGS);
     const player = playback(HANDOFF_SVGS);
+    const uploader = upload(HANDOFF_SVGS);
+    const remover = del(HANDOFF_SVGS);
 
-    expect(dock).toContain("render();\n    requestPreview();");
+    expect(dock).toContain("render();\n    syncIdlePreview();");
+    expect(dock).toContain(
+      "if(handoff){ if(window.__oaDock&&canManage)window.__oaDock.open('handoff'); else openDock(); }",
+    );
+    expect(dock).not.toContain("if(!canManage && handoff)");
     expect(dock).toContain("stopPreview();\n    root.hidden=true;");
     expect(recorder).toContain("requestPreview().then(function(s)");
     expect(recorder).toContain("setRecordingIndicator(true);");
     expect(player).toContain("if(recordStarting)return;");
+    expect(player).not.toContain("requestPreview();");
+    expect(uploader).not.toContain("requestPreview();");
+    expect(remover).toContain("render(); syncIdlePreview();");
   });
 
   it("mirrors preview without styling it as an active recording", () => {
@@ -219,5 +230,9 @@ describe("handoff live camera preview", () => {
     expect(HANDOFF_CSS).not.toContain(
       "#oa-handoff-cam[data-rec]{--oa-cam-mirror:-1",
     );
+    expect(HANDOFF_CSS).toContain(".oa-handoff-speed{min-height:28px;");
+    expect(HANDOFF_CSS).toContain("background-image:linear-gradient(");
+    expect(HANDOFF_CSS).toContain("transition:background-color .15s");
+    expect(HANDOFF_CSS).not.toContain(".oa-handoff-speed:active{transform:");
   });
 });

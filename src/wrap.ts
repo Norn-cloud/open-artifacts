@@ -232,15 +232,14 @@ img,video,canvas{max-width:100%}
 .oa-brand svg{display:block;width:14px;height:14px}
 @media (hover:hover) and (pointer:fine){.oa-header #oa-theme-toggle:hover,.oa-header-more:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}.oa-brand:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 .oa-version,.oa-visibility{display:inline-flex;align-items:center;flex-shrink:0;min-width:0}
-.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:background .15s,border-color .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
+.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border);border-radius:6px;background-color:var(--oa-bg);color:var(--oa-fg);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;transition:background-color .15s,border-color .15s;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat}
 /* After the base rule, not before: same selector, same specificity, and a
    media query does not raise it, so source order alone decides. Emitted
    first, the base rule's padding shorthand resets padding-right and silently
    drops the narrow-screen value. */
 @media (max-width:30rem){.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select:focus-visible,.oa-visibility .oa-visibility-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-version .oa-version-select:active,.oa-visibility .oa-visibility-select:active{transform:translateY(1px)}
-@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
+@media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background-color:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
 @media (max-width:52rem){
 .oa-header{gap:.75rem;padding-inline:.75rem}
 .oa-header .oa-header-title .oa-header-title-text{display:block;min-width:0}
@@ -291,7 +290,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle svg{display:block;width:16px;height:16px}
 .oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--oa-accent);color:var(--oa-accent-on);font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);box-shadow:-8px 0 24px -8px color-mix(in oklab,var(--oa-fg),transparent 72%);z-index:2147483645;font-family:var(--oa-font)}
+.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
    with the theme toggle above it, and the list card shares the same edge. */

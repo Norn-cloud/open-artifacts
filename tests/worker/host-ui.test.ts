@@ -69,6 +69,15 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain("var(--oa-danger)");
   });
 
+  it("keeps the comments sidebar flat", async () => {
+    const html = await hostHtml();
+    const drawerRule = html.match(/\.oa-cm-drawer\{([^}]*)\}/)?.[1];
+
+    expect(drawerRule).toBeDefined();
+    expect(drawerRule).toContain("border-left:");
+    expect(drawerRule).not.toContain("box-shadow:");
+  });
+
   it("still serves the interactive UI on the encrypted unlock shell", async () => {
     // Encrypted artifacts get interactive (unanchored) comments too.
     const html = await hostHtml({

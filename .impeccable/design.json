@@ -118,10 +118,7 @@
       "micro": { "displayName": "Micro", "purpose": "Count badges only." }
     },
     "shadows": [
-      { "name": "focus-ring", "value": "0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)", "purpose": "Layered :focus-visible ring on every control. The only shadow on inline chrome." },
-      { "name": "panel-lift", "value": "0 4px 12px -2px color-mix(in oklab, var(--oa-fg), transparent 78%)", "purpose": "Dropdown menus and the compose popover." },
-      { "name": "drawer-lift", "value": "-8px 0 24px -8px color-mix(in oklab, var(--oa-fg), transparent 72%)", "purpose": "The comments drawer (directional, left edge)." },
-      { "name": "action-bar-lift", "value": "0 6px 24px -4px color-mix(in oklab, var(--oa-fg), transparent 88%)", "purpose": "The live action bar (deepest, with backdrop-blur)." }
+      { "name": "focus-ring", "value": "0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)", "purpose": "Accessibility outline rendered outside :focus-visible controls; not elevation." }
     ],
     "motion": [
       { "name": "fast", "value": "150ms", "purpose": "Feedback: color/bg transitions on hover, toggle, press." },
@@ -148,7 +145,7 @@
       "refersTo": "select",
       "description": "Native select styled as a shadcn trigger: bg-background, 6px radius, custom chevron, hover tint, accent border + ring on focus.",
       "html": "<select class=\"ds-select\" aria-label=\"Version\"><option>v1</option><option>v2</option><option>v3</option></select>",
-      "css": ".ds-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff);color:var(--oa-fg,#18181b);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted,#71717a) 50%),linear-gradient(135deg,var(--oa-muted,#71717a) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat;transition:background .15s,border-color .15s}.ds-select:hover{background-color:color-mix(in oklab,var(--oa-fg,#18181b),transparent 92%)}.ds-select:focus-visible{outline:none;border-color:var(--oa-accent,#6457f0);box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}"
+      "css": ".ds-select{min-height:28px;padding:.2rem 1.6rem .2rem .5rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background-color:var(--oa-bg,#fff);color:var(--oa-fg,#18181b);font-size:.75rem;font-family:inherit;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted,#71717a) 50%),linear-gradient(135deg,var(--oa-muted,#71717a) 50%,transparent 50%);background-position:calc(100% - .7rem) 55%,calc(100% - .4rem) 55%;background-size:.3rem .3rem;background-repeat:no-repeat;transition:background-color .15s,border-color .15s}.ds-select:hover{background-color:color-mix(in oklab,var(--oa-fg,#18181b),transparent 92%)}.ds-select:focus-visible{outline:none;border-color:var(--oa-accent,#6457f0);box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}"
     },
     {
       "name": "Count badge",
@@ -178,39 +175,39 @@
       "name": "Dropdown menu",
       "kind": "custom",
       "refersTo": "dropdown-menu",
-      "description": "shadcn DropdownMenu: 6px radius, panel-lift shadow, 4px (rounded-sm) items with hover tint. Destructive item in danger.",
+      "description": "Flat dropdown menu: 6px radius, 1px boundary, and 4px (rounded-sm) items with hover tint. Destructive item in danger.",
       "html": "<div class=\"ds-menu\"><button class=\"ds-menu-item\">Edit</button><button class=\"ds-menu-item\">Resolve</button><button class=\"ds-menu-item ds-menu-danger\">Delete</button></div>",
-      "css": ".ds-menu{min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg,#18181b),transparent 78%)}.ds-menu-item{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg,#18181b);font:inherit;font-size:.8rem;cursor:pointer;transition:background .12s}.ds-menu-item:hover{background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 94%)}.ds-menu-item:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-menu-danger{color:var(--oa-danger,#b42318)}"
+      "css": ".ds-menu{min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff)}.ds-menu-item{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg,#18181b);font:inherit;font-size:.8rem;cursor:pointer;transition:background .12s}.ds-menu-item:hover{background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 94%)}.ds-menu-item:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-menu-danger{color:var(--oa-danger,#b42318)}"
     }
   ],
   "narrative": {
     "northStar": "The Quiet Instrument",
-    "overview": "The service chrome is the host UI around an artifact - the sticky header, its toggles, the comments drawer, the live and handoff docks, the version picker. It is tool UI, not content: quiet, precise, systems-grade, the kind of chrome a Figma canvas or a Linear toolbar user trusts on sight. The artifact leads; the chrome recedes. One accent, one font family, one radius scale, both themes always, keyboard first-class. The chrome does not own a palette of its own - it reads --oa-* tokens that bridge to the artifact's identity, so a brand-register artifact repaints the chrome to match. The design system is therefore structural: sizes, radii, spacing, states, focus. Icon buttons are shadcn ghost (transparent, no border, muted-to-fg on hover, accent tint when active). Inline chrome is flat; floating panels (drawer, dropdown, compose, action bar) cast a --oa-fg-tinted shadow to lift above the canvas.",
+    "overview": "The service chrome is the host UI around an artifact - the sticky header, its toggles, the comments drawer, the live and handoff docks, the version picker. It is tool UI, not content: quiet, precise, systems-grade, the kind of chrome a Figma canvas or a Linear toolbar user trusts on sight. The artifact leads; the chrome recedes. One accent, one font family, one radius scale, both themes always, keyboard first-class. The chrome does not own a palette of its own - it reads --oa-* tokens that bridge to the artifact's identity, so a brand-register artifact repaints the chrome to match. The design system is therefore structural: sizes, radii, spacing, states, focus. Icon buttons are shadcn ghost (transparent, no border, muted-to-fg on hover, accent tint when active). No elevation shadows: every chrome surface separates with borders, surface tint, or backdrop contrast.",
     "keyCharacteristics": [
       "One accent (Signal Indigo #6457f0 / #8d82f5 dark), the only interactive color; danger for destruction only.",
       "Both themes always; the viewer stamps data-theme and every chrome element reads in light and dark.",
       "28px hit targets, shadcn radii (6px controls, 4px menu items, 8px cards, 999px badges/avatar).",
       "Ghost icon buttons (transparent, no border, muted-to-fg on hover).",
-      "Inline chrome flat; floating panels cast a --oa-fg-tinted shadow.",
+      "No elevation shadows; sidebars and floating panels use borders, tonal contrast, or backdrop contrast.",
       "Keyboard-first: :focus-visible rings on every control, no animation on high-frequency actions."
     ],
     "rules": [
       { "name": "The One Accent Rule", "body": "Signal Indigo is the only interactive color. Danger is for destruction only. No second accent, no semantic red/yellow/green in chrome.", "section": "colors" },
       { "name": "The Bridge Rule", "body": "The chrome reads --oa-*, which the token contract mirrors from the artifact's identity tokens. Never hand-override --oa-* in an artifact theme fragment.", "section": "colors" },
-      { "name": "The Flat-Bar / Lifted-Panel Rule", "body": "Inline chrome (header, icon buttons, selects, list cards) is flat. Only panels that float over content (drawer, dropdown, compose, action bar) cast a shadow. Never shadow an inline control.", "section": "elevation" },
+      { "name": "The Flat Chrome Rule", "body": "Header bars, controls, sidebars, menus, popovers, toasts, and docks remain flat. Use boundaries and tonal contrast to express layering; never add decorative elevation effects.", "section": "elevation" },
       { "name": "The Compact Radius Rule", "body": "Radii stay at 4-8px for controls and cards (plus 999px pill for badges/avatar/compose). No 12px+ corners in chrome.", "section": "shapes" },
       { "name": "The One Family Rule", "body": "One font family in the chrome; no display face, no mono costume. Hierarchy is weight + size, not family contrast.", "section": "typography" }
     ],
     "dos": [
       "Do use one accent (Signal Indigo) for every interactive/active state; danger only for destructive actions.",
-      "Do ship :focus-visible rings (the layered focus-ring shadow) on every control; keyboard is first-class.",
+      "Do ship visible :focus-visible rings on every control; keyboard is first-class.",
       "Do keep hit targets at 28px and radii aligned (6px controls, 4px menu items, 8px cards, 999px badges/avatar/compose).",
       "Do let the chrome follow the artifact's palette via the --oa-* bridge; the service defaults are a fallback, not a fixed identity.",
       "Do support both themes on every chrome element.",
-      "Do shadow floating panels (drawer, dropdown, compose, action bar) with a --oa-fg-tinted color-mix so the shadow reads in both themes."
+      "Do separate overlapping chrome with borders, surface lightness, and backdrop contrast."
     ],
     "donts": [
-      "Don't shadow inline controls (icon buttons, selects, list cards) - they stay flat; only floating panels cast a shadow.",
+      "Don't add elevation shadows to controls, sidebars, menus, popovers, toasts, or docks; the service chrome stays flat.",
       "Don't introduce a second accent or decorative semantic colors in chrome.",
       "Don't hand-override --oa-* tokens in artifact theme fragments - the bridge already mirrors the artifact identity.",
       "Don't animate high-frequency actions (toggles, presses); motion is .15s for feedback and .18s for drawer slide, nothing more.",

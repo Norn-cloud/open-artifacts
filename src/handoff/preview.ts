@@ -58,6 +58,13 @@ const PREVIEW_SCRIPT = `
     });
     previewRequest=request; return request;
   }
+  // Idle Handoff has two distinct modes: a saved handoff is playback-first
+  // and must stay camera-free; an empty handoff is record-first and previews
+  // the capture. Re-record remains an explicit camera request in startRecord.
+  function syncIdlePreview(){
+    if(handoff){stopPreview();return Promise.resolve(null);}
+    return requestPreview();
+  }
   function stopPreview(){
     previewGeneration+=1; previewRequest=null; stopSeg();
     var active=stream; stream=null; stopTracks(active); clearPreviewElement();

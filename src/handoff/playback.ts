@@ -52,7 +52,7 @@ export function playback(svgs: HandoffSvgs): string {
       cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; cam.playbackRate=loadSpeed(); }catch(e){} };
       cam.onclick=null;
       cam.ontimeupdate=function(){ var t=cam.currentTime*1000; var tm=document.getElementById('oa-handoff-time'); if(tm)tm.textContent=fmt(t); if(!scrubbing){var s=controls.querySelector('.oa-handoff-scrub'); if(s)s.value=t;} };
-      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} clearPreviewElement(); state='IDLE'; render(); requestPreview(); };
+      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} clearPreviewElement(); state='IDLE'; render(); syncIdlePreview(); };
       cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:playEvents, durationMs:playDur}); setStatus(''); }).catch(function(){
         // Unmuted autoplay can be blocked when the async media fetch outlasts
         // the Play click's user activation. Fall back to muted autoplay
@@ -60,7 +60,7 @@ export function playback(svgs: HandoffSvgs): string {
         cam.muted=true;
         cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:playEvents, durationMs:playDur}); setStatus('Tap the video to unmute'); cam.onclick=function(){ cam.muted=false; cam.onclick=null; setStatus(''); }; }).catch(function(e2){ setStatus('Playback failed: '+(e2&&e2.message||'')); });
       });
-    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); requestPreview(); });
+    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); syncIdlePreview(); });
   }
   // Derive scrubber markers from playEvents: a tick at each click, plus a tick
   // at scroll-stops (a scroll event after >=1.5s of no scroll). Capped at ~30

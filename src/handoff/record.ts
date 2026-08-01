@@ -150,6 +150,6 @@ export function record(_svgs: HandoffSvgs): string {
     return '';
   }
   function stopRecord(){ if(mr&&mr.state!=='inactive')mr.stop(); }
-  function cancelRecord(restorePreview){ hideCountdown(); recordStarting=false; events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); if(restorePreview!==false)requestPreview(); }
+  function cancelRecord(restorePreview){ hideCountdown(); recordStarting=false; events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); if(restorePreview!==false)syncIdlePreview(); }
 `;
 }
