@@ -36,8 +36,9 @@ Feature: Handoff recording (one per version)
     And the events JSON is stored in R2 under handoff/<id>/<hid>/events
     And a handoffs row is inserted in D1
     And GET /api/artifacts/<id>/handoffs returns the handoff
-    And GET /api/artifacts/<id>/handoffs/<hid>/media returns the bytes with the recorded content-type
+    And GET /api/artifacts/<id>/handoffs/<hid>/media returns the bytes with a stable base media content-type
     And GET /api/artifacts/<id>/handoffs/<hid>/events returns the events JSON
+    But an empty media file is rejected with 400 before anything is stored
 
   Scenario: Recording again for the SAME version overwrites in place
     When the owner has already recorded a handoff for /a/<id> at version 1
@@ -45,6 +46,13 @@ Feature: Handoff recording (one per version)
     Then the response is 201 with the same {id} (version-scoped, reused)
     And GET /api/artifacts/<id>/handoffs returns only the second handoff
     And the first handoff's media and events are overwritten at the same R2 keys
+
+  Scenario: Playback bypasses an overwritten recording's stale browser cache
+    Given the owner has re-recorded a handoff at the same media and events keys
+    When a viewer clicks Play for the replacement handoff
+    Then media and events requests include the replacement handoff's createdAt revision
+    And both requests use the browser no-store cache mode
+    And interaction replay starts only after the media element loads metadata
 
   Scenario: Recording for a DIFFERENT version keeps both handoffs
     When the owner has recorded a handoff for /a/<id> at version 1
@@ -68,6 +76,38 @@ Feature: Handoff recording (one per version)
     And the /a/<id> host page inlines hasBlur in the handoff JSON
     So playback knows not to re-composite an already-blurred clip
 
+  Scenario: The circular camera preview stays stable while dragging
+    Given a recording or playback shows the circular camera preview
+    When the primary pointer drags the preview and another pointer also moves
+    Then the preview follows only the primary pointer until release or cancel
+    And switching between the raw camera and blur canvas does not steal the drag
+    And the recording mirror remains active throughout the drag
+    And the saved position is clamped inside the viewport after a resize
+
+  Scenario: Opening a record-first Handoff previews the camera
+    Given the artifact has no saved handoff
+    And the owner opens the Handoff dock while it is idle
+    Then the circular camera shows a mirrored live preview without a recording ring
+    And clicking Record reuses that media stream for the countdown and capture
+    And closing the dock stops every camera and microphone track
+    And a permission result arriving after close is stopped without being attached
+
+  Scenario: A saved handoff opens playback-first without camera access
+    Given the artifact has a saved handoff for the viewed version
+    When either an owner or viewer opens the artifact
+    Then the Handoff dock is open by default with Play as its primary action
+    And the browser does not request camera or microphone access
+    When the owner explicitly clicks Re-record
+    Then the browser requests camera and microphone access for capture
+
+  Scenario: Playback starts from the recorded page position
+    Given the owner starts recording after scrolling the artifact
+    Then the first interaction event stores that viewport position at t=0
+    And later artifact scroll positions are stored in the event timeline
+    When a viewer clicks Play from a different part of the artifact
+    Then the artifact resets to the recorded starting position before playback advances
+    And handoffs recorded before the t=0 event remain playable using their earliest scroll
+
   Scenario: Playback reads are view-gated like the artifact
     When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
     And a handoff exists for a private artifact
@@ -84,4 +124,3 @@ Feature: Handoff recording (one per version)
     When the owner DELETEs the artifact
     Then every version's handoff media and events are removed from R2
     And every handoffs row is removed from D1
-

@@ -52,6 +52,13 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     expect(html).toContain('"oa-cm-dt-"+id');
   });
 
+  it("keeps the account menu beside its trigger and updates mobile overflow", async () => {
+    const html = await hostHtml();
+    expect(html).toContain("slot.appendChild(btn);slot.appendChild(menu)");
+    expect(html).not.toContain("btn.appendChild(menu)");
+    expect(html).toContain("window.__oaSyncHeaderOverflow");
+  });
+
   it("styles the compose and pin chrome with tokens and focus rings", async () => {
     const html = await hostHtml();
     expect(html).toContain(".oa-cm-compose");
@@ -60,6 +67,15 @@ describe("host page interactive UI (tasks 009/010/011)", () => {
     // Delete control uses the danger token, not a hardcoded colour.
     expect(html).toContain(".oa-cm-del");
     expect(html).toContain("var(--oa-danger)");
+  });
+
+  it("keeps the comments sidebar flat", async () => {
+    const html = await hostHtml();
+    const drawerRule = html.match(/\.oa-cm-drawer\{([^}]*)\}/)?.[1];
+
+    expect(drawerRule).toBeDefined();
+    expect(drawerRule).toContain("border-left:");
+    expect(drawerRule).not.toContain("box-shadow:");
   });
 
   it("still serves the interactive UI on the encrypted unlock shell", async () => {

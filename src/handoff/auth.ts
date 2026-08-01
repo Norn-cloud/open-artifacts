@@ -15,7 +15,7 @@ export function auth(_svgs: HandoffSvgs): string {
   // walkthroughs default to 1x). Applied to cam.playbackRate on play and on
   // change. Stored as the numeric string ("1","1.5","2").
   var SPEED_KEY='oa-handoff-speed';
-  function loadSpeed(){ var v=1; try{ var s=localStorage.getItem(SPEED_KEY); if(s){var n=parseFloat(s); if(n>=0.5&&n<=2.5)v=n;} }catch(e){} return v; }
+  function loadSpeed(){ var v=1; try{ var s=localStorage.getItem(SPEED_KEY); if(s){var n=parseFloat(s); if(n>=1&&n<=1.5)v=n; else saveSpeed(1);} }catch(e){} return v; }
   function saveSpeed(v){ try{localStorage.setItem(SPEED_KEY, String(v));}catch(e){} }
   // X-OA-CSRF: a SaaS deploy (coda0) gates session-based writes on this header
   // (requireCsrf); self-host admits via the bearer wt_ instead. Send both so

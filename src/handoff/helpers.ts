@@ -11,6 +11,15 @@ export function helpers(_svgs: HandoffSvgs): string {
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function el(t,c,h){ var d=document.createElement(t); if(c)d.className=c; if(h!=null)d.innerHTML=h; return d; }
+  // Fetch truncates an unquoted comma-separated codecs parameter when it
+  // creates a Blob. A base media type preserves the complete WebM payload
+  // while giving the video element stable source metadata.
+  function normalizeMediaBlob(blob){
+    var type=blob&&typeof blob.type==='string'?blob.type:'';
+    var base=type.split(';')[0].trim().toLowerCase();
+    if((base.indexOf('video/')!==0&&base.indexOf('audio/')!==0)||type===base)return blob;
+    return blob.slice(0,blob.size,base);
+  }
   // Shared dock-button builder: the same .oa-dock-btn anatomy the Live toolbar
   // uses (icon span + label span), so the two docks' controls are the same
   // element. iconSvg is a trusted constant SVG string; label is textContent.

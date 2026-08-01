@@ -38,15 +38,16 @@ export function state(_svgs: HandoffSvgs): string {
   var countdownEl=document.getElementById('oa-handoff-countdown');
   var countdownTimer=null;
 
-  // canManage gates Record/Re-record/Delete (write-gated server-side). A non-
-  // owner viewer can still Play, so the dock auto-opens a Play-only view when a
-  // handoff exists and there's no owner toggle button to click.
+  // canManage gates Record/Re-record/Delete (write-gated server-side). Every
+  // saved handoff opens playback-first; owners retain the header toggle while
+  // viewers receive the same Play-only surface without management controls.
   var canManage = window.__oaCanManage === true;
 
   function openDock(){
     root.removeAttribute('hidden');
     if(toggle) toggle.setAttribute('aria-expanded','true');
     render();
+    syncIdlePreview();
     // Move focus into the dock toolbar so keyboard users land on the primary
     // action (Record / Play). Deferred so render() has populated controls.
     setTimeout(function(){ var b=controls.querySelector('button'); if(b) b.focus(); },0);
@@ -54,6 +55,7 @@ export function state(_svgs: HandoffSvgs): string {
   function closeDock(){
     // Recording/playing hold irreplaceable in-flight work - refuse to yield.
     if(state!=='IDLE') return false;
+    if(recordStarting)cancelRecord(false); else stopPreview();
     root.hidden=true;
     if(toggle) toggle.setAttribute('aria-expanded','false');
     return true;
@@ -65,7 +67,7 @@ export function state(_svgs: HandoffSvgs): string {
     window.__oaDock.register('handoff', {
       open: openDock,
       close: closeDock,
-      restoreFocus: function(){ if(toggle) toggle.focus(); },
+      restoreFocus: function(){ if(window.__oaRestoreHeaderControlFocus)window.__oaRestoreHeaderControlFocus(toggle);else if(toggle)toggle.focus(); },
       refuseMessage: function(){
         if(state==='RECORDING') return 'Stop the recording before closing.';
         if(state==='SAVING') return 'Saving the handoff - please wait...';
@@ -84,8 +86,10 @@ export function state(_svgs: HandoffSvgs): string {
     else if(state==='RECORDING')renderRec();
     else if(state==='PLAYING')renderPlay();
   }
-  // Auto-open a Play-only dock for non-owners when a handoff is inlined.
-  if(!canManage && handoff){ openDock(); }
+  // A saved handoff is the artifact's default mode for both owners and viewers.
+  // Route owner startup through the manager so its active-dock bookkeeping
+  // stays correct and the header toggle closes on its first click.
+  if(handoff){ if(window.__oaDock&&canManage)window.__oaDock.open('handoff'); else openDock(); }
 
   // Frame -> host: buffer interaction events during RECORDING.
   window.addEventListener('message', function(e){

@@ -41,8 +41,13 @@ function tryParseJson(raw: string): unknown | null {
   }
 }
 
-// View auth that collapses missing + denied to the same 404, matching /raw and
-// the live routes: a private artifact's handoff existence is never confirmed.
+function stableMediaType(type: string): string {
+  const base = type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  return /^(?:video|audio)\/[a-z0-9!#$&^_.+-]+$/i.test(base)
+    ? base
+    : "application/octet-stream";
+}
+
 // View auth that collapses missing + denied to the same null, matching /raw and
 // the live routes: a private artifact's handoff existence is never confirmed.
 // Returns the record on success so callers can branch cache policy on visibility.
@@ -107,6 +112,9 @@ handoffApi.post("/artifacts/:id/handoffs", async (c) => {
   if (!(media instanceof File)) {
     return c.json({ error: "media file is required" }, 400);
   }
+  if (media.size === 0) {
+    return c.json({ error: "media file is empty" }, 400);
+  }
   if (media.size > MAX_HANDOFF_MEDIA_BYTES) {
     return c.json({ error: "media exceeds the 64 MiB limit" }, 413);
   }
@@ -145,14 +153,11 @@ handoffApi.post("/artifacts/:id/handoffs", async (c) => {
     typeof m.author === "string"
       ? m.author.slice(0, MAX_HANDOFF_AUTHOR_LENGTH)
       : null;
-  // Allowlist the stored media type so an owner can't POST text/html (or any
-  // non-media type) and later serve it as a script-bearing document from the
-  // same origin. Non-media types are coerced to octet-stream, which the host's
-  // <video> still plays from a blob: URL but a direct navigation cannot render.
-  const mediaType =
-    typeof media.type === "string" && /^(?:video|audio)\/.+/i.test(media.type)
-      ? media.type
-      : "application/octet-stream";
+  // Store a stable base type rather than MediaRecorder's codec parameter.
+  // Unquoted comma-separated codecs are truncated by Fetch when the response
+  // becomes a Blob, which can make Chromium reject an otherwise valid WebM.
+  // The allowlist also prevents script-bearing same-origin media responses.
+  const mediaType = stableMediaType(media.type);
 
   // One-handoff-per-artifact is enforced at the store layer: createHandoff
   // derives a stable id from the artifact id and UPSERTs in place, so a
@@ -179,7 +184,7 @@ handoffApi.get("/artifacts/:id/handoffs/:hid/media", async (c) => {
   if (media === null) return c.text("not found", 404);
   return new Response(media.body, {
     headers: {
-      "content-type": media.mediaType,
+      "content-type": stableMediaType(media.mediaType),
       ...readHeaders(record.visibility),
     },
   });

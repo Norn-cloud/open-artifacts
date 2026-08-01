@@ -81,16 +81,16 @@ export const HANDOFF_CSS = `
 .oa-handoff-mark::before{content:"";position:absolute;inset:-5px -4px}
 .oa-handoff-mark:hover{background:var(--oa-accent)}
 /* Camera bubble: same border/shadow language as the dock - hairline ring
-   with a fg tint, layered drop shadow. While capturing (data-rec) the ring
-   shifts to danger and a small notch flags live capture; the selfie mirror
-   flip is preserved. */
-#oa-handoff-cam{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 10%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 24px -6px color-mix(in oklab,var(--oa-fg),transparent 78%),0 0 0 1px color-mix(in oklab,var(--oa-bg),transparent 20%);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
-#oa-handoff-cam[hidden]{display:none}
-#oa-handoff-cam[data-rec]{transform:scaleX(-1);border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
+   with a fg tint, layered drop shadow. data-mirror owns the selfie flip so an
+   idle preview stays neutral; data-rec only adds the live-capture ring. */
+#oa-handoff-cam,#oa-handoff-cam-canvas{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 10%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 24px -6px color-mix(in oklab,var(--oa-fg),transparent 78%),0 0 0 1px color-mix(in oklab,var(--oa-bg),transparent 20%);z-index:2147483646;cursor:grab;touch-action:none;user-select:none;--oa-cam-drag-x:0px;--oa-cam-drag-y:0px;--oa-cam-mirror:1;transform:translate3d(var(--oa-cam-drag-x),var(--oa-cam-drag-y),0) scaleX(var(--oa-cam-mirror))}
+#oa-handoff-cam[hidden],#oa-handoff-cam-canvas[hidden]{display:none}
+#oa-handoff-cam[data-mirror]{--oa-cam-mirror:-1}
+#oa-handoff-cam-canvas[data-mirror]{--oa-cam-mirror:-1}
+#oa-handoff-cam[data-rec]{border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
+#oa-handoff-cam-canvas[data-rec]{border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
 #oa-handoff-cam[data-rec]::after{content:"";position:absolute;top:8px;left:8px;width:7px;height:7px;border-radius:50%;background:var(--oa-danger);box-shadow:0 0 0 2px var(--oa-bg)}
-#oa-handoff-cam-canvas{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 10%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 24px -6px color-mix(in oklab,var(--oa-fg),transparent 78%),0 0 0 1px color-mix(in oklab,var(--oa-bg),transparent 20%);z-index:2147483646;cursor:grab;touch-action:none;user-select:none}
-#oa-handoff-cam-canvas[hidden]{display:none}
-#oa-handoff-cam[data-dragging]{cursor:grabbing}
+#oa-handoff-cam[data-dragging],#oa-handoff-cam-canvas[data-dragging]{cursor:grabbing;will-change:transform}
 .oa-handoff-mic{display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0;width:36px;height:18px}
 .oa-handoff-mic-bar{display:block;width:100%;height:4px;border-radius:2px;background:color-mix(in oklab,var(--oa-fg),transparent 82%);transform:scaleX(.02);transform-origin:left center;transition:transform .08s linear}
 .oa-handoff-mic-bar.oa-handoff-mic-silent{background:color-mix(in oklab,var(--oa-danger),transparent 60%)}
@@ -102,8 +102,9 @@ export const HANDOFF_CSS = `
 @keyframes oa-handoff-pop{0%{transform:scale(.6);opacity:0}30%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
 #oa-handoff-countdown[data-on]>*{animation:oa-handoff-pop .5s ease-out}
 @media (prefers-reduced-motion:reduce){#oa-handoff-countdown[data-on]>*{animation:none}}
-.oa-handoff-speed{min-height:28px;padding:.1rem 1.1rem .1rem .4rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-mono);font-size:.7rem;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;flex-shrink:0}
+.oa-handoff-speed{min-height:28px;padding:.1rem 1.1rem .1rem .4rem;border:1px solid var(--oa-border);border-radius:6px;background-color:var(--oa-bg);color:var(--oa-fg);font-family:var(--oa-mono);font-size:.7rem;line-height:1.4;cursor:pointer;-webkit-appearance:none;appearance:none;flex-shrink:0;background-image:linear-gradient(45deg,transparent 50%,var(--oa-muted) 50%),linear-gradient(135deg,var(--oa-muted) 50%,transparent 50%);background-position:calc(100% - .5rem) 55%,calc(100% - .25rem) 55%;background-size:.25rem .25rem;background-repeat:no-repeat;transition:background-color .15s,border-color .15s}
 .oa-handoff-speed:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+@media (hover:hover) and (pointer:fine){.oa-handoff-speed:hover{background-color:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
 #oa-handoff-share.oa-dock-btn--copied{color:var(--oa-accent);border-color:color-mix(in oklab,var(--oa-accent),transparent 60%)}
 /* The Play/Pause toggle swaps both icon and label; "Pause" is wider than
    "Play" and the dock hugs its contents, so the dock would jump width on

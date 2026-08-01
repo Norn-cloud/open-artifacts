@@ -19,26 +19,18 @@ export function record(_svgs: HandoffSvgs): string {
   // *preference* because the canvas may not be live yet on the first record
   // (MediaPipe still loading) — recording raw + flagging hasBlur=false keeps
   // playback honest (it re-composites live instead of trusting a missing blur).
-  var recUsedBlur=false;
+  var recUsedBlur=false, recordStarting=false;
 
   function startRecord(){
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ setStatus('Camera/mic not supported here'); return; }
     if(!window.MediaRecorder){ setStatus('Recording not supported in this browser'); return; }
-    if(stream)return;
-    navigator.mediaDevices.getUserMedia({
-      video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},
-      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-    }).then(function(s){
-      stream=s; cam.muted=true; cam.srcObject=s; cam.setAttribute('data-rec','1'); makeCamDraggable();
-      // syncCamDisplay starts the MediaPipe composite loop when blur is on, but
-      // the canvas only begins producing BLURRED frames once segFirstFrame flips
-      // (async - after MediaPipe loads + the first inference). beginRecord must
-      // wait for that before picking the recorder stream, otherwise it captures
-      // the raw camera and the saved file is unblurred despite the blurred
-      // preview - the privacy bug. maybeWaitForBlur bounds the wait and falls
-      // back to raw + hasBlur=false if MediaPipe is slow or fails to load.
-      cam.play().then(function(){ syncCamDisplay(); maybeWaitForBlur(s); }).catch(function(){ syncCamDisplay(); maybeWaitForBlur(s); });
-    }).catch(function(err){ setStatus('Camera/mic denied: '+(err&&err.message?err.message:'permission needed')); });
+    if(recordStarting||state!=='IDLE')return;
+    recordStarting=true;
+    requestPreview().then(function(s){
+      if(!s||state!=='IDLE'||root.hidden){recordStarting=false;return;}
+      // syncCamDisplay has already started the optional blur preview. Wait for
+      // its first composite before choosing the stream MediaRecorder captures.
+      maybeWaitForBlur(s);
+    });
   }
   // Wait until the blur composite is actually producing frames before recording,
   // so the encoded stream is the composited canvas (crisp person + blurred bg),
@@ -94,7 +86,7 @@ export function record(_svgs: HandoffSvgs): string {
     // the real limiter; a 1-min clip is ~19 MiB). A 250ms timeslice keeps
     // motion from compressing into blocky 1s chunks.
     try{ mr=new MediaRecorder(recStream, mime?{mimeType:mime, audioBitsPerSecond:64000, videoBitsPerSecond:2500000}:undefined); }
-    catch(e){ setStatus('MediaRecorder unavailable'); cleanupStream(); return; }
+    catch(e){ recordStarting=false; setStatus('MediaRecorder unavailable'); return; }
     chunks=[]; mr.ondataavailable=function(e){ if(e.data&&e.data.size){chunks.push(e.data); recBytes+=e.data.size; if(recBytes>=MAX_REC_BYTES)stopRecord();} }; mr.onstop=onRecStop;
     // 3-2-1 countdown overlay before the recorder starts (Loom's de-facto
     // recorder convention): gives the creator a beat to compose before capture
@@ -104,9 +96,11 @@ export function record(_svgs: HandoffSvgs): string {
     if(reduced){ startRecordingNow(); }
     else { runCountdown(3, startRecordingNow); }
     function startRecordingNow(){
+      if(!recordStarting||root.hidden){cancelRecord(false);return;}
       mr.start(250);
       recBytes=0; if(recTimeout)clearTimeout(recTimeout); recTimeout=setTimeout(stopRecord, MAX_REC_MS);
-      recStart=performance.now(); events=[]; state='RECORDING';
+      recordStarting=false; recStart=performance.now(); events=[]; state='RECORDING';
+      setRecordingIndicator(true);
       toFrame({type:'oa:handoff:record:arm'});
       if(timerInt)clearInterval(timerInt); timerInt=setInterval(tickTimer,250);
       render();
@@ -156,7 +150,6 @@ export function record(_svgs: HandoffSvgs): string {
     return '';
   }
   function stopRecord(){ if(mr&&mr.state!=='inactive')mr.stop(); }
-  function cancelRecord(){ hideCountdown(); events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); stopSeg(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); }
-  function cleanupStream(){ if(stream){stream.getTracks().forEach(function(tr){tr.stop();}); stream=null;} if(cam){cam.srcObject=null; cam.hidden=true; cam.removeAttribute('data-rec');} }
+  function cancelRecord(restorePreview){ hideCountdown(); recordStarting=false; events=[]; if(recTimeout)clearTimeout(recTimeout); if(mr&&mr.state!=='inactive'){mr.onstop=null; mr.stop();} stopMicMeter(); cleanupStream(); toFrame({type:'oa:handoff:record:disarm'}); state='IDLE'; if(timerInt)clearInterval(timerInt); render(); if(restorePreview!==false)syncIdlePreview(); }
 `;
 }

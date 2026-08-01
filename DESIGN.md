@@ -38,6 +38,7 @@ typography:
     lineHeight: 1
 rounded:
   button: "6px"
+  menu: "4px"
   item: "8px"
   badge: "999px"
   avatar: "50%"
@@ -100,9 +101,9 @@ structural - sizes, radii, spacing, states, focus - carried by a small set of
   reads in light and dark.
 - 28px hit targets, shadcn-aligned radii (6px controls, 4px menu items, 8px
   cards, 999px badges/avatar) - a console, not soft UI.
-- Ghost icon buttons (transparent, no border, muted-to-fg on hover); inline
-  chrome is flat, floating panels (drawer, dropdown, compose, action bar) cast a
-  `--oa-fg`-tinted shadow.
+- Ghost icon buttons (transparent, no border, muted-to-fg on hover); every
+  chrome surface stays flat and separates with borders, tint, or backdrop
+  contrast instead of elevation effects.
 - Keyboard-first: `:focus-visible` rings on every control, no animation on
   high-frequency actions.
 
@@ -170,43 +171,38 @@ artifact, not the frame.
 
 ## Layout
 
-- Sticky header (`--oa-header-h: 2.5rem`), flex row, `gap: 0.6rem`, padding
-  `0.375rem 1rem`, `backdrop-filter: blur(10px)` over an 8%-transparent bg.
+- Sticky header (`--oa-header-h: 2.5rem`), flex row, `gap: 0.75rem`, padding
+  `0.375rem 0.75rem`, `backdrop-filter: blur(10px)` over a 5%-transparent bg.
   Title (favicon + name, ellipsis) flexes to fill; controls trail right.
 - Drawers (comments) are `position: fixed`, top at `var(--oa-header-h)`, right
   edge, `max-width: 23rem`, sliding via `transform: translateX(100%)` ->
   `translateX(0)` over `.18s`.
 - The artifact frame fills the viewport below the header.
 - z-index scale: drawer `2147483645` < header `2147483646`. No arbitrary `999`.
-- Responsive: the header truncates the title and drops non-essential controls
-  on narrow viewports; the drawer goes full-width (`width: 100%`) below its
-  max-width.
+- Responsive: at `52rem` and below, favicon + truncated title, comment actions,
+  and theme remain inline. Version, visibility, brand, Live, Handoff, and
+  account controls move into a fixed More panel below the measured header; no
+  action disappears. The drawer goes full-width below its max-width.
 
 ## Elevation & Depth
 
-Flat surfaces, lifted panels. Bars and inline controls (icon buttons, selects,
-cards) stay flat - structure comes from 1px hairline borders (`--oa-border`) and
-the surface tint (`--oa-surface` on `--oa-bg`). **Floating panels** - the
-comments drawer, dropdown menus, the compose popover, the live action bar - cast
-a soft shadow to lift above the canvas. The header carries a
-`backdrop-filter: blur(10px)` over a 5%-transparent background so content scrolls
-beneath it. Dark-theme depth is a lightness staircase (`#131316` -> `#1c1c21`)
-for surfaces; floating-panel shadows use a `--oa-fg`-tinted `color-mix` so they
-read in both themes.
+No elevation shadows. Every service-chrome surface, including sidebars,
+dropdowns, compose surfaces, toasts, and dock bars, separates with a 1px
+`--oa-border` edge, a `--oa-surface` lightness step, or backdrop contrast. The
+comments drawer uses its left border as the only boundary against the artifact.
+The header's `backdrop-filter: blur(10px)` communicates overlap while content
+scrolls beneath it; it does not imply raised geometry. Dark-theme depth remains
+a lightness staircase (`#131316` -> `#1c1c21`).
 
-### Shadow Vocabulary
+### Focus Treatment
 - **Focus ring** (`box-shadow: 0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)`):
-  layered (bg gap + accent outer) so it reads on any surface; applied on
-  `:focus-visible` only.
-- **Panel lift** (`box-shadow: 0 4px 12px -2px color-mix(in oklab, var(--oa-fg), transparent 78%)`):
-  dropdown menus and the compose popover. The drawer uses a directional variant
-  (`-8px 0 24px -8px …`); the live action bar a deeper one (`0 6px 24px -4px …`).
+  an accessibility outline rendered outside the control so it remains legible
+  on any surface. It is applied only on `:focus-visible` and is not elevation.
 
 ### Named Rules
-**The Flat-Bar / Lifted-Panel Rule.** Inline chrome (header bar, icon buttons,
-selects, list cards) is flat - borders and surface tint carry it. Only panels
-that float over content (drawer, dropdown menu, compose popover, action bar)
-cast a shadow. Never shadow an inline control.
+**The Flat Chrome Rule.** Header bars, controls, sidebars, menus, popovers,
+toasts, and dock bars remain flat. Use boundaries and tonal contrast to express
+layering; never add decorative elevation effects.
 
 ## Shapes
 
@@ -238,22 +234,27 @@ SVG icons are `16×16`, `display: block`, centered.
 Sticky, backdrop-blurred, 2.5rem tall. Favicon + title (ellipsis, `0.8rem`/600)
 left; version picker, visibility, account chip, comments toggle, live toggle,
 handoff toggle, theme toggle trail right. `--oa-header-h` is exposed so artifact
-sticky bars and full-viewport sections clear it.
+sticky bars and full-viewport sections clear it. At `52rem` and below, a More
+button discloses the secondary controls in a labeled panel with outside-click
+and Escape dismissal; comments and theme stay one tap away. A dock launched
+from the panel returns focus to More when it closes, never to a hidden control.
 
 ### Select (version / visibility)
 `28px` min-height, `6px` radius, 1px border, `--oa-bg` fill (shadcn trigger),
 `0.75rem` label. Custom chevron via two `linear-gradient` arrows in `--oa-muted`.
 Hover tints the background (`color-mix(in oklab, var(--oa-fg), transparent 92%)`);
-`:focus-visible` -> accent border + focus ring.
+`:focus-visible` -> accent border + focus ring. Pointer states change only the
+background color, so the custom chevron stays visible and the select never
+translates when its native menu opens.
 
 ### Comments drawer
-Fixed right, `23rem` max, slides `.18s`, casts a directional shadow (panel lift).
-Head (title + count + close), filter row, scrollable list, footer input.
+Fixed right, `23rem` max, slides `.18s`, and uses a 1px left border with no
+elevation effect. Head (title + count + close), filter row, scrollable list,
+footer input.
 Comment items: `8px` radius (rounded-lg), `--oa-surface` bg, 1px tinted border,
 hover background tint, avatar + title (`0.875rem`/600) + byline (`0.72rem`
 muted). Done state strikes through and dims the avatar. Dropdown menus (more,
-filter) are shadcn-style: `6px` radius, panel-lift shadow, `4px` items with
-hover tint.
+filter) are shadcn-style: `6px` radius, 1px border, `4px` items with hover tint.
 
 ### Avatar
 `28px` circle, `--oa-fg`-tinted fill (`color-mix(in oklab, var(--oa-fg), transparent 90%)`),
@@ -267,13 +268,26 @@ pinned top-right of its toggle. Hidden unless `[data-count]` is set.
 Bottom-center pills that inherit the icon-button vocabulary for their controls
 and the drawer's surface/border tokens for their panels. They are mutually
 exclusive (opening one closes the other) - a state rule, not a visual one.
+The circular camera preview captures one primary pointer for each drag and keeps
+that pointer bound to the overlay where the gesture began. Drag translation and
+the recording mirror use separate CSS variables so moving the preview never
+flips it; saved coordinates are clamped back inside the viewport after resize.
+An artifact with a saved handoff opens the Handoff dock by default in a
+camera-free playback-first state. Camera and microphone access starts only when
+the owner opens a record-first dock with no saved handoff or explicitly chooses
+Re-record; only active capture adds the danger ring, and closing the dock
+releases every media track. Handoff timelines begin with the artifact's scroll
+position at `t=0`, so playback resets to the recorded viewport before its first
+animation frame. Re-recording keeps stable R2 keys, so playback appends the
+handoff `createdAt` as a media/events revision and bypasses the browser cache;
+event replay waits for media metadata before it advances the artifact.
 
 ## Do's and Don'ts
 
 ### Do
 - **Do** use one accent (Signal Indigo) for every interactive/active state;
   danger only for destructive actions.
-- **Do** ship `:focus-visible` rings (the layered focus-ring shadow) on every
+- **Do** ship visible `:focus-visible` rings on every
   control; keyboard is first-class.
 - **Do** keep hit targets at 28px and radii aligned (6px controls, 4px menu
   items, 8px cards, 999px badges/avatar/compose).
@@ -281,13 +295,12 @@ exclusive (opening one closes the other) - a state rule, not a visual one.
   the service defaults are a fallback, not a fixed identity.
 - **Do** support both themes on every chrome element; the viewer stamps
   `data-theme` and the toggle must win over `prefers-color-scheme`.
-- **Do** shadow floating panels (drawer, dropdown, compose, action bar) so they
-  lift above the canvas; use a `--oa-fg`-tinted `color-mix` so the shadow reads
-  in both themes.
+- **Do** separate overlapping chrome with borders, surface lightness, and
+  backdrop contrast; keep sidebars visibly bounded without artificial lift.
 
 ### Don't
-- **Don't** shadow inline controls (icon buttons, selects, list cards) - they
-  stay flat; only floating panels cast a shadow.
+- **Don't** add elevation shadows to controls, sidebars, menus, popovers,
+  toasts, or docks; the service chrome stays flat.
 - **Don't** introduce a second accent or decorative semantic colors in chrome.
 - **Don't** hand-override `--oa-*` tokens in artifact theme fragments - the
   bridge already mirrors the artifact identity.
