@@ -1995,7 +1995,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
 // native rate. Capture-phase listeners only OBSERVE - no preventDefault - so
 // the artifact behaves normally during recording. Inert until the host sends
 // oa:handoff:record:arm; disarmed by oa:handoff:record:disarm.
-const FRAME_HANDOFF_RECORD_SCRIPT = `
+export const FRAME_HANDOFF_RECORD_SCRIPT = `
 (function(){
   if(!window.__oaSend)return;
   var armed=false, t0=0, raf=0, lastX=0, lastY=0, dirty=false, lastSend=0;
@@ -2019,6 +2019,7 @@ const FRAME_HANDOFF_RECORD_SCRIPT = `
     window.addEventListener('resize',onResize);
     document.documentElement.classList.add('oa-handoff-recording');
     raf=requestAnimationFrame(tick);
+    var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:0,kind:'scroll',x:lastX,y:lastY,sx:s.sx,sy:s.sy});
     window.__oaSend({type:'oa:handoff:record:ready'});
   }
   function disarm(){ if(!armed)return; armed=false;
@@ -2045,7 +2046,7 @@ const FRAME_HANDOFF_RECORD_SCRIPT = `
 // t=0; pause/resume/seek/stop are mirrored from the host controls. Visual-only:
 // no real DOM events are dispatched, so replay can never navigate away or
 // trigger destructive actions. Inert until oa:handoff:play arrives.
-const FRAME_HANDOFF_PLAY_SCRIPT = `
+export const FRAME_HANDOFF_PLAY_SCRIPT = `
 (function(){
   if(!window.__oaSend)return;
   var events=[], cursor=null, raf=0, offset=0, lastResume=0, playing=false, idx=0;
@@ -2060,6 +2061,15 @@ const FRAME_HANDOFF_PLAY_SCRIPT = `
     else if(ev.kind==='move'){ if(cursor)cursor.style.transform='translate('+ev.x+'px,'+ev.y+'px)'; }
   }
   function curT(){ return playing ? offset+(performance.now()-lastResume) : offset; }
+  function resetToStart(){
+    lastScroll=null;
+    for(var i=0;i<events.length;i++){
+      var ev=events[i];
+      if((ev.kind==='scroll'||ev.kind==='resize')&&typeof ev.sx==='number'&&typeof ev.sy==='number'){
+        lastScroll={sx:ev.sx,sy:ev.sy}; window.scrollTo(ev.sx,ev.sy); return;
+      }
+    }
+  }
   function tick(){
     var t=curT();
     while(idx<events.length && events[idx].t<=t){ apply(events[idx]); idx++; }
@@ -2067,7 +2077,7 @@ const FRAME_HANDOFF_PLAY_SCRIPT = `
   }
   function play(){ if(playing)return; playing=true; lockScroll(true); lastResume=performance.now(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); }
   function pause(){ if(!playing)return; offset=curT(); playing=false; if(raf)cancelAnimationFrame(raf); raf=0; lockScroll(false); }
-  function seek(t){ offset=t; lastResume=performance.now(); idx=0; for(var i=0;i<events.length;i++){ if(events[i].t<=t){ apply(events[i]); idx=i+1; } else break; } if(playing){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); } }
+  function seek(t){ offset=t; lastResume=performance.now(); idx=0; resetToStart(); for(var i=0;i<events.length;i++){ if(events[i].t<=t){ apply(events[i]); idx=i+1; } else break; } if(playing){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); } }
   function stop(){ playing=false; if(raf)cancelAnimationFrame(raf); raf=0; offset=0; idx=0; lockScroll(false); if(cursor&&cursor.parentNode)cursor.parentNode.removeChild(cursor); cursor=null; }
   // While a handoff is playing, the viewer's own scroll is locked so the only
   // scroll is the recorded one - the play shim drives window.scrollTo from the
@@ -2105,7 +2115,7 @@ const FRAME_HANDOFF_PLAY_SCRIPT = `
   window.addEventListener('message',function(e){
     if(e.source!==window.parent)return;
     var m=e.data; if(!m||typeof m!=='object')return;
-    if(m.type==='oa:handoff:play'){ stop(); events=Array.isArray(m.events)?m.events:[]; mkCursor(); lastScroll=null; offset=0; idx=0; play(); }
+    if(m.type==='oa:handoff:play'){ stop(); events=Array.isArray(m.events)?m.events:[]; mkCursor(); offset=0; idx=0; resetToStart(); play(); }
     else if(m.type==='oa:handoff:pause')pause();
     else if(m.type==='oa:handoff:resume')play();
     else if(m.type==='oa:handoff:seek')seek(Number(m.t)||0);

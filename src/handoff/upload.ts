@@ -31,9 +31,9 @@ export function upload(_svgs: HandoffSvgs): string {
     }).then(function(h){
       if(h.deleteToken)saveDelToken(h.id, h.deleteToken);
       handoff={id:h.id,version:h.version,durationMs:h.durationMs,hasVideo:h.hasVideo,hasAudio:h.hasAudio,hasBlur:!!h.hasBlur,author:h.author,createdAt:h.createdAt};
-      state='IDLE'; setStatus('Handoff saved'); render();
+      state='IDLE'; setStatus('Handoff saved'); render(); requestPreview();
       try{frame.contentWindow.location.reload();}catch(e){frame.src=frame.src;}
-    }).catch(function(err){ state='IDLE'; setStatus(esc(err.message||'Upload failed')); render(); });
+    }).catch(function(err){ state='IDLE'; setStatus(esc(err.message||'Upload failed')); render(); requestPreview(); });
   }
 `;
 }

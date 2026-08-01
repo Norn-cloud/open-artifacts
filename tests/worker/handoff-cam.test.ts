@@ -85,15 +85,15 @@ describe("camera bubble drag runtime", () => {
     );
   });
 
-  it("composes drag translation with the recording mirror", () => {
+  it("composes drag translation with the preview mirror", () => {
     expect(HANDOFF_CSS).toContain(
       "transform:translate3d(var(--oa-cam-drag-x),var(--oa-cam-drag-y),0) scaleX(var(--oa-cam-mirror))",
     );
     expect(HANDOFF_CSS).toContain(
-      "#oa-handoff-cam[data-rec]{--oa-cam-mirror:-1",
+      "#oa-handoff-cam[data-mirror]{--oa-cam-mirror:-1",
     );
     expect(HANDOFF_CSS).not.toContain(
-      "#oa-handoff-cam[data-rec]{transform:scaleX(-1)",
+      "#oa-handoff-cam[data-mirror]{transform:scaleX(-1)",
     );
     expect(HANDOFF_CSS).toContain(
       "#oa-handoff-cam-canvas[data-dragging]{cursor:grabbing",

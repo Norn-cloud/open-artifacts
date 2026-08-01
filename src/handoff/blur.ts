@@ -80,6 +80,8 @@ export function blur(svgs: HandoffSvgs): string {
     if(!camBlur)return;
     if(!segCanvas){ segCanvas=document.getElementById('oa-handoff-cam-canvas'); segCtx=segCanvas?segCanvas.getContext('2d'):null; }
     if(!segCanvas)return;
+    if(cam.hasAttribute('data-mirror'))segCanvas.setAttribute('data-mirror',''); else segCanvas.removeAttribute('data-mirror');
+    if(cam.hasAttribute('data-rec'))segCanvas.setAttribute('data-rec',''); else segCanvas.removeAttribute('data-rec');
     // Show the canvas overlay with the raw video drawn as a fallback so the
     // circular bubble stays visible while MediaPipe loads + before the first
     // segmentation lands (otherwise a 0x0 canvas collapses and the bubble

@@ -20,6 +20,7 @@ import { cam } from "./cam";
 import { del } from "./del";
 import { helpers } from "./helpers";
 import { playback } from "./playback";
+import { preview } from "./preview";
 import { record } from "./record";
 import { render } from "./render";
 import { share } from "./share";
@@ -42,7 +43,7 @@ export { CLOSE_SVG, HANDOFF_SVG, HANDOFF_SVGS } from "./svgs";
 // order below keeps declarations ahead of use.
 export function handoffScript(svgs: HandoffSvgs): string {
   // Order: helpers/auth first (pure utilities), then status (setStatus +
-  // tickers), then the cam/blur/record/upload/playback/share/delete bodies,
+  // tickers), then the cam/blur/preview/record/upload/playback/share/delete bodies,
   // then render (the three render fns), then state last — state declares the
   // shared `var`s and the dispatcher + dock-registration logic that wires the
   // others. Function declarations hoist within the IIFE, so call order is not
@@ -56,6 +57,7 @@ export function handoffScript(svgs: HandoffSvgs): string {
     status(svgs),
     cam(svgs),
     blur(svgs),
+    preview(svgs),
     record(svgs),
     upload(svgs),
     playback(svgs),

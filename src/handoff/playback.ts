@@ -15,7 +15,9 @@ export function playback(svgs: HandoffSvgs): string {
   // renderScrubMarkers). Shared via the IIFE closure.
   var playEvents=[];
   function startPlay(hid){
+    if(recordStarting)return;
     var h=handoff; if(!h||h.id!==hid)return;
+    stopPreview();
     state='PLAYING'; playDur=h.durationMs||0; scrubbing=false;
     render();
     setStatus('<span class="oa-handoff-spin"></span>Loading handoff…');
@@ -33,7 +35,7 @@ export function playback(svgs: HandoffSvgs): string {
       // called renderScrubMarkers synchronously in render() before the fetch
       // resolved (playEvents was []); paint the real markers here.
       var sw=document.getElementById('oa-handoff-scrub-wrap'); if(sw) renderScrubMarkers(sw);
-      cam.srcObject=null; cam.removeAttribute('data-rec'); makeCamDraggable(); cam.src=url;
+      cam.srcObject=null; setBubbleFlag('data-mirror',false); setRecordingIndicator(false); makeCamDraggable(); cam.src=url;
       // If the clip was recorded with blur, the background is already blurred
       // in the file - don't re-composite (would double-blur). If it was
       // recorded without blur but the viewer toggled Blur on, re-composite live.
@@ -50,7 +52,7 @@ export function playback(svgs: HandoffSvgs): string {
       cam.onloadedmetadata=function(){ try{ cam.muted=false; cam.volume=1; cam.playbackRate=loadSpeed(); }catch(e){} };
       cam.onclick=null;
       cam.ontimeupdate=function(){ var t=cam.currentTime*1000; var tm=document.getElementById('oa-handoff-time'); if(tm)tm.textContent=fmt(t); if(!scrubbing){var s=controls.querySelector('.oa-handoff-scrub'); if(s)s.value=t;} };
-      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} cam.onclick=null; state='IDLE'; render(); };
+      cam.onended=function(){ toFrame({type:'oa:handoff:stop'}); if(playUrl){URL.revokeObjectURL(playUrl); playUrl=null;} clearPreviewElement(); state='IDLE'; render(); requestPreview(); };
       cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:playEvents, durationMs:playDur}); setStatus(''); }).catch(function(){
         // Unmuted autoplay can be blocked when the async media fetch outlasts
         // the Play click's user activation. Fall back to muted autoplay
@@ -58,7 +60,7 @@ export function playback(svgs: HandoffSvgs): string {
         cam.muted=true;
         cam.play().then(function(){ toFrame({type:'oa:handoff:play', events:playEvents, durationMs:playDur}); setStatus('Tap the video to unmute'); cam.onclick=function(){ cam.muted=false; cam.onclick=null; setStatus(''); }; }).catch(function(e2){ setStatus('Playback failed: '+(e2&&e2.message||'')); });
       });
-    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); });
+    }).catch(function(err){ setStatus('Load failed: '+(err&&err.message||'')); state='IDLE'; render(); requestPreview(); });
   }
   // Derive scrubber markers from playEvents: a tick at each click, plus a tick
   // at scroll-stops (a scroll event after >=1.5s of no scroll). Capped at ~30

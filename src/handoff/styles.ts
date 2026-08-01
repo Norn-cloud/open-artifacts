@@ -81,12 +81,14 @@ export const HANDOFF_CSS = `
 .oa-handoff-mark::before{content:"";position:absolute;inset:-5px -4px}
 .oa-handoff-mark:hover{background:var(--oa-accent)}
 /* Camera bubble: same border/shadow language as the dock - hairline ring
-   with a fg tint, layered drop shadow. While capturing (data-rec) the ring
-   shifts to danger and a small notch flags live capture; the selfie mirror
-   flip is preserved. */
+   with a fg tint, layered drop shadow. data-mirror owns the selfie flip so an
+   idle preview stays neutral; data-rec only adds the live-capture ring. */
 #oa-handoff-cam,#oa-handoff-cam-canvas{position:fixed;right:1rem;bottom:5.5rem;width:min(180px,26vw);aspect-ratio:1/1;border-radius:50%;border:2px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 10%);background:#000;object-fit:cover;pointer-events:auto;box-shadow:0 8px 24px -6px color-mix(in oklab,var(--oa-fg),transparent 78%),0 0 0 1px color-mix(in oklab,var(--oa-bg),transparent 20%);z-index:2147483646;cursor:grab;touch-action:none;user-select:none;--oa-cam-drag-x:0px;--oa-cam-drag-y:0px;--oa-cam-mirror:1;transform:translate3d(var(--oa-cam-drag-x),var(--oa-cam-drag-y),0) scaleX(var(--oa-cam-mirror))}
 #oa-handoff-cam[hidden],#oa-handoff-cam-canvas[hidden]{display:none}
-#oa-handoff-cam[data-rec]{--oa-cam-mirror:-1;border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
+#oa-handoff-cam[data-mirror]{--oa-cam-mirror:-1}
+#oa-handoff-cam-canvas[data-mirror]{--oa-cam-mirror:-1}
+#oa-handoff-cam[data-rec]{border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
+#oa-handoff-cam-canvas[data-rec]{border-color:color-mix(in oklab,var(--oa-danger),transparent 40%)}
 #oa-handoff-cam[data-rec]::after{content:"";position:absolute;top:8px;left:8px;width:7px;height:7px;border-radius:50%;background:var(--oa-danger);box-shadow:0 0 0 2px var(--oa-bg)}
 #oa-handoff-cam[data-dragging],#oa-handoff-cam-canvas[data-dragging]{cursor:grabbing;will-change:transform}
 .oa-handoff-mic{display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0;width:36px;height:18px}

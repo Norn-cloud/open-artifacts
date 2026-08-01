@@ -276,6 +276,10 @@ The circular camera preview captures one primary pointer for each drag and keeps
 that pointer bound to the overlay where the gesture began. Drag translation and
 the recording mirror use separate CSS variables so moving the preview never
 flips it; saved coordinates are clamped back inside the viewport after resize.
+Opening the owner dock starts a neutral mirrored preview; only active capture
+adds the danger ring, and closing the dock releases every media track. Handoff
+timelines begin with the artifact's scroll position at `t=0`, so playback resets
+to the recorded viewport before its first animation frame.
 
 ## Do's and Don'ts
 

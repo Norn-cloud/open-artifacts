@@ -47,6 +47,7 @@ export function state(_svgs: HandoffSvgs): string {
     root.removeAttribute('hidden');
     if(toggle) toggle.setAttribute('aria-expanded','true');
     render();
+    requestPreview();
     // Move focus into the dock toolbar so keyboard users land on the primary
     // action (Record / Play). Deferred so render() has populated controls.
     setTimeout(function(){ var b=controls.querySelector('button'); if(b) b.focus(); },0);
@@ -54,6 +55,7 @@ export function state(_svgs: HandoffSvgs): string {
   function closeDock(){
     // Recording/playing hold irreplaceable in-flight work - refuse to yield.
     if(state!=='IDLE') return false;
+    if(recordStarting)cancelRecord(false); else stopPreview();
     root.hidden=true;
     if(toggle) toggle.setAttribute('aria-expanded','false');
     return true;

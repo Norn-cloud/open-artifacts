@@ -6,6 +6,7 @@ import { cam } from "../../src/handoff/cam";
 import { del } from "../../src/handoff/del";
 import { helpers } from "../../src/handoff/helpers";
 import { playback } from "../../src/handoff/playback";
+import { preview } from "../../src/handoff/preview";
 import { record } from "../../src/handoff/record";
 import { render } from "../../src/handoff/render";
 import { share } from "../../src/handoff/share";
@@ -36,6 +37,7 @@ describe("handoff dock script syntax gate", () => {
     ["record", record],
     ["upload", upload],
     ["playback", playback],
+    ["preview", preview],
     ["share", share],
     ["del", del],
     ["render", render],

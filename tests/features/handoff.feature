@@ -76,6 +76,21 @@ Feature: Handoff recording (one per version)
     And the recording mirror remains active throughout the drag
     And the saved position is clamped inside the viewport after a resize
 
+  Scenario: Opening Handoff previews the camera before recording
+    Given the owner opens the Handoff dock while it is idle
+    Then the circular camera shows a mirrored live preview without a recording ring
+    And clicking Record reuses that media stream for the countdown and capture
+    And closing the dock stops every camera and microphone track
+    And a permission result arriving after close is stopped without being attached
+
+  Scenario: Playback starts from the recorded page position
+    Given the owner starts recording after scrolling the artifact
+    Then the first interaction event stores that viewport position at t=0
+    And later artifact scroll positions are stored in the event timeline
+    When a viewer clicks Play from a different part of the artifact
+    Then the artifact resets to the recorded starting position before playback advances
+    And handoffs recorded before the t=0 event remain playable using their earliest scroll
+
   Scenario: Playback reads are view-gated like the artifact
     When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
     And a handoff exists for a private artifact
