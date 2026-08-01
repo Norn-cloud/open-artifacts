@@ -105,7 +105,7 @@ export function render(svgs: HandoffSvgs): string {
     // creator's default). Persisted so the choice sticks across views.
     var curSpeed=loadSpeed();
     var speed=el('select','oa-handoff-speed'); speed.setAttribute('aria-label','Playback speed');
-    [1,1.5,2].forEach(function(r){ var o=el('option',''); o.value=String(r); o.textContent=r+'x'; if(Math.abs(r-curSpeed)<0.01)o.setAttribute('selected','selected'); speed.appendChild(o); });
+    [1,1.2,1.5].forEach(function(r){ var o=el('option',''); o.value=String(r); o.textContent=r+'x'; if(Math.abs(r-curSpeed)<0.01)o.setAttribute('selected','selected'); speed.appendChild(o); });
     speed.onchange=function(){ var v=parseFloat(speed.value); saveSpeed(v); if(cam){try{cam.playbackRate=v}catch(e){}} };
     var cl=cluster('<span class="oa-handoff-time" id="oa-handoff-time">0:00</span>');
     // Pause (primary accent) anchors the left; scrubber flexes; speed + Exit
