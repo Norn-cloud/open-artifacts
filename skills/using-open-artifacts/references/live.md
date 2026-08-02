@@ -57,8 +57,10 @@ Live-edit artifact <ID> at coda0.com:
      no pick/submit needed. `anchor` locates the commented element (canvas
      point or text quote; see the comments feature). Reply with a normal
      `update` if you act on it; no `done` ack is expected for comments.
-   - The watcher never auto-acks `comment` events and never exits on them;
-     they print like any other event and the loop keeps polling.
+   - A comment is consumed from the transient live queue when `poll` returns
+     it. The watcher never enters edit-ack waiting or exits on a comment; it
+     prints like any other event and keeps polling. The comment remains in the
+     artifact's persistent comment history.
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
 6. Publish: node "$ARTIFACT_CLI" update <ID>   (use the artifact's recipe, or pass the new recipe)
 7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <new-version>
