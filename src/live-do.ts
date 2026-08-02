@@ -9,7 +9,7 @@ import { DurableObject } from "cloudflare:workers";
 // The three-party loop (one-shot edit-and-reload):
 //   Browser (host) ── ws.send(generate/exit) ──▶ LiveObject
 //   Agent (CLI)    ── rpc.poll()  ──▶ drains pendingEvents (blocks)
-//   Agent          ◀── rpc.poll() returns one event (generate)
+//   Agent          ◀── rpc.poll() returns one event (generate/comment/exit)
 //   Agent          ── rpc.reply(id, ack)  ──▶ LiveObject broadcasts ack
 //   Agent          ── rpc.reply(id, done) ──▶ LiveObject broadcasts done
 //   LiveObject     ── ws.send(ack/done) ──▶ Browser (broadcasts)
@@ -307,8 +307,9 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       winner.id,
       winner.type,
     );
+    let event: LiveEvent;
     try {
-      return JSON.parse(winner.payload) as LiveEvent;
+      event = JSON.parse(winner.payload) as LiveEvent;
     } catch {
       // corrupted row — drop it so it doesn't block the queue
       await this.ctx.storage.sql.exec(
@@ -318,6 +319,18 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       );
       return null;
     }
+    // Comments are notifications, not edit jobs: the watcher has received
+    // the payload once poll selects it, so keeping the row would replay old
+    // comments after the lease expires. The comment itself remains in D1;
+    // only this transient live-delivery row is consumed.
+    if (event.type === "comment") {
+      await this.ctx.storage.sql.exec(
+        `DELETE FROM pending WHERE id = ? AND type = ?`,
+        winner.id,
+        winner.type,
+      );
+    }
+    return event;
   }
 
   private async flushWaiters(): Promise<void> {

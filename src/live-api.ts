@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { type AppContext, authorizeWrite, storeFrom } from "./api";
+import { type AppContext, storeFrom } from "./api";
 import type { LiveEvent, LiveObject } from "./live-do";
 
 // Live edit routes. All 404 when the deploy did not bind a
@@ -28,23 +28,16 @@ function liveEnabled(c: Context<AppContext>): boolean {
 }
 
 async function authorizeLive(c: Context<AppContext>, id: string) {
-  // Live editing mutates the artifact (the agent edits source + republishes),
-  // so the poll/reply routes are WRITE-gated — but the gate must accept EVERY
-  // credential that authorizes a write: the artifact's own write/channel token
-  // (wt_/ch_, self-host) OR the owner's sk_/session (SaaS). The engine's
-  // authorizeWrite (src/api.ts) checks the bearer token hash against the record
-  // AND falls through to the authorizer — so it admits both. Using the
-  // authorizer-interface authorizeWrite alone would drop the wt_ path
-  // (defaultAuthorizer.authorizeWrite returns false), breaking self-host
-  // watchers — the regression introduced when owner-only Live gating landed.
-  //
-  // The owner-only *product* gate lives in the browser UI (canManage): the
-  // Live toggle only renders for owners, so non-owners can never fire a
-  // `generate` event. The poll route need not re-enforce owner-ness — it only
-  // admits principals that can republish, which is exactly the write gate.
-  const auth = await authorizeWrite(c, storeFrom(c), id);
-  if (!auth.ok) return null;
-  return auth.record;
+  const store = storeFrom(c);
+  const record = await store.get(id);
+  if (record === null) return null;
+  // Live routes use the artifact's view gate so a hosted `sk_` watcher can
+  // receive comment/generate notifications. The watcher publishes edits with
+  // its artifact `wt_`/`ch_` capability through the normal update route; Live
+  // only coordinates the browser channel and must not make the watcher's API
+  // key look like an artifact write token.
+  if (!(await c.get("authorizer").authorizeView(c, record))) return null;
+  return record;
 }
 
 function stubFor(
