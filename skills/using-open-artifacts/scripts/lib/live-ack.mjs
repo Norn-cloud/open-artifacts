@@ -16,14 +16,16 @@ export const isEventPending = (status, eid) =>
 export const hasExit = (status) =>
   (status?.pendingEvents || []).some((e) => e.type === "exit");
 
-// A newer generate is any pending generate whose id the watcher has not
-// already delivered this session (knownIds is the watcher's grow-only
+// A newer event is any pending generate or comment whose id the watcher has
+// not already delivered this session (knownIds is the watcher's grow-only
 // delivered set, so in-flight events waiting on their own `done` are not
-// mistaken for new submissions).
+// mistaken for new submissions). Comments stream in as they are posted, so
+// they must not wait out an ack-wait either.
 export const hasNewEvent = (status, knownIds) => {
   if (!knownIds || knownIds.size === 0) return false;
   return (status?.pendingEvents || []).some(
-    (e) => e.type === "generate" && !knownIds.has(e.id),
+    (e) =>
+      (e.type === "generate" || e.type === "comment") && !knownIds.has(e.id),
   );
 };
 

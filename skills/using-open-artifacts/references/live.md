@@ -52,6 +52,13 @@ Live-edit artifact <ID> at coda0.com:
    - Another `generate` can arrive while you are still editing a previous one —
      the watcher delivers new submissions immediately. Edit and reply `done`
      for each event id separately.
+   - A `comment` event `{type:'comment', id, body, author, anchor, createdAt}`
+     arrives whenever the user posts a comment while the live channel is up —
+     no pick/submit needed. `anchor` locates the commented element (canvas
+     point or text quote; see the comments feature). Reply with a normal
+     `update` if you act on it; no `done` ack is expected for comments.
+   - The watcher never auto-acks `comment` events and never exits on them;
+     they print like any other event and the loop keeps polling.
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
 6. Publish: node "$ARTIFACT_CLI" update <ID>   (use the artifact's recipe, or pass the new recipe)
 7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <new-version>

@@ -1535,6 +1535,16 @@ const LIVE_SCRIPT = `
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
   function genId(){ return 'ev_'+Math.random().toString(36).slice(2)+Date.now().toString(36); }
+  // Bridge for the comments chrome: a comment posted while the live channel
+  // is up is streamed to the agent's watcher immediately (a comment event
+  // the watch loop polls), so "I left a comment" reaches the agent without
+  // waiting for a pick+submit. The comments script runs before this one, so
+  // it calls the hook lazily at post time.
+  window.__oaLivePush=function(msg){
+    if(!msg||!msg.type)return;
+    if(!msg.id)msg.id=genId();
+    send(msg);
+  };
 
   function setState(s){ state=s; renderBar(); }
 
@@ -2777,6 +2787,10 @@ const HOST_UI_SCRIPT = `
       .then(function(cm){if(cm.deleteToken)saveToken(cm.id,cm.deleteToken);
         state.push({id:cm.id,author:cm.author,body:cm.body,anchor:cm.anchor,done:!!cm.done,createdAt:cm.createdAt});
         sync();closePop();
+        // Live bridge: if a live session's WebSocket is up, stream the
+        // comment to the agent's watcher right away — the agent polls it as
+        // a comment event instead of waiting for a pick+submit.
+        if(window.__oaLivePush)window.__oaLivePush({type:"comment",id:cm.id,body:cm.body,author:cm.author||null,anchor:cm.anchor||null,createdAt:cm.createdAt});
       }).catch(function(err){
         errEl.textContent=typeof err==="number"?"Could not post ("+err+")":"Could not post";
         errEl.removeAttribute("hidden");

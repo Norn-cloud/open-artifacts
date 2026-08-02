@@ -40,6 +40,16 @@ describe("live-ack: isEventPending / hasExit / hasNewEvent", () => {
     expect(hasNewEvent(status, null)).toBe(false);
     expect(hasNewEvent({ pendingEvents: [] }, known)).toBe(false);
   });
+
+  it("hasNewEvent treats a streamed comment as a new event", () => {
+    const known = new Set(["ev1"]);
+    const status = {
+      pendingEvents: [ev("ev1", "generate"), ev("c1", "comment")],
+    };
+    expect(hasNewEvent(status, known)).toBe(true);
+    // An already-delivered comment is not new.
+    expect(hasNewEvent(status, new Set(["ev1", "c1"]))).toBe(false);
+  });
 });
 
 describe("live-ack: waitForEventAck", () => {

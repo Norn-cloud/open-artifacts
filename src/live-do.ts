@@ -24,7 +24,7 @@ import { DurableObject } from "cloudflare:workers";
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type: "generate" | "exit" | "ack" | "done" | "error";
+  type: "generate" | "exit" | "comment" | "ack" | "done" | "error";
   id: string;
   [key: string]: unknown;
 };

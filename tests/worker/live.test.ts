@@ -230,6 +230,10 @@ describe("live routes with LIVE_DO bound", () => {
     // stamp the last generate's sessionId, and the watcher's exclude set
     // would hide the exit row forever (the watcher would never exit).
     expect(html).toContain("{type:'exit', id:genId()");
+    // The comments chrome bridges posted comments onto the live channel: the
+    // live script exposes the push hook, and the comments submit calls it.
+    expect(html).toContain("__oaLivePush");
+    expect(html).toContain('__oaLivePush({type:"comment"');
   });
 
   it("a non-owner viewer sees no Live toggle even when LIVE_DO is bound", async () => {
@@ -355,7 +359,7 @@ describe("live routes with LIVE_DO bound", () => {
     expect(status.pendingEvents.some((e) => e.id === "ev1")).toBe(true);
   });
 
-  it("a browser WebSocket generate reaches pendingEvents (the real enqueue path)", async () => {
+  it("browser WebSocket generate and comment events reach pendingEvents (the real enqueue path)", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await liveStub(id).fetch(
       new Request(`${BASE}/api/artifacts/${id}/live`, {
@@ -367,10 +371,18 @@ describe("live routes with LIVE_DO bound", () => {
     if (!ws) throw new Error("no websocket in upgrade response");
     ws.accept();
     ws.send(JSON.stringify({ type: "generate", id: "ev_ws1", items: [] }));
-    // The DO processes the WS message asynchronously; poll status until the
-    // event lands (bounded — the DO enqueue is fast, this is just a guard).
-    let seen = false;
-    for (let i = 0; i < 20 && !seen; i++) {
+    ws.send(
+      JSON.stringify({
+        type: "comment",
+        id: "c_ws1",
+        body: "make the header sticky",
+        anchor: { mode: "point", x: 10, y: 20 },
+      }),
+    );
+    // The DO processes the WS messages asynchronously; poll status until both
+    // events land (bounded — the DO enqueue is fast, this is just a guard).
+    let seen = 0;
+    for (let i = 0; i < 20 && seen < 2; i++) {
       const statusRes = await fetchWith(
         new Request(`${BASE}/api/artifacts/${id}/live/status`, {
           headers: SK_BEARER,
@@ -381,11 +393,13 @@ describe("live routes with LIVE_DO bound", () => {
       const status = (await statusRes.json()) as {
         pendingEvents: { id: string }[];
       };
-      seen = status.pendingEvents.some((e) => e.id === "ev_ws1");
-      if (!seen) await new Promise((r) => setTimeout(r, 100));
+      seen = status.pendingEvents.filter(
+        (e) => e.id === "ev_ws1" || e.id === "c_ws1",
+      ).length;
+      if (seen < 2) await new Promise((r) => setTimeout(r, 100));
     }
     ws.close();
-    expect(seen).toBe(true);
+    expect(seen).toBe(2);
   });
 
   it("GET /live/poll honors exclude so in-flight events are never re-delivered", async () => {

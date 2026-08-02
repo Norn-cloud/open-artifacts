@@ -112,6 +112,13 @@ Feature: Live editing
     And the frame replies oa:live:annot:data with comments, strokes, and a screenshot when capturable
     And the host sends generate with those comments/strokes/screenshot, or omits them when empty
 
+  Scenario: A posted comment streams to the watcher immediately
+    When a live channel is up (the owner's page holds a WebSocket)
+    And the user posts a comment
+    Then the host pushes {type:'comment', id, body, author, anchor, createdAt} over the WebSocket
+    And the watcher's poll delivers the comment event promptly (even during an ack-wait)
+    But the watcher does not auto-ack or exit on a comment — it just prints and keeps polling
+
   Scenario: A live poll failure tells the operator why
     When the agent CLI polls /api/artifacts/<id>/live/poll and the instance responds 401, 403, or 404
     Then the one-shot `live <id>` exits with a hint naming the artifact/token problem
