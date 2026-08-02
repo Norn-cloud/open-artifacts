@@ -310,6 +310,28 @@ Manifest v2 records the Recipe path and Recipe/input/output hashes only after
 the publish succeeds. Write tokens and channel tokens remain in the
 gitignored credentials file.
 
+### Live mode after publishing
+
+On a live-capable instance (the CLI prints a "live mode" tip right after
+`create` when the instance binds `LIVE_DO` and you are logged in), **start the
+watcher by default** once the artifact is published:
+
+```
+node "$ARTIFACT_CLI" live <ID> --watch
+```
+
+Run it as a background task (per-harness patterns in
+[references/live.md](references/live.md) — "Harness note") and keep it running
+for the session. **Your only job in a live session is to poll** — you never
+operate the viewer page yourself (no browser automation, no clicking Live,
+picking elements, or typing prompts on the artifact page). The user drives the
+viewer: they open the artifact URL, click Live, pick elements, type a change
+for each, and submit; your watcher prints each `generate` event for you to act
+on (edit the Recipe sources, `update`, reply `done`). The viewer's Live button
+shows a dot while your watcher is connected, so the user can see an agent is
+online before they start picking. Read [references/live.md](references/live.md)
+before the session.
+
 ## Updating
 
 *(Run this in the content-generation task when the harness provides one; run

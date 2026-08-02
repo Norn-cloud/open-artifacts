@@ -591,6 +591,17 @@ async function commandCreate(recipePath, flags) {
   if (password) {
     console.error("password protected: share the URL and password separately");
   }
+  // Live-capable instance + logged-in (sk_) operator: tell the agent to open
+  // the live long-connection by default and what the user does on their side.
+  // The agent only polls — it never operates the viewer page itself.
+  if (json.liveSupported === true && config.authToken?.startsWith("sk_")) {
+    console.error(
+      `live mode: this instance supports live editing. Start the watcher and keep it running: ` +
+        `node artifact.mjs live ${json.id} --watch — the user opens ${json.url}, clicks Live, picks ` +
+        `elements, types a change for each, and submits. Your watcher prints each generate event; ` +
+        `the viewer's Live button shows a dot while it is online (references/live.md).`,
+    );
+  }
 }
 
 function findEntry(manifest, id) {
@@ -1574,17 +1585,29 @@ async function commandLive(rest, flags) {
     }
     return { status: response.status, json };
   };
-  const pollOnce = async () => {
+  const pollOnce = async (exclude = []) => {
     const params = new URLSearchParams({ timeout: String(timeout) });
     if (typesRaw) params.set("types", typesRaw);
+    if (exclude.length) params.set("exclude", exclude.join(","));
     const { status: httpStatus, json } = await fetchJson(
       "GET",
       `${base}/poll?${params}`,
     );
     if (httpStatus !== 200) {
-      throw new Error(
+      // 401/403/404 are definitive, not transient: the artifact is missing or
+      // this token is not authorized for it (private/owner gate). Tag the
+      // error (err.status) so the watch loop can distinguish the class without
+      // parsing the message, and name the cause so an operator chasing a
+      // silent 404 loop can fix it.
+      const err = new Error(
         `live poll failed (${httpStatus}): ${json.error ?? "unknown"}`,
       );
+      if (httpStatus === 401 || httpStatus === 403 || httpStatus === 404) {
+        err.status = httpStatus;
+        err.message +=
+          " — the artifact may not exist or this token is not authorized for it; verify the id and that you are logged in as its owner (`whoami`; references/auth.md)";
+      }
+      throw err;
     }
     return json;
   };
@@ -1606,8 +1629,11 @@ async function commandLive(rest, flags) {
   // clear it from the DO's pending queue before polling the next, so the loop
   // paces one event at a time and avoids re-delivering a lease-expired,
   // unreplied event ahead of a newer one. The reply POST is synchronous, so
-  // this is about pacing the decoupled watcher, not confirming the reply. The
-  // deadline/exit/resilience logic lives in lib/live-ack.mjs (unit-tested).
+  // this is about pacing the decoupled watcher, not confirming the reply.
+  // When the user submits a NEWER event during the wait, the ack poll returns
+  // "new" and the loop delivers it immediately (poll excludes in-flight ids,
+  // so the still-pending event is never re-delivered). The deadline/exit/
+  // resilience logic lives in lib/live-ack.mjs (unit-tested).
   const fetchStatus = async () => {
     const { status: httpStatus, json } = await fetchJson(
       "GET",
@@ -1668,18 +1694,56 @@ async function commandLive(rest, flags) {
   // (a second `live` poll returns `done` after the agent republishes, or
   // `exit` when the browser closes the session). Exits on `exit` or Ctrl-C.
   console.error("[live watch] online; waiting for events (Ctrl-C to stop)");
+  // Presence heartbeat: POST /live/heartbeat on a fixed interval so the
+  // viewer's Live toggle shows this watcher as connected (agentActive in
+  // /live/status). Fire-and-forget — a transient failure must not kill the
+  // watcher; presence decays server-side after ~3 missed beats.
+  const heartbeatMs = parseMs(
+    process.env.OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS,
+    20_000,
+    1,
+  );
+  const heartbeatTimer = setInterval(async () => {
+    try {
+      await fetchJson("POST", `${base}/heartbeat`);
+    } catch {
+      // transient; presence decays server-side
+    }
+  }, heartbeatMs);
+  // Ids delivered this session (grow-only). Passed as the poll exclude so a
+  // lease-expired, unreplied event is never re-delivered ahead of newer ones,
+  // even when the ack-wait early-returns on a new submission.
+  const delivered = new Set();
+  let authWarned = false;
   while (true) {
     let evt;
     try {
-      evt = await pollOnce();
+      evt = await pollOnce([...delivered]);
     } catch (e) {
-      // Transient poll error — back off and retry.
-      console.error(`[live watch] ${e.message}; retrying in 2s`);
+      // Transient poll error — back off and retry. An auth-class failure
+      // (401/403/404, tagged by pollOnce with the artifact/token hint in the
+      // message) prints in full once so a stale id or token is diagnosable
+      // instead of a silent 404 spin; retries then stay terse.
+      const auth =
+        e && (e.status === 401 || e.status === 403 || e.status === 404);
+      if (auth) {
+        if (!authWarned) {
+          authWarned = true;
+          console.error(`[live watch] ${e.message}`);
+        }
+        console.error(
+          "[live watch] poll rejected (401/403/404); retrying in 2s",
+        );
+      } else {
+        console.error(`[live watch] ${e.message}; retrying in 2s`);
+      }
       await new Promise((r) => setTimeout(r, 2000));
       continue;
     }
+    delivered.add(evt.id);
     console.log(JSON.stringify(evt));
     if (evt.type === "exit") {
+      clearInterval(heartbeatTimer);
       await consumeExit();
       console.error("[live watch] session ended");
       break;
@@ -1696,15 +1760,22 @@ async function commandLive(rest, flags) {
       // --ack-timeout=0 for the legacy fire-and-forget behavior. An `exit`
       // arriving during the wait (user closed the session) breaks the loop so
       // the watcher stops promptly instead of blocking for the ack timeout.
+      // A NEWER generate arriving during the wait returns "new": poll now and
+      // deliver it immediately instead of blocking for the full ack timeout.
       if (ackTimeoutMs > 0) {
         const result = await waitForEventAck(fetchStatus, evt.id, {
           pollIntervalMs: ackPollMs,
           maxWaitMs: ackTimeoutMs,
+          knownIds: delivered,
         });
         if (result === "exit") {
+          clearInterval(heartbeatTimer);
           await consumeExit();
           console.error("[live watch] session ended during edit");
           break;
+        }
+        if (result === "new") {
+          continue;
         }
         if (result === "timeout") {
           console.error(
