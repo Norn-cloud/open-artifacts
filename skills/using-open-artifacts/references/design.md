@@ -44,7 +44,7 @@ spatial shell (pan/zoom frames) instead of a scrolling document; it composes
 with any level (level 2 Canvas is the common multi-frame prototype). It does
 not replace a level. When a
 brief is a flow, a set of screens/variants, or a board, reach for it and read
-`${CLAUDE_SKILL_DIR}/references/canvas.md`.
+`references/canvas.md`.
 
 ### Level 1 — simple
 
@@ -95,7 +95,7 @@ brief is a flow, a set of screens/variants, or a board, reach for it and read
   states wherever the interaction can reach them. A tool with half its
   states reads as a mockup, not a tool.
 - **Before building L2+, read
-  `${CLAUDE_SKILL_DIR}/references/interaction.md`** for the eight-state
+  `references/interaction.md`** for the eight-state
   contract, focus visibility, hit targets, form patterns, and waiting states.
   These are P0 requirements at this level.
 - **Anti-slop focus:** don't add motion that doesn't aid the task. An
@@ -109,7 +109,7 @@ brief is a flow, a set of screens/variants, or a board, reach for it and read
 - **JS:** orchestrates motion. Page-load sequences, scroll-triggered reveals,
   hover micro-interactions, ambient atmosphere — **all with native browser
   APIs, no external libraries** (the strict CSP blocks CDNs). Read
-  `${CLAUDE_SKILL_DIR}/references/motion.md` for the native motion pattern
+  `references/motion.md` for the native motion pattern
   library.
 - **Components:** hero as thesis, staggered reveals, scroll-driven parallax
   (CSS `animation-timeline: scroll()`), view transitions between states,
@@ -174,7 +174,7 @@ Orthogonal to level, decide the register — it changes what "good" means:
      one-sentence layout concept.
 4. **Build.** Write a Recipe plus body, theme, style, and script fragments.
    Show something concrete early. The builder injects
-   `${CLAUDE_SKILL_DIR}/references/tokens.css`; put the direction's unlayered
+   `references/tokens.css`; put the direction's unlayered
    `:root` overrides in the theme fragment, then write components against the
    tokens (`var(--accent)`, `var(--space-4)`, `var(--radius-md)`) rather than
    hardcoded values.
@@ -184,7 +184,7 @@ Orthogonal to level, decide the register — it changes what "good" means:
 
 ## The token contract
 
-`${CLAUDE_SKILL_DIR}/references/tokens.css` defines the shared token set:
+`references/tokens.css` defines the shared token set:
 identity (`--bg`, `--fg`, `--accent`, matching `--accent-on`, fonts), accent
 states, accessible semantic color pairs (success/warn/danger — separate from
 the accent), derived tiers (`--surface-2`, `--accent-soft`), spacing (4px
@@ -509,7 +509,7 @@ page feel designed rather than assembled:
   paste a config to simulate one"), never just "No data". Loading prefers a
   skeleton in the final layout's shape over a spinner.
 - **Icons**: prefer [Remix Icon](https://remixicon.com/) — read
-  `${CLAUDE_SKILL_DIR}/references/icons.md` for a vendored ~90-icon
+  `references/icons.md` for a vendored ~90-icon
   inline-SVG subset. Copy the whole `<svg>` inline (it uses
   `fill="currentColor"`); size via `svg{width:1em;height:1em;
   vertical-align:-.125em}`. Never link the CDN. One icon style per page,
@@ -732,7 +732,7 @@ layout decisions:
   sticky bars set `top: var(--oa-header-h, 2.5rem)`. The viewer rewrites the
   `top` of every `position: sticky` element to this value, so a canvas's zoom
   cluster (and any other floating control) must be `position: fixed`, never
-  sticky — see `${CLAUDE_SKILL_DIR}/references/canvas.md`.
+  sticky — see `references/canvas.md`.
 - At `52rem` and below, secondary service controls move into the viewer's More
   panel while the title, comment actions, and theme remain inline. Do not add
   artifact-level spacing or duplicate controls to compensate for this chrome;
@@ -845,11 +845,11 @@ Two passes is normal. Then publish.
 
 The viewer serves artifacts under a sandboxed iframe with two layers of
 restriction. The **CSP directive** is
-`default-src 'none'; script-src 'self' 'nonce-<per-request>'; style-src 'unsafe-inline'`
+`default-src 'none'; script-src <response-origin> 'nonce-<per-request>'; style-src 'unsafe-inline'`
 (also `img-src`/`font-src` allow `data:` for embedded assets): inline
 `<style>` and every inline `<script>` (both viewer-injected and user-authored,
 each stamped with a per-request `nonce=` at serve time) are allowed, and
-same-origin `/vendor/...` runtime bundles load under `'self'`, but
+same-origin `/vendor/...` runtime bundles load from the response origin, but
 `<link>` stylesheets, web fonts, remote `<img>`/`<video>`/`<source>` src,
 every `fetch`/XHR/WebSocket/EventSource, and any external `<script src>` are
 blocked by `default-src 'none'` / no external script host. Separately, the
@@ -862,10 +862,11 @@ parent URL (see `canvas.md`'s encrypted-canvas deep-link caveat).
 Web fonts are an opt-in, per-deploy surface. Runtime libraries (mermaid) are
 self-hosted and served same-origin on every deploy. When the deploy sets
 `OPEN_ARTIFACTS_WEB_FONTS="1"`, the CSP widens to
-`font-src 'self' data: cdn.fontshare.com fonts.gstatic.com`,
-`style-src 'unsafe-inline' fonts.googleapis.com`, and the sandbox gains
-`allow-same-origin` so the browser can cache fonts. `script-src` is always
-`'self' 'nonce-<per-request>'` — no external script host, no `'unsafe-inline'`,
+`font-src <response-origin> data: cdn.fontshare.com fonts.gstatic.com`,
+`style-src <response-origin> 'unsafe-inline' fonts.googleapis.com`; the
+sandbox still omits `allow-same-origin`, so the frame remains opaque.
+`script-src` is always
+the response origin plus `'nonce-<per-request>'` — no external script host, no `'unsafe-inline'`,
 no `'strict-dynamic'`. Delivery paths:
 
 - **Fonts** — same-origin `/fonts/<slug>` proxy (for foundry-download-page
@@ -877,11 +878,10 @@ no `'strict-dynamic'`. Delivery paths:
   external script host in the CSP. See `references/scripts.md`, the allowlist,
   and the build-time syntax gate.
 
-`connect-src` stays `'none'`. The trade-off: `allow-same-origin` ends the
-opaque-origin guarantee — a malicious artifact on such a deploy can read the host
-origin's `localStorage`/`cookies`, and an artifact can pull passive font bytes
+`connect-src` stays `'none'`. The trade-off is limited to passive font bytes
 from the allowlisted CDNs (fonts are non-executable, so the allowlist has no
-code-execution surface). The build gate restricts `@font-face src` / `@import`
+code-execution surface); the artifact remains opaque and cannot read the host
+origin's `localStorage`/cookies. The build gate restricts `@font-face src` / `@import`
 to the same-origin proxy, `data:`, and the allowlisted font CDNs, and
 `<script src>` to an allowlisted same-origin `/vendor/...` path, so neither
 surface can pull in an arbitrary external host or package. Reach for
@@ -891,8 +891,8 @@ diagrams justify the ~3.5 MB.
 
 `script-src` carries no `'unsafe-inline'` — every inline `<script>` (both
 viewer-injected and user-authored) is stamped with a per-request `nonce=` at
-serve time, and `'self'` lets the same-origin `/vendor/...` runtime bundle
-load. There is no `'strict-dynamic'`, so trust does not propagate from a
+serve time, and the response origin lets the same-origin `/vendor/...` runtime
+bundle load. There is no `'strict-dynamic'`, so trust does not propagate from a
 nonce'd script to a runtime-created one. An artifact's inline JS cannot
 `document.createElement("script", {src: <external>})` to load an arbitrary
 package: no external script host is in `script-src`, so the runtime-created
@@ -910,11 +910,9 @@ user JS (the per-request nonce is stamped on every user `<script>`).
   in the body for the self-hosted mermaid bundle (same-origin, so no external
   host enters the CSP; a regular script executes synchronously, so the
   scripts-slot init runs after it — see `references/scripts.md`).
-- **No localStorage / sessionStorage / cookies** — on a non-opt-in deploy the
-  sandbox blocks them; keep state in memory for the session. On an opt-in
-  deploy (`allow-same-origin`) they are reachable, but `connect-src 'none'`
-  still blocks network egress, so do not rely on storage for persistence and
-  never treat the artifact as a trusted same-origin document.
+- **No localStorage / sessionStorage / cookies** — the sandboxed artifact frame
+  remains opaque on every deploy, including web-font opt-in. Keep state in
+  memory for the session and do not rely on browser storage for persistence.
 - **Both themes must work**: the viewer stamps `data-theme` on `<html>` and
   it must win over `prefers-color-scheme` in both directions. The injected
   contract handles the mechanics (`@layer` + an OS-dark tier); your job is

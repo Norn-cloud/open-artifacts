@@ -488,7 +488,7 @@ async function commandCreate(recipePath, flags) {
     // even a successful channel-publish lands as anonymous (owner_id empty),
     // so the artifact won't appear in the user's dashboard. Warn up front.
     console.error(
-      "tip: no auth token configured; if this instance requires login, run `node artifact.mjs login --provider google` first (references/auth.md)",
+      "tip: no auth token configured; if this instance requires login, run the CLI's `login --provider google` command first (references/auth.md)",
     );
   }
   const prepared = await prepareRecipePayload(recipePath, flags);
@@ -521,7 +521,7 @@ async function commandCreate(recipePath, flags) {
   if (status !== 201 && status !== 200) {
     const hint =
       status === 401
-        ? " - run `node artifact.mjs login` to authenticate to this instance (references/auth.md)"
+        ? " - run the CLI's `login` command to authenticate to this instance (references/auth.md)"
         : "";
     fail(`create failed (${status}): ${json.error ?? "unknown error"}${hint}`);
   }
@@ -577,7 +577,7 @@ async function commandCreate(recipePath, flags) {
     !hookInstalled(process.env.CLAUDE_PROJECT_DIR)
   ) {
     console.error(
-      'tip: run "artifact.mjs install-hook" to flag this artifact stale automatically when its watched files change',
+      'tip: run the CLI\'s "install-hook" command to flag this artifact stale automatically when its watched files change',
     );
   }
 
@@ -1478,7 +1478,7 @@ async function commandWhoami(flags) {
   const sk = token?.startsWith("sk_") ? token : loadCredentials().apiKey;
   if (!sk?.startsWith("sk_")) {
     fail(
-      "not logged in; run `node artifact.mjs login` on a SaaS instance first",
+      "not logged in; run the CLI's `login` command on a SaaS instance first",
     );
   }
   const { status, json } = await request(
@@ -1519,7 +1519,7 @@ async function commandLive(rest, flags) {
   const sk = token?.startsWith("sk_") ? token : loadCredentials().apiKey;
   if (!sk?.startsWith("sk_")) {
     fail(
-      "not logged in; run `node artifact.mjs login` on a SaaS instance first",
+      "not logged in; run the CLI's `login` command on a SaaS instance first",
     );
   }
   const base = `${config.apiUrl}/api/artifacts/${encodeURIComponent(id)}/live`;
@@ -1777,8 +1777,8 @@ options:
   --ack-poll <ms>      (live --watch/--wait-ack) /live/status poll interval;
                        default 1000 (remote-Worker friendly)
 
-auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > OPEN_ARTIFACTS_TOKEN >
-config createToken > credentials.json apiKey
+auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > credentials.json apiKey >
+OPEN_ARTIFACTS_TOKEN > config createToken
 `;
 
 async function main() {

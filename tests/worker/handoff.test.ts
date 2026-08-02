@@ -39,6 +39,10 @@ const ownerApp = createApp(ownerAuthorizer());
 const BASE = "http://artifacts.test";
 
 const ON: Bindings = { ...env, OPEN_ARTIFACTS_HANDOFF: "1" };
+const ON_BRANDED: Bindings = {
+  ...ON,
+  BRAND_NAME: "coda0",
+};
 const OFF: Bindings = { ...env, OPEN_ARTIFACTS_HANDOFF: "" };
 
 async function fetchWith(
@@ -180,6 +184,32 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
     expect(html).toContain("oa-handoff-root");
     expect(html).toContain("window.__oaCanManage=true");
     expect(html).toContain("window.__oaRestoreHeaderControlFocus(toggle)");
+  });
+
+  it("keeps primary controls before the account slot and brand", async () => {
+    const { id } = await createArtifact(ON_BRANDED);
+    const res = await ownerFetchWith(
+      new Request(`${BASE}/a/${id}`),
+      ON_BRANDED,
+    );
+    const html = await res.text();
+    const headerStart = html.indexOf('<header class="oa-header">');
+    const panelStart = html.indexOf('<div id="oa-header-panel"');
+    const handoff = html.indexOf(
+      '<button class="oa-handoff-toggle"',
+      panelStart,
+    );
+    const brand = html.indexOf('<a class="oa-brand"', panelStart);
+    const account = html.indexOf('<span id="oa-account-slot"', panelStart);
+    const comments = html.indexOf('<button class="oa-cm-toggle"', headerStart);
+    const theme = html.indexOf('<button id="oa-theme-toggle"', headerStart);
+
+    expect(headerStart).toBeGreaterThan(-1);
+    expect(panelStart).toBeGreaterThan(-1);
+    expect(handoff).toBeLessThan(brand);
+    expect(comments).toBeLessThan(account);
+    expect(theme).toBeLessThan(account);
+    expect(account).toBeLessThan(brand);
   });
 
   it("a non-owner viewer sees no Handoff toggle button", async () => {

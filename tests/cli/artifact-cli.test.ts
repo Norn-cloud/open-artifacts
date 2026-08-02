@@ -2667,7 +2667,7 @@ describe("auth token precedence", () => {
     const result = await run(["create", recipePath], {
       env: { OPEN_ARTIFACTS_URL: apiUrl },
     });
-    expect(result.stderr).toContain("node artifact.mjs login");
+    expect(result.stderr).toContain("CLI's `login --provider google` command");
     // Still sends the request (self-hosted open instances allow anonymous create).
     expect(requests[0].auth ?? "").toBe("");
   });
@@ -2681,7 +2681,9 @@ describe("auth token precedence", () => {
         OPEN_ARTIFACTS_API_KEY: `sk_${"a".repeat(40)}`,
       },
     });
-    expect(result.stderr).not.toContain("node artifact.mjs login");
+    expect(result.stderr).not.toContain(
+      "CLI's `login --provider google` command",
+    );
   });
 });
 

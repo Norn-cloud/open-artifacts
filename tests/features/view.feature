@@ -11,11 +11,11 @@ Feature: View an artifact
     And the head contains an emoji favicon as an SVG data URI
     And a minimal CSS reset is inlined
 
-  Scenario: Strict CSP blocks external requests
-    When I GET /a/:id
+  Scenario: Strict CSP isolates the artifact frame from external requests
+    When I GET /a/:id/frame
     Then the Content-Security-Policy header forbids all external hosts
     And inline styles and scripts are allowed
-    And images are allowed only from data: URIs
+    And images are allowed only from data: or blob: URIs
 
   Scenario: Theme awareness
     When I GET /a/:id
