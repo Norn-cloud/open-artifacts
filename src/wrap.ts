@@ -908,11 +908,11 @@ const HOST_FRAME_CSS = `
 #oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0}
 `;
 
-// Account chip in the service header: provider avatar (with a name-initial
+// Account chip in the coda0 service header: provider avatar (with a name-initial
 // fallback) + dropdown (dashboard / sign out), or a "Sign in" link when no
-// session. Driven by a same-origin fetch('/api/me') so it works on any host
-// that exposes a /api/me returning {user:{name,picture}} (coda0). A self-host
-// with no /api/me gets a non-200 and the chip stays empty.
+// session. Driven by a same-origin fetch('/api/me') from coda0's hosted account
+// service, which returns {user:{name,picture}}. A self-host without that
+// endpoint gets a non-200 and the chip stays empty.
 const ACCOUNT_CSS = `
 .oa-account-slot{position:relative;display:inline-flex;align-items:center;flex-shrink:0;min-height:28px}
 .oa-account-slot:empty{display:none}
