@@ -96,7 +96,15 @@ export function state(_svgs: HandoffSvgs): string {
     if(!e.data||typeof e.data.type!=='string')return;
     if(e.source!==frame.contentWindow)return;
     var d=e.data;
-    if(d.type==='oa:handoff:event'&&state==='RECORDING'){ events.push({t:d.t, kind:d.kind, x:d.x, y:d.y, sx:d.sx, sy:d.sy}); }
+    if(d.type==='oa:handoff:event'&&state==='RECORDING'){
+      // Keep the raw values for old-player compatibility and the normalized
+      // geometry for recordings that must replay across responsive viewports.
+      // Undefined properties disappear from JSON, so events produced by an
+      // older frame or a future partial frame remain valid.
+      events.push({t:d.t, kind:d.kind, x:d.x, y:d.y, sx:d.sx, sy:d.sy,
+        vw:d.vw, vh:d.vh, sxMax:d.sxMax, syMax:d.syMax,
+        nx:d.nx, ny:d.ny, nsx:d.nsx, nsy:d.nsy});
+    }
   });
 `;
 }

@@ -105,10 +105,11 @@ export interface CommentInput {
 
 // A handoff recording: a creator's webcam+mic walkthrough of an artifact,
 // captured as an R2 media blob plus an R2 events JSON stream (mouse/click/
-// scroll). Only metadata lives in D1. version pins the recording to the
-// artifact snapshot it was made against so playback re-serves that frame and
-// the captured coordinates still map. hasVideo/hasAudio let a recorder drop the
-// camera (or mic) for a lighter clip.
+// scroll). Pointer coordinates and scroll positions carry a viewport snapshot
+// plus normalized values so playback can adapt to a different screen size or
+// aspect ratio. Only metadata lives in D1. version pins the recording to the
+// artifact snapshot it was made against so playback re-serves that frame.
+// hasVideo/hasAudio let a recorder drop the camera (or mic) for a lighter clip.
 export interface HandoffMeta {
   id: string;
   artifactId: string;

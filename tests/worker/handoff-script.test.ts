@@ -83,6 +83,88 @@ describe("handoff dock script syntax gate", () => {
     expect(js).toContain("oa:handoff:event");
   });
 
+  it("keeps viewport geometry when the host buffers frame events", () => {
+    const frameWindow = {};
+    const nodes: Record<string, unknown> = {
+      "oa-handoff-cam": {},
+      "oa-handoff-controls": {},
+      "oa-handoff-countdown": {},
+      "oa-handoff-data": { textContent: "null" },
+      "oa-handoff-dock": {},
+      "oa-handoff-root": {},
+      "oa-handoff-status": {},
+      "oa-frame": { contentWindow: frameWindow },
+    };
+    let messageListener:
+      | ((event: { data: Record<string, unknown>; source: object }) => void)
+      | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+    const runtime = new Function(
+      "window",
+      "document",
+      `${state(HANDOFF_SVGS)} return { events: events, setRecording: function(){ state = "RECORDING"; } };`,
+    )(
+      {
+        __oaBridgeId: "artifact-1",
+        addEventListener: (
+          type: string,
+          listener: (event: {
+            data: Record<string, unknown>;
+            source: object;
+          }) => void,
+        ) => {
+          if (type === "message") messageListener = listener;
+        },
+        __oaCanManage: false,
+      },
+      {
+        getElementById: (id: string) => nodes[id] ?? null,
+        querySelector: () => null,
+      },
+    ) as { events: unknown[]; setRecording(): void };
+
+    runtime.setRecording();
+    messageListener?.({
+      source: frameWindow,
+      data: {
+        type: "oa:handoff:event",
+        t: 120,
+        kind: "move",
+        x: 400,
+        y: 200,
+        sx: 0,
+        sy: 500,
+        vw: 800,
+        vh: 600,
+        sxMax: 0,
+        syMax: 1400,
+        nx: 0.5,
+        ny: 1 / 3,
+        nsx: 0,
+        nsy: 5 / 14,
+      },
+    });
+
+    expect(runtime.events).toEqual([
+      {
+        t: 120,
+        kind: "move",
+        x: 400,
+        y: 200,
+        sx: 0,
+        sy: 500,
+        vw: 800,
+        vh: 600,
+        sxMax: 0,
+        syMax: 1400,
+        nx: 0.5,
+        ny: 1 / 3,
+        nsx: 0,
+        nsy: 5 / 14,
+      },
+    ]);
+  });
+
   it("the concatenated script is non-empty and wrapped in one IIFE", () => {
     const js = handoffScript(HANDOFF_SVGS);
     expect(js.length).toBeGreaterThan(1000);

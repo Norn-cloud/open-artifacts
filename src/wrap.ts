@@ -1988,11 +1988,13 @@ const FRAME_LIVE_PICKER_SCRIPT = `
 // Handoff RECORD shim, running inside the sandboxed artifact frame. The host
 // page cannot reach the opaque-origin frame's DOM, so the frame captures its
 // own pointer + scroll events and postMessages them out with a timestamp (ms
-// since arm). Coordinates are clientX/clientY (viewport-relative) plus
-// scrollX/scrollY, so playback on the same artifact version maps them back to
-// the same points. mousemove is rAF-throttled (~30fps); click/scroll fire at
-// native rate. Capture-phase listeners only OBSERVE - no preventDefault - so
-// the artifact behaves normally during recording. Inert until the host sends
+// since arm). Alongside the legacy pixel values it stores normalized viewport
+// coordinates and normalized scroll progress. Playback can therefore follow
+// the same relative point when the recording and viewing windows have different
+// sizes, aspect ratios, or responsive document heights. mousemove is
+// rAF-throttled (~30fps); click/scroll fire at native rate. Capture-phase
+// listeners only OBSERVE - no preventDefault - so the artifact behaves
+// normally during recording. Inert until the host sends
 // oa:handoff:record:arm; disarmed by oa:handoff:record:disarm.
 export const FRAME_HANDOFF_RECORD_SCRIPT = `
 (function(){
@@ -2001,14 +2003,34 @@ export const FRAME_HANDOFF_RECORD_SCRIPT = `
   var THROTTLE_MS=33;
   function now(){ return performance.now()-t0; }
   function curScroll(){ return { sx: window.scrollX||0, sy: window.scrollY||0 }; }
+  function finite(n){ return typeof n==='number'&&isFinite(n)?n:0; }
+  function clamp01(n){ return Math.max(0,Math.min(1,n)); }
+  function viewport(){
+    var d=document.documentElement||{}, b=document.body||{};
+    var vw=finite(window.innerWidth)||finite(d.clientWidth)||1;
+    var vh=finite(window.innerHeight)||finite(d.clientHeight)||1;
+    var cw=finite(d.clientWidth)||vw, ch=finite(d.clientHeight)||vh;
+    var dw=Math.max(vw,finite(d.scrollWidth),finite(b.scrollWidth));
+    var dh=Math.max(vh,finite(d.scrollHeight),finite(b.scrollHeight));
+    return {vw:vw,vh:vh,sxMax:Math.max(0,dw-cw),syMax:Math.max(0,dh-ch)};
+  }
+  function eventData(kind,x,y,sx,sy){
+    var v=viewport(), px=finite(x), py=finite(y), psx=finite(sx), psy=finite(sy);
+    var msg={type:'oa:handoff:event',t:Math.round(now()),kind:kind,x:px,y:py,sx:psx,sy:psy,
+      vw:v.vw,vh:v.vh,sxMax:v.sxMax,syMax:v.syMax,
+      nx:clamp01(px/v.vw),ny:clamp01(py/v.vh),
+      nsx:v.sxMax?clamp01(psx/v.sxMax):0,nsy:v.syMax?clamp01(psy/v.syMax):0};
+    if(kind==='resize'){msg.w=v.vw;msg.h=v.vh;}
+    return msg;
+  }
   function onMove(e){ if(!armed)return; lastX=e.clientX; lastY=e.clientY; dirty=true; }
-  function onClick(e){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'click',x:e.clientX,y:e.clientY,sx:s.sx,sy:s.sy}); }
-  function onScroll(){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'scroll',x:lastX,y:lastY,sx:s.sx,sy:s.sy}); }
-  function onResize(){ if(!armed)return; var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'resize',x:0,y:0,sx:s.sx,sy:s.sy,w:window.innerWidth,h:window.innerHeight}); }
+  function onClick(e){ if(!armed)return; var s=curScroll(); window.__oaSend(eventData('click',e.clientX,e.clientY,s.sx,s.sy)); }
+  function onScroll(){ if(!armed)return; var s=curScroll(); window.__oaSend(eventData('scroll',lastX,lastY,s.sx,s.sy)); }
+  function onResize(){ if(!armed){return;} var s=curScroll(); window.__oaSend(eventData('resize',0,0,s.sx,s.sy)); }
   function tick(){
     if(!armed)return;
     var t=performance.now();
-    if(dirty && t-lastSend>=THROTTLE_MS){ var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:Math.round(now()),kind:'move',x:lastX,y:lastY,sx:s.sx,sy:s.sy}); dirty=false; lastSend=t; }
+    if(dirty && t-lastSend>=THROTTLE_MS){ var s=curScroll(); window.__oaSend(eventData('move',lastX,lastY,s.sx,s.sy)); dirty=false; lastSend=t; }
     raf=requestAnimationFrame(tick);
   }
   function arm(){ if(armed)return; armed=true; t0=performance.now(); dirty=false; lastSend=0;
@@ -2018,7 +2040,7 @@ export const FRAME_HANDOFF_RECORD_SCRIPT = `
     window.addEventListener('resize',onResize);
     document.documentElement.classList.add('oa-handoff-recording');
     raf=requestAnimationFrame(tick);
-    var s=curScroll(); window.__oaSend({type:'oa:handoff:event',t:0,kind:'scroll',x:lastX,y:lastY,sx:s.sx,sy:s.sy});
+    var s=curScroll(); window.__oaSend(eventData('scroll',lastX,lastY,s.sx,s.sy));
     window.__oaSend({type:'oa:handoff:record:ready'});
   }
   function disarm(){ if(!armed)return; armed=false;
@@ -2041,10 +2063,14 @@ export const FRAME_HANDOFF_RECORD_SCRIPT = `
 // Handoff PLAY shim, inside the frame. Receives the recorded event stream from
 // the host (the frame cannot fetch - connect-src 'none') and reproduces a
 // synthetic cursor + click ripples + scroll, driven by its own rAF clock from
-// t=0. The host starts the webcam <video> in the same tick so the two share a
-// t=0; pause/resume/seek/stop are mirrored from the host controls. Visual-only:
-// no real DOM events are dispatched, so replay can never navigate away or
-// trigger destructive actions. Inert until oa:handoff:play arrives.
+// t=0. Normalized viewport coordinates and scroll progress are mapped against
+// the playback frame's current geometry, so a responsive layout can be viewed
+// at a different size or aspect ratio without stretching the timeline's intent.
+// Events from older recordings that lack geometry metadata use their original
+// pixel values. The host starts the webcam <video> in the same tick so the two
+// share a t=0; pause/resume/seek/stop are mirrored from the host controls.
+// Visual-only: no real DOM events are dispatched, so replay can never navigate
+// away or trigger destructive actions. Inert until oa:handoff:play arrives.
 export const FRAME_HANDOFF_PLAY_SCRIPT = `
 (function(){
   if(!window.__oaSend)return;
@@ -2054,10 +2080,38 @@ export const FRAME_HANDOFF_PLAY_SCRIPT = `
   (document.head||document.documentElement).appendChild(st);
   function mkCursor(){ if(cursor)return; cursor=document.createElement('div'); cursor.id='oa-handoff-cursor'; document.body.appendChild(cursor); }
   function ripple(x,y){ var r=document.createElement('div'); r.className='oa-handoff-ripple'; r.style.left=(x-12)+'px'; r.style.top=(y-12)+'px'; r.style.width='24px'; r.style.height='24px'; document.body.appendChild(r); setTimeout(function(){ if(r.parentNode)r.parentNode.removeChild(r); },650); }
+  function finite(n){ return typeof n==='number'&&isFinite(n)?n:0; }
+  function clamp01(n){ return Math.max(0,Math.min(1,n)); }
+  function viewport(){
+    var d=document.documentElement||{}, b=document.body||{};
+    var vw=finite(window.innerWidth)||finite(d.clientWidth)||1;
+    var vh=finite(window.innerHeight)||finite(d.clientHeight)||1;
+    var cw=finite(d.clientWidth)||vw, ch=finite(d.clientHeight)||vh;
+    var dw=Math.max(vw,finite(d.scrollWidth),finite(b.scrollWidth));
+    var dh=Math.max(vh,finite(d.scrollHeight),finite(b.scrollHeight));
+    return {vw:vw,vh:vh,sxMax:Math.max(0,dw-cw),syMax:Math.max(0,dh-ch)};
+  }
+  function point(ev,v){
+    var x=finite(ev.x), y=finite(ev.y);
+    if(typeof ev.nx==='number'&&isFinite(ev.nx))x=clamp01(ev.nx)*v.vw;
+    else if(typeof ev.vw==='number'&&isFinite(ev.vw)&&ev.vw>0)x=clamp01(x/ev.vw)*v.vw;
+    if(typeof ev.ny==='number'&&isFinite(ev.ny))y=clamp01(ev.ny)*v.vh;
+    else if(typeof ev.vh==='number'&&isFinite(ev.vh)&&ev.vh>0)y=clamp01(y/ev.vh)*v.vh;
+    return {x:x,y:y};
+  }
+  function scrollPoint(ev,v){
+    var sx=finite(ev.sx), sy=finite(ev.sy);
+    if(typeof ev.nsx==='number'&&isFinite(ev.nsx))sx=clamp01(ev.nsx)*v.sxMax;
+    else if(typeof ev.sxMax==='number'&&isFinite(ev.sxMax))sx=ev.sxMax?clamp01(sx/ev.sxMax)*v.sxMax:0;
+    if(typeof ev.nsy==='number'&&isFinite(ev.nsy))sy=clamp01(ev.nsy)*v.syMax;
+    else if(typeof ev.syMax==='number'&&isFinite(ev.syMax))sy=ev.syMax?clamp01(sy/ev.syMax)*v.syMax:0;
+    return {sx:sx,sy:sy};
+  }
   function apply(ev){
-    if(ev.kind==='scroll'||ev.kind==='resize'){ if(typeof ev.sx==='number'&&typeof ev.sy==='number'){lastScroll={sx:ev.sx,sy:ev.sy};window.scrollTo(ev.sx,ev.sy);} }
-    else if(ev.kind==='click'){ if(cursor)cursor.style.transform='translate('+ev.x+'px,'+ev.y+'px)'; ripple(ev.x,ev.y); }
-    else if(ev.kind==='move'){ if(cursor)cursor.style.transform='translate('+ev.x+'px,'+ev.y+'px)'; }
+    var v=viewport();
+    if(ev.kind==='scroll'||ev.kind==='resize'){ if(typeof ev.sx==='number'&&typeof ev.sy==='number'){var s=scrollPoint(ev,v);lastScroll=s;window.scrollTo(s.sx,s.sy);} }
+    else if(ev.kind==='click'){ var p=point(ev,v); if(cursor)cursor.style.transform='translate('+p.x+'px,'+p.y+'px)'; ripple(p.x,p.y); }
+    else if(ev.kind==='move'){ var p=point(ev,v); if(cursor)cursor.style.transform='translate('+p.x+'px,'+p.y+'px)'; }
   }
   function curT(){ return playing ? offset+(performance.now()-lastResume) : offset; }
   function resetToStart(){
@@ -2065,7 +2119,7 @@ export const FRAME_HANDOFF_PLAY_SCRIPT = `
     for(var i=0;i<events.length;i++){
       var ev=events[i];
       if((ev.kind==='scroll'||ev.kind==='resize')&&typeof ev.sx==='number'&&typeof ev.sy==='number'){
-        lastScroll={sx:ev.sx,sy:ev.sy}; window.scrollTo(ev.sx,ev.sy); return;
+        var s=scrollPoint(ev,viewport()); lastScroll=s; window.scrollTo(s.sx,s.sy); return;
       }
     }
   }
