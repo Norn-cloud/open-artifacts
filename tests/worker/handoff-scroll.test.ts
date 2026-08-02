@@ -10,6 +10,8 @@ interface MessageEventStub {
 }
 
 interface ViewportOptions {
+  clientHeight?: number;
+  clientWidth?: number;
   height?: number;
   scrollHeight?: number;
   scrollWidth?: number;
@@ -31,6 +33,8 @@ function executeRecordShim(
   >();
   const width = options.width ?? 1440;
   const height = options.height ?? 900;
+  const clientWidth = options.clientWidth ?? width;
+  const clientHeight = options.clientHeight ?? height;
   const scrollWidth = options.scrollWidth ?? width;
   const scrollHeight = options.scrollHeight ?? height;
   const windowStub = {
@@ -61,8 +65,8 @@ function executeRecordShim(
     body: { scrollHeight, scrollWidth },
     documentElement: {
       classList: { add: () => {}, remove: () => {} },
-      clientHeight: height,
-      clientWidth: width,
+      clientHeight,
+      clientWidth,
       scrollHeight,
       scrollWidth,
     },
@@ -109,6 +113,8 @@ function executePlayShim(options: ViewportOptions = {}) {
   let pendingFrame: (() => void) | null = null;
   const width = options.width ?? 1280;
   const height = options.height ?? 720;
+  const clientWidth = options.clientWidth ?? width;
+  const clientHeight = options.clientHeight ?? height;
   const scrollWidth = options.scrollWidth ?? width;
   const scrollHeight = options.scrollHeight ?? 2000;
   const makeElement = () => {
@@ -133,8 +139,8 @@ function executePlayShim(options: ViewportOptions = {}) {
   };
   const documentElement = {
     appendChild: () => {},
-    clientHeight: height,
-    clientWidth: width,
+    clientHeight,
+    clientWidth,
     scrollHeight,
     scrollWidth,
     style: {} as Record<string, string>,
@@ -311,6 +317,34 @@ describe("handoff scroll timeline", () => {
       harness.elements.find((element) => element.id === "oa-handoff-cursor")
         ?.style.transform,
     ).toBe("translate(292.5px,422px)");
+  });
+
+  it("does not invent horizontal scroll space from a classic scrollbar", () => {
+    const harness = executePlayShim({
+      clientWidth: 375,
+      height: 844,
+      scrollHeight: 3844,
+      scrollWidth: 375,
+      width: 390,
+    });
+
+    harness.play([
+      {
+        t: 0,
+        kind: "scroll",
+        nsx: 0.5,
+        nsy: 0,
+        sx: 720,
+        sy: 0,
+        sxMax: 1440,
+        syMax: 2700,
+        vw: 1440,
+        vh: 900,
+      },
+    ]);
+    harness.advance();
+
+    expect(harness.scrolls[0]?.[0]).toBe(0);
   });
 
   it("uses the earliest scroll as a best-effort start for old recordings", () => {

@@ -2010,8 +2010,8 @@ export const FRAME_HANDOFF_RECORD_SCRIPT = `
     var vw=finite(window.innerWidth)||finite(d.clientWidth)||1;
     var vh=finite(window.innerHeight)||finite(d.clientHeight)||1;
     var cw=finite(d.clientWidth)||vw, ch=finite(d.clientHeight)||vh;
-    var dw=Math.max(vw,finite(d.scrollWidth),finite(b.scrollWidth));
-    var dh=Math.max(vh,finite(d.scrollHeight),finite(b.scrollHeight));
+    var dw=Math.max(cw,finite(d.scrollWidth),finite(b.scrollWidth));
+    var dh=Math.max(ch,finite(d.scrollHeight),finite(b.scrollHeight));
     return {vw:vw,vh:vh,sxMax:Math.max(0,dw-cw),syMax:Math.max(0,dh-ch)};
   }
   function eventData(kind,x,y,sx,sy){
@@ -2087,8 +2087,8 @@ export const FRAME_HANDOFF_PLAY_SCRIPT = `
     var vw=finite(window.innerWidth)||finite(d.clientWidth)||1;
     var vh=finite(window.innerHeight)||finite(d.clientHeight)||1;
     var cw=finite(d.clientWidth)||vw, ch=finite(d.clientHeight)||vh;
-    var dw=Math.max(vw,finite(d.scrollWidth),finite(b.scrollWidth));
-    var dh=Math.max(vh,finite(d.scrollHeight),finite(b.scrollHeight));
+    var dw=Math.max(cw,finite(d.scrollWidth),finite(b.scrollWidth));
+    var dh=Math.max(ch,finite(d.scrollHeight),finite(b.scrollHeight));
     return {vw:vw,vh:vh,sxMax:Math.max(0,dw-cw),syMax:Math.max(0,dh-ch)};
   }
   function point(ev,v){
