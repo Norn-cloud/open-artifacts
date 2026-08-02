@@ -547,15 +547,6 @@ function headerHtml(
     liveEnabled && canManage
       ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span><span class="oa-live-connection" data-live-connection hidden>Connected</span></button>`
       : "";
-  const liveGuide =
-    liveEnabled && canManage && artifactId
-      ? `<div id="oa-live-guide" class="oa-live-guide" role="dialog" aria-labelledby="oa-live-guide-title" hidden>
-  <div class="oa-live-guide-head"><strong id="oa-live-guide-title">Live agent not connected</strong><button id="oa-live-guide-close" class="oa-live-guide-close" type="button">Close</button></div>
-  <p>Copy this prompt to the coding agent, then keep its Live watcher running while you make edits here.</p>
-  <textarea id="oa-live-guide-text" class="oa-live-guide-text" readonly aria-label="Live watcher startup prompt"></textarea>
-  <div class="oa-live-guide-actions"><button id="oa-live-guide-copy" class="oa-live-guide-copy" type="button">Copy start prompt</button></div>
-</div>`
-      : "";
   // The Handoff toggle opens the record/play dock. Record is owner-only
   // (write-gated server-side); Play is open to any viewer. The button is shown
   // to owners (Record + Play) and to viewers who have a handoff to Play — but
@@ -589,7 +580,7 @@ function headerHtml(
     </div>
   </div>
 </header>`;
-  return `${header}${liveGuide}`;
+  return header;
 }
 
 // The comments drawer is surrounding-chrome rendered into the same sandboxed
@@ -887,7 +878,7 @@ const LIVE_CSS = `
 @media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="on"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
 @keyframes oa-live-agent-pulse{to{box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 5px transparent}}
 .oa-live-guide[hidden]{display:none}
-.oa-live-guide{position:fixed;top:calc(var(--oa-header-h) + .5rem);right:.75rem;z-index:2147483647;width:min(27rem,calc(100vw - 1.5rem));padding:.85rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-bg);color:var(--oa-fg);box-shadow:0 8px 28px -6px color-mix(in oklab,var(--oa-fg),transparent 78%);font-family:var(--oa-font);font-size:.8rem;line-height:1.45;pointer-events:auto}
+.oa-live-guide{width:100%;box-sizing:border-box;padding:.75rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font);font-size:.8rem;line-height:1.45}
 .oa-live-guide-head{display:flex;align-items:center;gap:.75rem}
 .oa-live-guide-head strong{flex:1;font-size:.85rem;font-weight:600}
 .oa-live-guide-close{border:0;background:transparent;color:var(--oa-muted);font:inherit;font-size:.75rem;cursor:pointer;padding:.25rem;border-radius:4px}
@@ -902,7 +893,7 @@ const LIVE_CSS = `
 .oa-live-guide-copy:active{transform:translateY(1px)}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
+#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645}
 #oa-live-chips{display:flex;flex-direction:column;gap:.35rem;min-height:0;overflow-y:auto;padding:.1rem}
 #oa-live-chips:empty{display:none}
 #oa-live-chips .oa-live-chip{position:relative;display:block;padding:.5rem .6rem .5rem .65rem;border-radius:8px;background:color-mix(in oklab,var(--oa-surface),transparent 4%);border:0;font-size:.8rem;line-height:1.4}
@@ -1405,9 +1396,22 @@ function stampNonceOnUserScripts(html: string, nonce: string): string {
 // `generate` to the LiveObject; the agent edits source, republishes, and
 // replies `done`; the host reloads the frame to show the result. One shot,
 // no variant cycling.
-function liveChromeHtml(wsUrl: string, artifactId: string): string {
+function liveChromeHtml(
+  wsUrl: string,
+  artifactId: string,
+  canManage: boolean,
+): string {
+  const guide = canManage
+    ? `<div id="oa-live-guide" class="oa-live-guide" role="dialog" aria-labelledby="oa-live-guide-title" hidden>
+      <div class="oa-live-guide-head"><strong id="oa-live-guide-title">Live agent not connected</strong><button id="oa-live-guide-close" class="oa-live-guide-close" type="button">Close</button></div>
+      <p>Copy this prompt to the coding agent, then keep its Live watcher running while you make edits here.</p>
+      <textarea id="oa-live-guide-text" class="oa-live-guide-text" readonly aria-label="Live watcher startup prompt"></textarea>
+      <div class="oa-live-guide-actions"><button id="oa-live-guide-copy" class="oa-live-guide-copy" type="button">Copy start prompt</button></div>
+    </div>`
+    : "";
   return `<div id="oa-live-root" hidden>
   <div id="oa-live-dock">
+    ${guide}
     <div id="oa-live-status" role="status" aria-live="polite"></div>
     <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
       <span class="oa-dock-btn oa-dock-btn--active oa-dock-btn--indicator" id="oa-live-pick-toggle" title="Pick mode is on"><span class="oa-dock-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-dock-label">Pick</span></span>
@@ -1504,7 +1508,9 @@ const LIVE_SCRIPT = `
   function showGuide(){
     if(!liveGuide)return;
     liveGuide.hidden=false;
-    if(guideCopy)guideCopy.focus();
+    // The guide lives inside the dock, which is still hidden until the
+    // toggle's click handler opens it. Defer focus until the dock is visible.
+    setTimeout(function(){ if(!root.hidden&&liveGuide&&!liveGuide.hidden&&guideCopy)guideCopy.focus(); },0);
   }
   function markGuideCopied(ok){
     if(!guideCopy)return;
@@ -1961,7 +1967,7 @@ export function hostShell(options: HostShellOptions): string {
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
-${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId) : ""}
+${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId, canManage) : ""}
 ${handoffEnabled ? handoffChromeHtml(artifactId, handoffList, Number(currentVersion ?? 1)) : ""}
 ${commentsDataScript(commentsList)}
 <script nonce="${nonce}">window.__oaViewedVersion=${Number(currentVersion ?? 1)};window.__oaCanManage=${canManage};</script>
