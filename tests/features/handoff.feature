@@ -108,6 +108,13 @@ Feature: Handoff recording (one per version)
     Then the artifact resets to the recorded starting position before playback advances
     And handoffs recorded before the t=0 event remain playable using their earliest scroll
 
+  Scenario: Playback adapts to a different recording viewport
+    Given the owner records pointer and scroll events in a 1440x900 viewport
+    When a viewer plays the handoff in a 390x844 viewport with a different aspect ratio
+    Then pointer positions are mapped from normalized viewport coordinates
+    And page scroll is mapped from normalized scroll progress for the current document
+    And handoffs without geometry metadata remain playable using their legacy pixels
+
   Scenario: Playback reads are view-gated like the artifact
     When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
     And a handoff exists for a private artifact
