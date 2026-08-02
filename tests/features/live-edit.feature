@@ -78,7 +78,9 @@ Feature: Live editing
     And a generate event arrives
     Then the watch auto-replies ack and prints the event on stdout
     And the watch polls GET /api/artifacts/<id>/live/status at a bounded interval until the event leaves pendingEvents before polling the next event
-    But `--ack-timeout=0` disables the wait and restores fire-and-forget polling
+    But when a newer generate event arrives during the wait, the watch delivers it immediately
+    And the newer poll excludes in-flight event ids so a lease-expired event is never re-delivered
+    And `--ack-timeout=0` disables the wait and restores fire-and-forget polling
     And a standalone `node artifact.mjs live <id> --wait-ack <eid>` blocks until that event is cleared or the ack timeout elapses
 
   Scenario: An observed exit is consumed so it does not poison a new session
@@ -86,3 +88,31 @@ Feature: Live editing
     And the agent's watcher observes the exit via pollOnce or /live/status during an ack-wait
     Then the watcher POSTs /api/artifacts/<id>/live/consume-exit to drop the exit row
     And a new `node artifact.mjs live <id> --watch` started within the GC window does not break on the stale exit
+
+  Scenario: The watcher heartbeats so the viewer shows it is online
+    When the deploy binds a LIVE_DO Durable Object (SQLite, class LiveObject)
+    And the agent CLI runs `node artifact.mjs live <id> --watch`
+    Then the watcher POSTs /api/artifacts/<id>/live/heartbeat on a fixed interval while watching
+    And GET /api/artifacts/<id>/live/status reports agentActive true with a lastAgentSeen timestamp
+    But before any heartbeat, GET /api/artifacts/<id>/live/status reports agentActive false
+    And the heartbeat route is write-gated (sk_/wt_/ch_), like poll and reply
+    And the heartbeat route 404s when the deploy has no LIVE_DO binding
+
+  Scenario: Create advertises live support and the CLI prompts to start the watcher
+    When the deploy binds a LIVE_DO Durable Object
+    Then POST /api/artifacts returns liveSupported true
+    But a deploy without the binding returns liveSupported false
+    And a logged-in (sk_) create prints a tip to start `live <id> --watch` and how the user operates the Live bar
+    But a create without an sk_ token prints no such tip
+
+  Scenario: The generate event carries the user's annotations
+    When the user opens Live in the viewer
+    Then the host arms the frame picker and enables annotations (oa:live:annot:enable)
+    And on submit the host collects the frame's annotations (oa:live:annot:collect)
+    And the frame replies oa:live:annot:data with comments, strokes, and a screenshot when capturable
+    And the host sends generate with those comments/strokes/screenshot, or omits them when empty
+
+  Scenario: A live poll failure tells the operator why
+    When the agent CLI polls /api/artifacts/<id>/live/poll and the instance responds 401, 403, or 404
+    Then the one-shot `live <id>` exits with a hint naming the artifact/token problem
+    And `--watch` prints the hint once and keeps retrying

@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -118,6 +118,13 @@ let nextRaw: { contentType: string; body: string } | null = null;
 // request and is blocked awaiting the reply. Stands in for another process
 // touching shared state mid-round-trip, so a test can assert the CLI re-reads.
 let onRequest: (() => void) | null = null;
+// Long-lived process tests (live --watch) need to hold a poll response open
+// until the test is ready to release it. When holdPoll is set, a GET
+// /live/poll request does not respond immediately; releasePoll() completes it.
+let holdPoll = false;
+let releasePoll:
+  | ((status: number, body: Record<string, unknown>) => void)
+  | null = null;
 let projectDir: string;
 
 beforeAll(async () => {
@@ -145,6 +152,18 @@ beforeAll(async () => {
         nextRaw = null;
         res.writeHead(200, { "content-type": preset.contentType });
         res.end(preset.body);
+        return;
+      }
+      if (
+        holdPoll &&
+        req.method === "GET" &&
+        (req.url ?? "").includes("/live/poll")
+      ) {
+        releasePoll = (status, body) => {
+          releasePoll = null;
+          res.writeHead(status, { "content-type": "application/json" });
+          res.end(JSON.stringify(body));
+        };
         return;
       }
       const preset = nextResponse;
@@ -185,6 +204,8 @@ beforeEach(() => {
   nextResponse = null;
   nextRaw = null;
   onRequest = null;
+  holdPoll = false;
+  releasePoll = null;
   projectDir = mkdtempSync(join(tmpdir(), "oa-cli-"));
   mkdirSync(join(projectDir, ".git"));
   mkdirSync(join(projectDir, "src"));
@@ -2733,6 +2754,140 @@ describe("create visibility and org metadata", () => {
       visibility: "public",
       orgId: "org-from-recipe",
     });
+  });
+});
+
+describe("create live-mode guidance", () => {
+  // A function, not a const: apiUrl is only assigned in beforeAll, which runs
+  // after this describe's body evaluates.
+  const liveCapableBody = () => ({
+    id: "testid123456",
+    url: `${apiUrl}/a/testid123456`,
+    writeToken: `wt_${"x".repeat(43)}`,
+    version: 1,
+    liveSupported: true,
+  });
+
+  it("prints the watcher tip on stderr when the instance is live-capable and logged in with sk_", async () => {
+    const { recipePath } = writeRecipe();
+    nextResponse = { status: 201, body: liveCapableBody() };
+    const result = await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_API_KEY: `sk_${"k".repeat(40)}` },
+    });
+    // stdout stays the machine-readable URL; the tip is a stderr tip.
+    expect(result.stdout.trim()).toBe(`${apiUrl}/a/testid123456`);
+    expect(result.stderr).toContain("live mode:");
+    expect(result.stderr).toContain("--watch");
+    expect(result.stderr).toContain("clicks Live");
+  });
+
+  it("prints no watcher tip when the instance does not support live", async () => {
+    const { recipePath } = writeRecipe();
+    nextResponse = {
+      status: 201,
+      body: { ...liveCapableBody(), liveSupported: false },
+    };
+    const result = await run(["create", recipePath], {
+      env: { OPEN_ARTIFACTS_API_KEY: `sk_${"k".repeat(40)}` },
+    });
+    expect(result.stderr).not.toContain("live mode:");
+  });
+
+  it("prints no watcher tip without a logged-in sk_ token", async () => {
+    const { recipePath } = writeRecipe();
+    nextResponse = { status: 201, body: liveCapableBody() };
+    const result = await run(["create", recipePath]);
+    expect(result.stderr).not.toContain("live mode:");
+  });
+});
+
+// Spawn a long-lived CLI process (live --watch) and collect its output; the
+// caller decides when it ends (via holdPoll/releasePoll, or kill as a
+// backstop). execFileAsync's promise exposes no .kill(), so use spawn here.
+function spawnCli(
+  args: string[],
+  env: Record<string, string>,
+): {
+  child: ReturnType<typeof spawn>;
+  done: Promise<{ stdout: string; stderr: string; code: number }>;
+} {
+  const child = spawn(process.execPath, [SCRIPT, ...args], {
+    cwd: projectDir,
+    env: { ...cleanEnv(), OPEN_ARTIFACTS_URL: apiUrl, ...env },
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (d: Buffer) => {
+    stdout += d;
+  });
+  child.stderr.on("data", (d: Buffer) => {
+    stderr += d;
+  });
+  const done = new Promise<{ stdout: string; stderr: string; code: number }>(
+    (resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ stdout, stderr, code: code ?? 1 }));
+    },
+  );
+  return { child, done };
+}
+
+describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
+  const skEnv = { OPEN_ARTIFACTS_API_KEY: `sk_${"k".repeat(40)}` };
+
+  it("POSTs /live/heartbeat on the configured interval and stops cleanly on exit", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "50",
+    });
+    try {
+      // Give the watcher time to open the poll and fire a few heartbeats.
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stderr } = await done;
+      const beats = requests.filter(
+        (r) => r.method === "POST" && r.path.includes("/live/heartbeat"),
+      );
+      expect(beats.length).toBeGreaterThanOrEqual(2);
+      expect(stderr).toContain("session ended");
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
+  it("one-shot live poll reports the artifact/token hint on 404", async () => {
+    nextResponse = { status: 404, body: { error: "not found" } };
+    const result = await run(["live", "testid123456"], {
+      env: skEnv,
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("not authorized");
+    expect(result.stderr).toContain("whoami");
+  });
+
+  it("watch prints the auth hint once on 404, then keeps retrying", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      // First poll → 404 (definitive auth-class failure): the watcher prints
+      // the hint once, then backs off and retries (second poll held again).
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(404, { error: "not found" });
+      await new Promise((r) => setTimeout(r, 2600));
+      expect(releasePoll).not.toBe(null);
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stderr } = await done;
+      expect(stderr).toContain("not authorized");
+      expect(stderr).toContain("retrying in 2s");
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
   });
 });
 

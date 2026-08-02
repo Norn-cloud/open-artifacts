@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hasExit,
+  hasNewEvent,
   isEventPending,
   waitForEventAck,
 } from "../../skills/using-open-artifacts/scripts/lib/live-ack.mjs";
@@ -12,7 +13,7 @@ const ev = (id: string, type: string) => ({
   created_at: 0,
 });
 
-describe("live-ack: isEventPending / hasExit", () => {
+describe("live-ack: isEventPending / hasExit / hasNewEvent", () => {
   it("isEventPending matches by id", () => {
     const status = { pendingEvents: [ev("ev1", "generate")] };
     expect(isEventPending(status, "ev1")).toBe(true);
@@ -25,6 +26,19 @@ describe("live-ack: isEventPending / hasExit", () => {
     expect(hasExit({ pendingEvents: [ev("e", "exit")] })).toBe(true);
     expect(hasExit({ pendingEvents: [ev("ev1", "generate")] })).toBe(false);
     expect(hasExit(undefined)).toBe(false);
+  });
+
+  it("hasNewEvent detects a generate the watcher has not delivered yet", () => {
+    const known = new Set(["ev1"]);
+    const status = {
+      pendingEvents: [ev("ev1", "generate"), ev("ev2", "generate")],
+    };
+    expect(hasNewEvent(status, known)).toBe(true);
+    // An in-flight event (already delivered, waiting on its own ack) is not new.
+    expect(hasNewEvent(status, new Set(["ev1", "ev2"]))).toBe(false);
+    // Without a knownIds set (standalone --wait-ack), no new-event detection.
+    expect(hasNewEvent(status, null)).toBe(false);
+    expect(hasNewEvent({ pendingEvents: [] }, known)).toBe(false);
   });
 });
 
@@ -95,5 +109,46 @@ describe("live-ack: waitForEventAck", () => {
     });
     expect(result).toBe("cleared");
     expect(i).toBe(2);
+  });
+
+  it("returns new when a newer generate appears while the target is still pending", async () => {
+    const known = new Set(["ev1"]);
+    const seq = [
+      { pendingEvents: [ev("ev1", "generate"), ev("ev2", "generate")] },
+    ];
+    const fetchStatus = async () => seq[0];
+    const result = await waitForEventAck(fetchStatus, "ev1", {
+      pollIntervalMs: 5,
+      maxWaitMs: 1000,
+      knownIds: known,
+    });
+    expect(result).toBe("new");
+  });
+
+  it("does not return new for already-delivered in-flight events", async () => {
+    const known = new Set(["ev1", "ev2"]);
+    const status = {
+      pendingEvents: [ev("ev1", "generate"), ev("ev2", "generate")],
+    };
+    const fetchStatus = async () => status;
+    const result = await waitForEventAck(fetchStatus, "ev2", {
+      pollIntervalMs: 5,
+      maxWaitMs: 20,
+      knownIds: known,
+    });
+    // No undelivered generate exists — waits out the deadline like before.
+    expect(result).toBe("timeout");
+  });
+
+  it("new-event detection is off without knownIds (standalone --wait-ack)", async () => {
+    const status = {
+      pendingEvents: [ev("ev1", "generate"), ev("ev2", "generate")],
+    };
+    const fetchStatus = async () => status;
+    const result = await waitForEventAck(fetchStatus, "ev1", {
+      pollIntervalMs: 5,
+      maxWaitMs: 20,
+    });
+    expect(result).toBe("timeout");
   });
 });

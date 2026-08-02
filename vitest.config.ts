@@ -5,6 +5,15 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
+      // Bind LIVE_DO in the pool so the bound-path live tests can run. The
+      // no-binding contract stays covered: live.test.ts passes an explicit
+      // { ...env, LIVE_DO: undefined } env for the 404 suite. Mirrors
+      // wrangler.dev.jsonc's durable_objects + exports (SQLite DO).
+      miniflare: {
+        durableObjects: {
+          LIVE_DO: { className: "LiveObject", useSQLite: true },
+        },
+      },
     }),
   ],
   test: {
