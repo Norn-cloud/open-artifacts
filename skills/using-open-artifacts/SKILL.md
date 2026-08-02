@@ -197,8 +197,8 @@ links, plus the frame and freeform contracts and a canvas ship-gate.
 
 Live editing is available only when the instance binds `LIVE_DO`; it requires
 the artifact owner's `sk_` session and edits local Recipe sources before an
-ordinary `update`. Read [live.md](references/live.md) before starting a live
-session. A deploy with `OPEN_ARTIFACTS_HANDOFF=1` may also expose host-side
+in-place `update --live`. Read [live.md](references/live.md) before starting a
+live session. A deploy with `OPEN_ARTIFACTS_HANDOFF=1` may also expose host-side
 webcam/microphone recording and playback; it is viewer chrome, not a Recipe
 format or an artifact-side API. Both surfaces are optional and may be absent
 on self-hosted instances.
@@ -328,9 +328,11 @@ picking elements, or typing prompts on the artifact page). The user drives the
 viewer: they open the artifact URL, click Live, pick elements, type a change
 for each, and submit; your watcher prints each `generate` event for you to act
 on (edit the Recipe sources, `update`, reply `done`). The viewer's Live button
-shows a dot while your watcher is connected, so the user can see an agent is
-online before they start picking. Read [references/live.md](references/live.md)
-before the session.
+shows `Connected` while your watcher is connected, so the user can see an agent
+is online before they start picking. If no watcher is connected, clicking Live
+still opens the picker and also shows a copyable startup prompt; start the
+watcher before submitting an edit. Read
+[references/live.md](references/live.md) before the session.
 
 ## Updating
 
@@ -350,6 +352,10 @@ not a Recipe path. A legacy Manifest v1 entry is migrated automatically; run
 before publishing. A 409 version conflict means another writer published
 first; review the current version and use `--force` only when overwriting it is
 intentional. `--label` is capped at 60 UTF-8 bytes.
+
+For a change requested through Live, use `node "$ARTIFACT_CLI" update <id> --live`
+after editing the Recipe. This replaces the currently served version in place:
+an artifact at v10 remains v10, and a later ordinary `update` creates v11.
 
 `build <recipe> --output <path>` writes an explicit local preview; add
 `--standalone` only for an HTML Recipe. `list`, `show <id> [--v N]`, and

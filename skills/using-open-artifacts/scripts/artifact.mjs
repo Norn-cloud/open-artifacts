@@ -612,7 +612,7 @@ async function commandCreate(recipePath, flags) {
       `live mode: this instance supports live editing. Start the watcher and keep it running: ` +
         `node artifact.mjs live ${json.id} --watch — the user opens ${json.url}, clicks Live, picks ` +
         `elements, types a change for each, and submits. Your watcher prints each generate event; ` +
-        `the viewer's Live button shows a dot while it is online (references/live.md).`,
+        `the viewer's Live button shows Connected while it is online (references/live.md).`,
     );
   }
 }
@@ -636,7 +636,12 @@ function findEntry(manifest, id) {
   return entry;
 }
 
-async function commandUpdate(id, recipePath, flags) {
+async function commandUpdate(
+  id,
+  recipePath,
+  flags,
+  inPlace = flags.live === true,
+) {
   const config = loadConfig(flags);
   const merged = loadManifest();
   const entry = findEntry(merged, id);
@@ -646,7 +651,7 @@ async function commandUpdate(id, recipePath, flags) {
   const sourceRecipe = recipePath ?? entry.recipe;
   if (!sourceRecipe) {
     const migratedRecipe = await commandMigrate(id, flags);
-    return commandUpdate(id, migratedRecipe, flags);
+    return commandUpdate(id, migratedRecipe, flags, inPlace);
   }
   const prepared = await prepareRecipePayload(sourceRecipe, flags, id);
   const { artifact, build, password, payload } = prepared;
@@ -655,7 +660,7 @@ async function commandUpdate(id, recipePath, flags) {
 
   const { status, json } = await request(
     "PUT",
-    `${config.apiUrl}/api/artifacts/${id}`,
+    `${config.apiUrl}/api/artifacts/${id}${inPlace ? "/live" : ""}`,
     payload,
     token,
   );
@@ -713,7 +718,7 @@ async function commandUpdate(id, recipePath, flags) {
 
   console.log(json.url ?? entry.url);
   console.error(
-    `updated artifact ${id} to version ${json.version} (${build.plan.strategy} Recipe build)`,
+    `updated artifact ${id} ${inPlace ? "in place at" : "to"} version ${json.version} (${build.plan.strategy} Recipe build)`,
   );
 }
 
@@ -1716,13 +1721,15 @@ async function commandLive(rest, flags) {
     20_000,
     1,
   );
-  const heartbeatTimer = setInterval(async () => {
+  const heartbeat = async () => {
     try {
       await fetchJson("POST", `${base}/heartbeat`);
     } catch {
       // transient; presence decays server-side
     }
-  }, heartbeatMs);
+  };
+  void heartbeat();
+  const heartbeatTimer = setInterval(heartbeat, heartbeatMs);
   // Ids delivered this session (grow-only). Passed as the poll exclude so a
   // lease-expired, unreplied event is never re-delivered ahead of newer ones,
   // even when the ack-wait early-returns on a new submission.
@@ -1817,7 +1824,8 @@ commands:
   build <recipe>       write an explicit preview/export (requires --output)
   create <recipe>      build in memory and publish exactly once
   update <id> [recipe] build in memory and redeploy at the same URL; defaults
-                       to the Recipe recorded in Manifest v2
+                       to the Recipe recorded in Manifest v2; --live replaces
+                       the currently served version in place
   migrate <id>         create a Recipe and fragments for a legacy artifact;
                        does not publish until update is run
   status               report artifacts whose watched files changed (exit 1 if stale)
@@ -1859,6 +1867,7 @@ options:
   --provider <name>    (login) google or github OAuth provider
   --port <n>           (login) loopback callback port (default: ephemeral)
   --force              overwrite on version conflict
+  --live               (update) replace the current version without creating a new one
   --v <n>              (show) view a specific version's content
   --hook               (status) emit Claude Code hook JSON instead of text
   --ack-timeout <ms>   (live --watch/--wait-ack) max wait for an event's done
@@ -1886,6 +1895,7 @@ async function main() {
       provider: { type: "string" },
       port: { type: "string" },
       force: { type: "boolean" },
+      live: { type: "boolean" },
       hook: { type: "boolean" },
       v: { type: "string" },
       reply: { type: "string" },
@@ -1920,7 +1930,7 @@ async function main() {
       break;
     case "update":
       if (!rest[0]) fail("update requires an artifact id");
-      await commandUpdate(rest[0], rest[1], flags);
+      await commandUpdate(rest[0], rest[1], flags, flags.live === true);
       break;
     case "migrate":
       if (!rest[0]) fail("migrate requires an artifact id");

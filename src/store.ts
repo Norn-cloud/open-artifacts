@@ -52,6 +52,10 @@ export interface ArtifactStore {
     record: ArtifactRecord,
     input: UpdateInput,
   ): Promise<number | { conflict: true; currentVersion: number }>;
+  replaceCurrent(
+    record: ArtifactRecord,
+    input: UpdateInput,
+  ): Promise<number | { conflict: true; currentVersion: number }>;
   delete(id: string): Promise<void>;
   updateVisibility(id: string, visibility: Visibility): Promise<void>;
   listComments(artifactId: string): Promise<CommentMeta[]>;
@@ -654,6 +658,107 @@ export class D1R2Store implements ArtifactStore {
         now,
       )
       .run();
+
+    return version;
+  }
+
+  async replaceCurrent(
+    record: ArtifactRecord,
+    input: UpdateInput,
+  ): Promise<number | { conflict: true; currentVersion: number }> {
+    let now = new Date().toISOString();
+    if (now === record.updatedAt) {
+      now = new Date(Date.now() + 1).toISOString();
+    }
+    const version = record.currentVersion;
+    const encrypted = input.encrypted !== null;
+    const title = input.title ?? record.title;
+    const description = input.description ?? record.description;
+    const favicon = input.favicon ?? record.favicon;
+    const format = input.format ?? record.format;
+
+    // Live edits intentionally keep the current version number. The CAS still
+    // protects the in-place replacement from overwriting a normal versioned
+    // or another Live update that landed after the browser/agent read its
+    // snapshot. updated_at is the mutation marker because current_version is
+    // intentionally unchanged by this operation.
+    const claimed = await this.db
+      .prepare(
+        `UPDATE artifacts
+         SET title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, updated_at = ?
+         WHERE id = ? AND current_version = ? AND updated_at = ?`,
+      )
+      .bind(
+        title,
+        description,
+        favicon,
+        format,
+        encrypted ? 1 : 0,
+        now,
+        record.id,
+        record.currentVersion,
+        record.updatedAt,
+      )
+      .run();
+
+    if (claimed.meta.changes === 0) {
+      const fresh = await this.get(record.id);
+      return {
+        conflict: true,
+        currentVersion: fresh?.currentVersion ?? version,
+      };
+    }
+
+    await this.bucket.put(
+      contentKey(record.id, version),
+      contentObjectBody(input.content, input.encrypted),
+      { customMetadata: { encrypted: encrypted ? "1" : "0" } },
+    );
+
+    // Keep the history row for this version, but refresh the metadata and size
+    // that the version picker displays. Its original created_at remains the
+    // creation time of the version, not the time of a later Live edit.
+    const updated = await this.db
+      .prepare(
+        `UPDATE versions
+         SET label = ?, title = ?, description = ?, favicon = ?, format = ?, encrypted = ?, size = ?
+         WHERE artifact_id = ? AND version = ?`,
+      )
+      .bind(
+        input.label,
+        title,
+        description,
+        favicon,
+        format,
+        encrypted ? 1 : 0,
+        contentByteLength(input.content),
+        record.id,
+        version,
+      )
+      .run();
+
+    // All current artifacts have a matching versions row, but inserting here
+    // keeps a legacy database repairable if that row was missing already.
+    if (updated.meta.changes === 0) {
+      await this.db
+        .prepare(
+          `INSERT INTO versions (artifact_id, version, label, title, description, favicon, format, encrypted, size, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          record.id,
+          version,
+          input.label,
+          title,
+          description,
+          favicon,
+          format,
+          encrypted ? 1 : 0,
+          contentByteLength(input.content),
+          record.updatedAt,
+        )
+        .run();
+    }
 
     return version;
   }

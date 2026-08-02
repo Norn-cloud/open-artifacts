@@ -186,7 +186,7 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
     expect(html).toContain("window.__oaRestoreHeaderControlFocus(toggle)");
   });
 
-  it("keeps primary controls before the account slot and brand", async () => {
+  it("keeps handoff, comments, and theme before the account slot and brand", async () => {
     const { id } = await createArtifact(ON_BRANDED);
     const res = await ownerFetchWith(
       new Request(`${BASE}/a/${id}`),
@@ -206,8 +206,8 @@ describe("handoff chrome with OPEN_ARTIFACTS_HANDOFF=1", () => {
 
     expect(headerStart).toBeGreaterThan(-1);
     expect(panelStart).toBeGreaterThan(-1);
-    expect(handoff).toBeLessThan(brand);
-    expect(comments).toBeLessThan(account);
+    expect(handoff).toBeLessThan(comments);
+    expect(comments).toBeLessThan(theme);
     expect(theme).toBeLessThan(account);
     expect(account).toBeLessThan(brand);
   });

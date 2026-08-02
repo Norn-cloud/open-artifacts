@@ -231,13 +231,13 @@ toward the accent (`color-mix(in oklab, var(--oa-accent), transparent 88%)`).
 SVG icons are `16×16`, `display: block`, centered.
 
 ### Header
-Sticky, backdrop-blurred, 2.5rem tall. Favicon + title (ellipsis, `0.8rem`/600)
-left; version picker, visibility, account chip, comments toggle, live toggle,
-handoff toggle, theme toggle trail right. `--oa-header-h` is exposed so artifact
+Sticky, backdrop-blurred, 2.5rem tall. The favicon + title leads from the left;
+the right-side controls trail orders version picker, visibility, Live, Handoff,
+comments, theme, account chip, and brand. `--oa-header-h` is exposed so artifact
 sticky bars and full-viewport sections clear it. At `52rem` and below, a More
-button discloses the secondary controls in a labeled panel with outside-click
-and Escape dismissal; comments and theme stay one tap away. A dock launched
-from the panel returns focus to More when it closes, never to a hidden control.
+button discloses the same ordered controls in a labeled panel with outside-click
+and Escape dismissal. A dock launched from the panel returns focus to More when
+it closes, never to a hidden control.
 
 ### Select (version / visibility)
 `28px` min-height, `6px` radius, 1px border, `--oa-bg` fill (shadcn trigger),

@@ -1997,6 +1997,33 @@ describe("Recipe publishing", () => {
     expect(manifest().artifacts[0].version).toBe(2);
   });
 
+  it("updates the current version in place for Live edits", async () => {
+    const built = writeRecipe();
+    await run(["create", built.recipePath]);
+    writeFileSync(
+      built.bodyPath,
+      '<main class="oa-prose"><h1>Live edit</h1></main>\n',
+    );
+    nextResponse = {
+      status: 200,
+      body: {
+        id: "testid123456",
+        url: "http://127.0.0.1/a/testid123456",
+        version: 1,
+      },
+    };
+
+    await run(["update", "testid123456", "--live"]);
+
+    expect(requests[1]).toMatchObject({
+      method: "PUT",
+      path: "/api/artifacts/testid123456/live",
+    });
+    expect(requests[1].body.baseVersion).toBe(1);
+    expect(requests[1].body.content).toContain("Live edit");
+    expect(manifest().artifacts[0].version).toBe(1);
+  });
+
   it("keeps Manifest hashes unchanged on a version conflict", async () => {
     const built = writeRecipe();
     await run(["create", built.recipePath]);

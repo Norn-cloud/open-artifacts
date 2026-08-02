@@ -390,6 +390,27 @@ describe("GET /a/:id (plain HTML) — host page", () => {
     expect(rule).toContain("margin:0");
   });
 
+  it("orders handoff, comments, theme, account, and brand in the header trail", async () => {
+    const created = await create({ content: "<p>header order</p>" });
+    const html = await (
+      await exports.default.fetch(`${BASE}/a/${created.id}`)
+    ).text();
+    const panel = html.indexOf('<div id="oa-header-panel"');
+    const handoff = html.indexOf('<button class="oa-handoff-toggle"', panel);
+    const comments = html.indexOf('<button class="oa-cm-toggle"', panel);
+    const theme = html.indexOf('<button id="oa-theme-toggle"', panel);
+    const account = html.indexOf('<span id="oa-account-slot"', panel);
+    const brand = html.indexOf('<a class="oa-brand"', panel);
+
+    expect(panel).toBeGreaterThan(-1);
+    expect(handoff).toBe(-1);
+    expect(comments).toBeGreaterThan(panel);
+    expect(comments).toBeLessThan(theme);
+    expect(theme).toBeLessThan(account);
+    expect(brand === -1 || account < brand).toBe(true);
+    expect(html).toContain("toggle.parentNode.insertBefore(arm,toggle)");
+  });
+
   it("keeps the title and primary actions usable when secondary controls collapse", async () => {
     const title = "A deliberately long artifact title for a narrow viewport";
     const created = await create({ content: "<p>first</p>", title });

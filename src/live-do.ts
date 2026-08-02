@@ -57,7 +57,7 @@ const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
 // A watcher heartbeats roughly every 20s; an agent that has not been seen
-// within this window is treated as offline (the viewer's Live dot drops).
+// within this window is treated as offline (the viewer's Connected indicator clears).
 const AGENT_ACTIVE_WINDOW_MS = 60_000;
 
 export class LiveObject extends DurableObject<Record<string, unknown>> {

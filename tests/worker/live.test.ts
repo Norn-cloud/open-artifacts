@@ -193,6 +193,19 @@ describe("live routes without LIVE_DO binding", () => {
     expect(res.status).toBe(404);
   });
 
+  it("PUT /api/artifacts/:id/live returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}/live`, {
+        content: "<p>live</p>",
+        baseVersion: 1,
+      }),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("the viewer host page renders no Live button without the binding", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), OFF, true);
@@ -222,6 +235,18 @@ describe("live routes with LIVE_DO bound", () => {
     expect(html).toContain("oa-live-toggle");
     expect(html).toContain("oa-live-root");
     expect(html).toContain("oa-live-config");
+    expect(html).toContain("oa-live-connection");
+    expect(html).toContain("Copy start prompt");
+    expect(html).toContain("navigator.clipboard.writeText");
+    // Offline guidance must not block the Live toggle from opening the picker.
+    expect(html).toContain(
+      "if(root.hidden&&agentOnline===false)showGuide();else hideGuide();",
+    );
+    // If the first arm message races the iframe load, oa:ready re-arms it
+    // while the newly opened dock is still in PICKING.
+    expect(html).toContain(
+      "else if(!root.hidden&&state==='PICKING'&&!draft){ toFrame({type:'oa:live:pick:arm'});",
+    );
     // The annotation pipeline: the host arms the frame picker AND enables the
     // annot overlay, and collects the frame's annotations before submit.
     expect(html).toContain("oa:live:annot:enable");
@@ -234,6 +259,89 @@ describe("live routes with LIVE_DO bound", () => {
     // live script exposes the push hook, and the comments submit calls it.
     expect(html).toContain("__oaLivePush");
     expect(html).toContain('__oaLivePush({type:"comment"');
+  });
+
+  it("locks element picking while the selected element prompt is open", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+
+    const hostPickStart = html.indexOf("if(d.type==='oa:element:picked')");
+    expect(hostPickStart).toBeGreaterThanOrEqual(0);
+    expect(html.slice(hostPickStart, hostPickStart + 300)).toContain(
+      "oa:live:pick:lock",
+    );
+
+    const frameRes = await fetchWith(new Request(`${BASE}/a/${id}/frame`), ON);
+    const frameHtml = await frameRes.text();
+    const framePickStart = frameHtml.indexOf("picked=hovered;");
+    expect(framePickStart).toBeGreaterThanOrEqual(0);
+    expect(frameHtml.slice(framePickStart, framePickStart + 300)).toContain(
+      "lock();",
+    );
+  });
+
+  it("replaces the current version for a Live edit", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    let res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+
+    res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}/live`, {
+        content: "<p>live v2</p>",
+        baseVersion: 2,
+      }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id, version: 2 });
+
+    const metaRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}`),
+      ON,
+      true,
+    );
+    const meta = (await metaRes.json()) as {
+      version: number;
+      versions: { version: number }[];
+    };
+    expect(meta.version).toBe(2);
+    expect(meta.versions.map((item) => item.version)).toEqual([1, 2]);
+
+    const frame = await fetchWith(
+      new Request(`${BASE}/a/${id}/frame`),
+      ON,
+      true,
+    );
+    expect(await frame.text()).toContain("live v2");
+
+    res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, {
+        content: "<p>v3</p>",
+        baseVersion: 2,
+      }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id, version: 3 });
+
+    const latestMetaRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}`),
+      ON,
+      true,
+    );
+    const latestMeta = (await latestMetaRes.json()) as {
+      version: number;
+      versions: { version: number }[];
+    };
+    expect(latestMeta.version).toBe(3);
+    expect(latestMeta.versions.map((item) => item.version)).toEqual([1, 2, 3]);
   });
 
   it("a non-owner viewer sees no Live toggle even when LIVE_DO is bound", async () => {

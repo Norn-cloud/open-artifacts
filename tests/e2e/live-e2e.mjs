@@ -9,7 +9,8 @@
 //   3. prompt typed + Submit                         -> watcher prints generate
 //   4. Exit clicked                                  -> watcher prints exit, exits 0
 //   5. /live/status reports agentActive while online
-//   6. the watcher stream never prints timeout noise (polls time out at 1s)
+//   6. the header renders Connected while the watcher is online
+//   7. the watcher stream never prints timeout noise (polls time out at 1s)
 //
 // Requires: agent-browser on PATH, node >= 22 (global WebSocket), pnpm.
 // Run:      node tests/e2e/live-e2e.mjs
@@ -280,6 +281,15 @@ try {
   // to the JSON TEXT of the value; parse again to get the value itself.
   const evalStr = (expr) =>
     JSON.parse(JSON.parse(ab(`eval "JSON.stringify(${expr})"`)));
+  await waitFor(
+    () =>
+      evalStr(
+        `(function(){var b=document.querySelector('.oa-live-toggle');var c=document.querySelector('[data-live-connection]');return !!b&&!!c&&!c.hidden&&c.textContent.trim()==='Connected';})()`,
+      ) === true,
+    "header Connected indicator",
+    15_000,
+  );
+  console.log("header presence: Connected");
   const dockExpanded = () =>
     evalStr(
       `document.querySelector('.oa-live-toggle')?.getAttribute('aria-expanded')`,

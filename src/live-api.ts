@@ -1,6 +1,14 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { type AppContext, storeFrom } from "./api";
+import {
+  type AppContext,
+  artifactUrl,
+  authorizeWrite,
+  bodyCapFor,
+  resolveMaxContentBytes,
+  storeFrom,
+} from "./api";
+import { validateUpdate } from "./domain";
 import type { LiveEvent, LiveObject } from "./live-do";
 
 // Live edit routes. All 404 when the deploy did not bind a
@@ -12,10 +20,13 @@ import type { LiveEvent, LiveObject } from "./live-do";
 //   GET  /api/artifacts/:id/live/status agent ack-status poll (pending events + presence)
 //   POST /api/artifacts/:id/live/heartbeat agent watcher presence (sk_)
 //   POST /api/artifacts/:id/live/consume-exit agent drops observed exit rows
+//   PUT  /api/artifacts/:id/live agent Live edit -> replace current version
 //
-// Auth: every route requires authorizeView on the artifact (so private/org
-// artifacts only expose live to the owner / org members, just like reads). The
-// browser carries a session cookie; the agent carries a Bearer sk_.
+// Auth: coordination routes require authorizeView on the artifact (so
+// private/org artifacts only expose live to the owner / org members, just like
+// reads). The Live update route additionally requires authorizeWrite and uses
+// the artifact's wt_/ch_ capability. The browser carries a session cookie; the
+// watcher carries a Bearer sk_ for coordination and a write token for edits.
 
 export const liveApi = new Hono<AppContext>();
 
@@ -110,6 +121,60 @@ liveApi.post("/artifacts/:id/live/consume-exit", async (c) => {
   if (!(await authorizeLive(c, id))) return c.text("not found", 404);
   await stubFor(c, id).rpcConsumeExit();
   return c.json({ ok: true });
+});
+
+liveApi.put("/artifacts/:id/live", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const maxContentBytes = resolveMaxContentBytes(c.env);
+  const declaredLength = Number(c.req.header("content-length") ?? "0");
+  if (declaredLength > bodyCapFor(maxContentBytes)) {
+    return c.json({ error: "request body too large" }, 413);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+
+  const parsed = validateUpdate(body, maxContentBytes);
+  if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+
+  const { baseVersion, force } = parsed.value;
+  if (
+    baseVersion !== null &&
+    baseVersion !== auth.record.currentVersion &&
+    !force
+  ) {
+    return c.json(
+      {
+        error: `baseVersion ${baseVersion} does not match current version ${auth.record.currentVersion}`,
+        currentVersion: auth.record.currentVersion,
+      },
+      409,
+    );
+  }
+
+  const result = await store.replaceCurrent(auth.record, parsed.value);
+  if (typeof result !== "number") {
+    return c.json(
+      {
+        error: `version conflict: artifact is at version ${result.currentVersion}`,
+        currentVersion: result.currentVersion,
+      },
+      409,
+    );
+  }
+  return c.json({
+    id: auth.record.id,
+    url: artifactUrl(c, auth.record.id),
+    version: result,
+  });
 });
 
 liveApi.post("/artifacts/:id/live/reply", async (c) => {

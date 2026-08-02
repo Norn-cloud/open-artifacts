@@ -34,6 +34,7 @@ Feature: Instance identity beyond the landing page
     Given a published branded artifact with account controls
     When I GET /a/:id
     Then the account slot appears immediately before the brand at the right edge
+    And the handoff control appears immediately before the comments and theme controls
     And the comments and theme controls appear before the account slot
 
   Scenario: Not-found reads "Go to" the configured brand

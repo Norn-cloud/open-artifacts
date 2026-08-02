@@ -22,8 +22,8 @@ node "$ARTIFACT_CLI" live <ID> --watch
 page yourself — no browser automation on the artifact page, no clicking Live,
 picking elements, or typing prompts. The user drives the viewer; your watcher
 prints each `generate` event for you to act on. The viewer's Live button shows
-a small dot while your watcher is connected (the watcher heartbeats every
-~20s, the viewer polls the status every ~15s, and the dot clears within about
+`Connected` while your watcher is connected (the watcher heartbeats every
+~20s, the viewer polls the status every ~15s, and the indicator clears within about
 a minute of the watcher stopping), so the user can see an agent is online
 before they start picking.
 
@@ -42,7 +42,7 @@ Live-edit artifact <ID> at coda0.com:
    - Your ONLY job is this watcher — do NOT operate the viewer page yourself
      (no browser automation, no clicking Live, picking elements, or typing
      prompts). The user drives the page.
-3. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). The user picks one or more elements; for each, they type a freeform prompt describing the change, pressing Enter (or Add) to commit that element+prompt pair. They may also draw strokes or drop comment pins over the picked element. When all elements are described, they hit Submit.
+3. The user opens https://coda0.com/a/<ID>, clicks Live (this arms the picker immediately). After an element is picked, the frame picker locks while its prompt input is open, so another element cannot replace the current draft. Pressing Enter (or Add) commits that element+prompt pair and re-arms the picker for the next item. They may also draw strokes or drop comment pins over the picked element. When all elements are described, they hit Submit.
 4. Your watcher prints a generate event:
    {type:'generate', id, items:[{element:{tagName,id,classes,textContent,outerHTML,computedStyles,parentContext,boundingRect,rect}, prompt}], comments?, strokes?, screenshot?}
    - Each item carries its own `element` (full context) and `prompt` (the user's freeform description for that element).
@@ -62,9 +62,11 @@ Live-edit artifact <ID> at coda0.com:
      prints like any other event and keeps polling. The comment remains in the
      artifact's persistent comment history.
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
-6. Publish: node "$ARTIFACT_CLI" update <ID>   (use the artifact's recipe, or pass the new recipe)
-7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <new-version>
-   - The browser receives `done`, reloads the frame, and shows the republished content.
+6. Publish the Live edit in place (this does not create a new artifact version):
+   node "$ARTIFACT_CLI" update <ID> --live   (use the artifact's recipe, or pass the new recipe)
+   - If the artifact was at v10, it remains at v10 while its served content changes.
+7. Ack: node "$ARTIFACT_CLI" live <ID> --reply <eid> done --version <current-version>
+   - The browser receives `done`, reloads the frame, and shows the updated content.
 8. The watcher keeps polling for the next event (another generate, or `exit` when the browser closes the session). Stop it with Ctrl-C.
 ```
 

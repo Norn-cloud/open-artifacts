@@ -23,6 +23,13 @@ Feature: Handoff recording (one per version)
     Then the /a/<id> host page renders a "Handoff" button
     And the /a/<id>/frame document carries the handoff shim (inert until armed)
 
+  Scenario: The header orders Handoff, comments, theme, and account controls
+    Given the owner sees Handoff, comments, theme, and account controls
+    When I GET /a/<id>
+    Then Handoff appears before the comments control
+    And the comments control appears before the theme control
+    And the theme control appears before the account slot
+
   Scenario: Recording requires write access
     When the deploy sets OPEN_ARTIFACTS_HANDOFF=1
     And a viewer without a write token POSTs a multipart handoff to /api/artifacts/<id>/handoffs

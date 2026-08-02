@@ -76,7 +76,7 @@ export function resolveMaxContentBytes(env: Bindings): number {
 
 // JSON escaping and encryption metadata inflate the body beyond the content
 // cap; anything past this is rejected before parsing.
-const bodyCapFor = (maxContentBytes: number): number =>
+export const bodyCapFor = (maxContentBytes: number): number =>
   maxContentBytes * 1.5 + 16 * 1024;
 
 export const storeFrom = (c: Context<AppContext>): ArtifactStore =>

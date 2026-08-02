@@ -216,6 +216,7 @@ img,video,canvas{max-width:100%}
 :root{--oa-header-h:2.5rem}
 [id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
 .oa-header{position:sticky;top:0;z-index:2147483646;isolation:isolate;display:flex;align-items:center;gap:.75rem;min-height:2.5rem;padding:.375rem .75rem;background:color-mix(in oklab,var(--oa-bg),transparent 5%);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--oa-border);font-family:var(--oa-font);font-size:.8rem}
+.oa-header-title-group{display:flex;align-items:center;gap:.6rem;flex:1;min-width:0}
 .oa-header .oa-header-title{display:flex;align-items:center;flex:1;min-width:0;font-size:.8rem;font-weight:600;line-height:1.5;letter-spacing:-.01em;margin:0;color:var(--oa-fg);white-space:nowrap}
 .oa-header .oa-header-title .oa-header-fav{display:grid;place-items:center;flex-shrink:0;width:1.25rem;height:1.25rem;margin-right:.375rem;font-size:1em;line-height:1}
 .oa-header .oa-header-title .oa-header-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -257,6 +258,7 @@ img,video,canvas{max-width:100%}
 .oa-header-panel .oa-header-control-label,.oa-header-panel .oa-header-action-label{display:inline;color:var(--oa-muted);font-size:.75rem;font-weight:400}
 .oa-header-panel .oa-brand{width:100%;min-height:36px;padding:.375rem}
 .oa-header-panel [data-oa-header-secondary]{justify-content:flex-start;gap:.5rem;width:100%;height:36px;padding:0 .375rem}
+.oa-header-panel .oa-cm-toggle,.oa-header-panel #oa-theme-toggle{justify-content:flex-start;gap:.5rem;width:100%;height:36px;padding:0 .375rem}
 .oa-header-panel .oa-account-slot{width:100%;margin:0}
 .oa-header-panel .oa-account-btn,.oa-header-panel .oa-account-signin{justify-content:flex-start;width:100%;height:36px;padding-inline:.375rem;border-radius:4px}
 .oa-header-panel .oa-account-menu{position:static;width:100%;margin-top:.25rem;padding:.25rem 0 0;border:0;border-top:1px solid var(--oa-border);border-radius:0;box-shadow:none}
@@ -529,8 +531,9 @@ function headerHtml(
   // artifact id is available (the public 404/version pages have none). The
   // count badge reflects the serve-time-inlined thread.
   const comments = artifactId
-    ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span></button>`
+    ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span><span class="oa-header-action-label">Comments</span></button>`
     : "";
+  const theme = `<button id="oa-theme-toggle" type="button" aria-label="Toggle theme"><span class="oa-header-action-label">Theme</span></button>`;
   const picker =
     versions && currentVersion && url
       ? versionPickerHtml(versions, currentVersion, url)
@@ -542,7 +545,16 @@ function headerHtml(
   // write-gated server-side too; the button is just hidden for non-owners.
   const live =
     liveEnabled && canManage
-      ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span></button>`
+      ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span><span class="oa-live-connection" data-live-connection hidden>Connected</span></button>`
+      : "";
+  const liveGuide =
+    liveEnabled && canManage && artifactId
+      ? `<div id="oa-live-guide" class="oa-live-guide" role="dialog" aria-labelledby="oa-live-guide-title" hidden>
+  <div class="oa-live-guide-head"><strong id="oa-live-guide-title">Live agent not connected</strong><button id="oa-live-guide-close" class="oa-live-guide-close" type="button">Close</button></div>
+  <p>Copy this prompt to the coding agent, then keep its Live watcher running while you make edits here.</p>
+  <textarea id="oa-live-guide-text" class="oa-live-guide-text" readonly aria-label="Live watcher startup prompt"></textarea>
+  <div class="oa-live-guide-actions"><button id="oa-live-guide-copy" class="oa-live-guide-copy" type="button">Copy start prompt</button></div>
+</div>`
       : "";
   // The Handoff toggle opens the record/play dock. Record is owner-only
   // (write-gated server-side); Play is open to any viewer. The button is shown
@@ -558,23 +570,26 @@ function headerHtml(
   // Keep the service controls together, then place the account slot before
   // branding so the brand stays at the panel's far right edge.
   const secondaryControls = `${picker}${share}${live}${handoff}`;
-  const hasPanelControls = `${secondaryControls}${chip}`;
+  const hasPanelControls = `${secondaryControls}${comments}${theme}${chip}`;
   const moreHidden = hasPanelControls ? "" : " hidden";
-  // Comments and theme remain primary controls outside More, before the
-  // overflow group so they sit to the left of account and branding.
-  return `<header class="oa-header">
-  <span class="oa-header-title" title="${escapeHtml(title)}"><span class="oa-header-fav" aria-hidden="true">${escapeHtml(favicon)}</span><span class="oa-header-title-text">${escapeHtml(title)}</span></span>
-  ${comments}
-  <button id="oa-theme-toggle" type="button" aria-label="Toggle theme"></button>
+  // The title leads from the left; the right-side trail keeps handoff before
+  // comments and theme, then the account slot and brand at the far edge.
+  const header = `<header class="oa-header">
+  <div class="oa-header-title-group">
+    <span class="oa-header-title" title="${escapeHtml(title)}"><span class="oa-header-fav" aria-hidden="true">${escapeHtml(favicon)}</span><span class="oa-header-title-text">${escapeHtml(title)}</span></span>
+  </div>
   <div class="oa-header-overflow">
     <button id="oa-header-more" class="oa-header-more" type="button" aria-label="More artifact controls" aria-expanded="false" aria-controls="oa-header-panel"${moreHidden}>${MORE_DOTS_SVG}</button>
     <div id="oa-header-panel" class="oa-header-panel" role="group" aria-label="Artifact controls">
       ${secondaryControls}
+      ${comments}
+      ${theme}
       <span id="oa-account-slot" class="oa-account-slot"></span>
       ${chip}
     </div>
   </div>
 </header>`;
+  return `${header}${liveGuide}`;
 }
 
 // The comments drawer is surrounding-chrome rendered into the same sandboxed
@@ -701,7 +716,7 @@ const THEME_SCRIPT = `
   if(!btn)return;
   function paint(){
     var t=root.getAttribute("data-theme");
-    btn.innerHTML=t==="dark"?${JSON.stringify(MOON_SVG)}:${JSON.stringify(SUN_SVG)};
+    btn.innerHTML=(t==="dark"?${JSON.stringify(MOON_SVG)}:${JSON.stringify(SUN_SVG)})+'<span class="oa-header-action-label">Theme</span>';
     btn.title="Theme: "+(t||"auto");
     btn.setAttribute("aria-label",t==="dark"?"Switch to light theme":"Switch to dark theme");
   }
@@ -767,10 +782,11 @@ const LAYOUT_SCRIPT = `
 })();
 `;
 
-// At compact widths, secondary header controls move into one floating panel so
-// the artifact identity and primary comment/theme actions never collapse. The
-// panel uses the same button and focus vocabulary as desktop chrome; this
-// script owns only disclosure state and keyboard/outside-click dismissal.
+// At compact widths, the complete right-side header trail moves into one
+// floating panel so its desktop ordering remains intact beside the artifact
+// identity. The panel uses the same button and focus vocabulary as desktop
+// chrome; this script owns only disclosure state and keyboard/outside-click
+// dismissal.
 const HEADER_SCRIPT = `
 (function(){
   var root=document.querySelector('.oa-header-overflow');
@@ -858,6 +874,11 @@ const LIVE_CSS = `
 .oa-live-toggle:active{transform:translateY(1px)}
 .oa-live-toggle svg{display:block;width:16px;height:16px}
 .oa-live-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
+.oa-live-toggle[data-agent="on"]{width:auto;gap:.35rem;padding-inline:.4rem}
+.oa-live-connection{display:none;align-items:center;gap:.25rem;color:var(--oa-accent);font-size:.7rem;font-weight:600;white-space:nowrap}
+.oa-live-connection[hidden]{display:none}
+.oa-live-toggle[data-agent="on"] .oa-live-connection{display:inline-flex}
+.oa-live-connection::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
 /* Agent-presence dot: set by LIVE_SCRIPT from /live/status when the CLI
    watcher is online (heartbeats every ~20s). The pulsing halo is
@@ -865,6 +886,20 @@ const LIVE_CSS = `
 .oa-live-toggle[data-agent="on"]::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--oa-accent);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 0 color-mix(in oklab,var(--oa-accent),transparent 55%)}
 @media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="on"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
 @keyframes oa-live-agent-pulse{to{box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 5px transparent}}
+.oa-live-guide[hidden]{display:none}
+.oa-live-guide{position:fixed;top:calc(var(--oa-header-h) + .5rem);right:.75rem;z-index:2147483647;width:min(27rem,calc(100vw - 1.5rem));padding:.85rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-bg);color:var(--oa-fg);box-shadow:0 8px 28px -6px color-mix(in oklab,var(--oa-fg),transparent 78%);font-family:var(--oa-font);font-size:.8rem;line-height:1.45;pointer-events:auto}
+.oa-live-guide-head{display:flex;align-items:center;gap:.75rem}
+.oa-live-guide-head strong{flex:1;font-size:.85rem;font-weight:600}
+.oa-live-guide-close{border:0;background:transparent;color:var(--oa-muted);font:inherit;font-size:.75rem;cursor:pointer;padding:.25rem;border-radius:4px}
+.oa-live-guide-close:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 92%)}
+.oa-live-guide-close:focus-visible,.oa-live-guide-copy:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-live-guide p{margin:.65rem 0;color:var(--oa-muted)}
+.oa-live-guide-text{display:block;width:100%;min-height:8rem;resize:vertical;padding:.55rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.75rem;line-height:1.45}
+.oa-live-guide-text:focus{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
+.oa-live-guide-actions{display:flex;justify-content:flex-end;margin-top:.65rem}
+.oa-live-guide-copy{min-height:28px;padding:.3rem .6rem;border:1px solid transparent;border-radius:6px;background:var(--oa-accent);color:var(--oa-accent-on);font:inherit;font-size:.75rem;font-weight:600;cursor:pointer}
+.oa-live-guide-copy:hover{background:color-mix(in oklab,var(--oa-accent),var(--oa-fg) 10%)}
+.oa-live-guide-copy:active{transform:translateY(1px)}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
 #oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
@@ -1447,7 +1482,63 @@ const LIVE_SCRIPT = `
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
   var liveToggle=document.querySelector('.oa-live-toggle');
+  var connection=document.querySelector('[data-live-connection]');
+  var liveGuide=document.getElementById('oa-live-guide');
+  var guideText=document.getElementById('oa-live-guide-text');
+  var guideCopy=document.getElementById('oa-live-guide-copy');
+  var guideClose=document.getElementById('oa-live-guide-close');
   if(!root||!dock||!statusEl||!chipsEl||!submitEl||!abar||!exitBtn||!frame) return;
+
+  var agentOnline=null;
+  if(guideText){
+    var guideOrigin=window.location.origin||'';
+    guideText.value=[
+      'Start the Live watcher for this artifact:',
+      'Artifact URL: '+guideOrigin+'/a/'+encodeURIComponent(cfg.artifactId),
+      'Run this from the project root:',
+      'node artifact.mjs live '+cfg.artifactId+' --watch',
+      'Keep the watcher running while I make Live edits.'
+    ].join(String.fromCharCode(10));
+  }
+  function hideGuide(){ if(liveGuide)liveGuide.hidden=true; }
+  function showGuide(){
+    if(!liveGuide)return;
+    liveGuide.hidden=false;
+    if(guideCopy)guideCopy.focus();
+  }
+  function markGuideCopied(ok){
+    if(!guideCopy)return;
+    var original=ok?'Copy start prompt':'Copy failed';
+    guideCopy.textContent=ok?'Copied':original;
+    setTimeout(function(){guideCopy.textContent='Copy start prompt';},1600);
+  }
+  function fallbackGuideCopy(){
+    if(!guideText){markGuideCopied(false);return;}
+    guideText.focus();
+    guideText.select();
+    var copied=false;
+    try{copied=document.execCommand('copy');}catch(e){copied=false;}
+    markGuideCopied(copied);
+  }
+  function copyGuide(){
+    if(!guideText)return;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      try{
+        navigator.clipboard.writeText(guideText.value).then(function(){markGuideCopied(true);}).catch(function(){fallbackGuideCopy();});
+      }catch(e){fallbackGuideCopy();}
+      return;
+    }
+    fallbackGuideCopy();
+  }
+  if(guideClose)guideClose.addEventListener('click',hideGuide);
+  if(guideCopy)guideCopy.addEventListener('click',copyGuide);
+  document.addEventListener('click',function(e){
+    var target=e.target;
+    if(liveGuide&&!liveGuide.hidden&&target!==liveToggle&&!liveGuide.contains(target))hideGuide();
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&liveGuide&&!liveGuide.hidden)hideGuide();
+  });
 
   function openLive(){
     // Reconnect if the ws died (a prior Exit, or Handoff tore Live down).
@@ -1457,11 +1548,11 @@ const LIVE_SCRIPT = `
     root.removeAttribute('hidden');
     if(liveToggle) liveToggle.setAttribute('aria-expanded','true');
     // Clicking Live = enter pick mode immediately. The dock's Pick control is
-    // a display-only indicator, so arming happens here on open - pick stays
-    // armed for the whole live session. Arm unconditionally (not gated on
-    // state==='IDLE') so a stale non-IDLE state left by an in-flight ws
-    // message after Exit can't strand the user with pick disarmed and no way
-    // to re-arm.
+    // a display-only indicator, so arming happens here on open. The picker
+    // locks while a picked element's prompt is open and is re-armed after the
+    // prompt is committed. Arm unconditionally (not gated on state==='IDLE')
+    // so a stale non-IDLE state left by an in-flight ws message after Exit
+    // can't strand the user with pick disarmed and no way to re-arm.
     setState('PICKING');
     toFrame({type:'oa:live:pick:arm'});
     // Annotate on top of the picked element: comment pins + strokes ride the
@@ -1487,6 +1578,7 @@ const LIVE_SCRIPT = `
   }
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
+      if(root.hidden&&agentOnline===false)showGuide();else hideGuide();
       // Toggle (open/close) through the dock manager, like the comments toggle
       // (.oa-cm-toggle) opens/closes its drawer. The manager enforces mutual
       // exclusion with Handoff and toasts when Handoff refuses to yield
@@ -1497,22 +1589,25 @@ const LIVE_SCRIPT = `
   }
 
   // Agent presence: the CLI watcher heartbeats while connected, and the Live
-  // toggle shows a dot when an agent is online — so the user knows a watcher
+  // toggle shows Connected when an agent is online — so the user knows a watcher
   // will pick up their changes before they start, instead of only learning
   // it from the STALLED hint 2 minutes after submit. Same-origin fetch works
   // on the host page (connect-src 'self'); the frame can never do this.
   var agentTimer=null;
   function paintAgent(on){
+    agentOnline=on;
     if(!liveToggle)return;
     liveToggle.setAttribute('data-agent', on?'on':'off');
-    liveToggle.setAttribute('aria-label', on?'Open live editor — agent online':'Open live editor');
+    if(connection)connection.hidden=!on;
+    liveToggle.setAttribute('aria-label', on?'Open live editor — agent connected':'Open live editor — no agent connected');
     liveToggle.title=on?'Live — agent connected':'Live';
+    if(on)hideGuide();
   }
   function pollAgent(){
     fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/status',{credentials:'same-origin'})
       .then(function(r){ if(!r.ok) throw 0; return r.json(); })
       .then(function(s){ paintAgent(s.agentActive===true); })
-      .catch(function(){ /* keep the last state; a blip must not flick the dot */ });
+      .catch(function(){ /* keep the last state; a blip must not flick the indicator */ });
   }
   function startAgentPoll(){ stopAgentPoll(); pollAgent(); agentTimer=setInterval(pollAgent,15000); }
   function stopAgentPoll(){ if(agentTimer){ clearInterval(agentTimer); agentTimer=null; } }
@@ -1626,7 +1721,7 @@ const LIVE_SCRIPT = `
     if(!draft) return;
     items.push({element:draft.element, prompt:String(prompt||'').trim(), rect:draft.rect});
     draft=null;
-    // Back to picking the next element; picker stays armed.
+    // Back to picking the next element; the prompt lock is over.
     setState('PICKING');
     toFrame({type:'oa:live:pick:arm'});
   }
@@ -1706,18 +1801,22 @@ const LIVE_SCRIPT = `
     if(!e.data||typeof e.data.type!=='string') return;
     if(e.source!==frame.contentWindow) return;
     var d=e.data;
-    if(d.type==='oa:element:picked'){ draft={element:d.element, rect:(d.element&&d.element.rect)||d.rect||null}; setState('COMPOSE'); }
+    if(d.type==='oa:element:picked'){ draft={element:d.element, rect:(d.element&&d.element.rect)||d.rect||null}; toFrame({type:'oa:live:pick:lock'}); setState('COMPOSE'); }
     // The frame reports oa:ready on every load. After an edit we reloaded it to
     // show the new version; arm pick now that its listener is back (a fresh
     // frame defaults to disarmed, and arming synchronously would race the
     // reload and be lost).
-    else if(d.type==='oa:ready' && pendingRearm){ pendingRearm=false; if(!root.hidden){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); } }
+    else if(d.type==='oa:ready'){
+      if(pendingRearm){ pendingRearm=false; if(!root.hidden){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); } }
+      else if(!root.hidden&&state==='PICKING'&&!draft){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); }
+    }
   });
 
   // --- global bar ---
   // The Pick control (#oa-live-pick-toggle) is a display-only indicator, not a
-  // button - no click handler. Pick is armed on open and re-armed after each
-  // edit; the indicator's static --active tint reflects that.
+  // button - no click handler. Pick is armed on open, locked while the prompt
+  // is open, and re-armed after each committed item; the indicator's static
+  // --active tint reflects the Live session.
   function exitLive(){
     // Route through the dock manager so active-state, focus restore, and
     // mutual-exclusion bookkeeping stay consistent with the header toggle.
@@ -1727,13 +1826,12 @@ const LIVE_SCRIPT = `
   exitBtn.onclick=exitLive;
 
   function reset(){ state='IDLE'; items=[]; draft=null; pendingRearm=false; renderBar(); abar.hidden=true; toFrame({type:'oa:live:pick:disarm'}); }
-  // After a successful edit the frame reloads to show the new version. Pick
-  // stays armed for the whole live session, so instead of dropping to IDLE we
-  // clear the batch and return to PICKING - arming once the reloaded frame
-  // reports ready (a fresh frame defaults to disarmed; arming synchronously
-  // would race the reload and be lost). If the user exited during the
-  // CONFIRMED window the dock is hidden: still reload (to show the new
-  // version) but skip the re-arm - state stays IDLE from closeLive, so
+  // After a successful edit the frame reloads to show the new version. Clear
+  // the batch and return to PICKING - arming the next-item picker once the
+  // reloaded frame reports ready (a fresh frame defaults to disarmed; arming
+  // synchronously would race the reload and be lost). If the user exited
+  // during the CONFIRMED window the dock is hidden: still reload (to show the
+  // new version) but skip the re-arm - state stays IDLE from closeLive, so
   // reopening arms cleanly instead of stranding on a stale PICKING state.
   function restartAfterEdit(){ reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
 
@@ -2021,6 +2119,9 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(!hovered||!pickable(hovered))return;
     e.preventDefault();e.stopPropagation();
     picked=hovered;
+    // Lock immediately so a second click cannot replace this draft while the
+    // host is opening the prompt. Keep picked/annotation state for submit.
+    lock();
     showHighlight(picked);
     // Annotation overlay: create over the first pick, reposition on later
     // picks so pins/strokes stay over the element the user is describing.
@@ -2039,6 +2140,13 @@ const FRAME_LIVE_PICKER_SCRIPT = `
       if(next){e.preventDefault();hovered=next;showHighlight(next);next.scrollIntoView({block:'nearest',behavior:'smooth'});}
     }
   }
+  function lock(){
+    armed=false;
+    hovered=null;
+    document.removeEventListener('mousemove',onMove,true);
+    document.removeEventListener('click',onClick,true);
+    document.removeEventListener('keydown',onKey,true);
+  }
   function arm(){
     armed=true;
     document.addEventListener('mousemove',onMove,true);
@@ -2046,10 +2154,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     document.addEventListener('keydown',onKey,true);
   }
   function disarm(){
-    armed=false;
-    document.removeEventListener('mousemove',onMove,true);
-    document.removeEventListener('click',onClick,true);
-    document.removeEventListener('keydown',onKey,true);
+    lock();
     hideHighlight();
     // Tear the annotation overlay down so a closed Live session never leaves
     // pointer-grabbing chrome over the artifact, and clear session state so a
@@ -2152,6 +2257,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(e.source!==window.parent)return;
     var m=e.data; if(!m||typeof m!=='object')return;
     if(m.type==='oa:live:pick:arm')arm();
+    else if(m.type==='oa:live:pick:lock')lock();
     else if(m.type==='oa:live:pick:disarm')disarm();
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
     else if(m.type==='oa:live:annot:collect')sendAnnots(m.req);
@@ -2160,6 +2266,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(e.source!==window.parent)return;
     var m=e.data; if(!m||typeof m!=='object')return;
     if(m.type==='oa:live:pick:arm')arm();
+    else if(m.type==='oa:live:pick:lock')lock();
     else if(m.type==='oa:live:pick:disarm')disarm();
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
     else if(m.type==='oa:live:annot:collect')sendAnnots();
@@ -2729,7 +2836,7 @@ const HOST_UI_SCRIPT = `
   // Pin tool is canvas-only. Hide until oa:ready reports canvas; encrypted
   // unlock shells keep it visible as the unanchored compose entry.
   if(!encrypted)arm.style.display="none";
-  if(header&&toggle)header.insertBefore(arm,toggle);else if(header)header.appendChild(arm);
+  if(toggle&&toggle.parentNode)toggle.parentNode.insertBefore(arm,toggle);else if(header)header.appendChild(arm);
   function setArmed(on){
     arm.setAttribute("aria-pressed",on?"true":"false");
     if(window.__oaToFrame)window.__oaToFrame({type:"oa:arm",mode:on?"on":null});

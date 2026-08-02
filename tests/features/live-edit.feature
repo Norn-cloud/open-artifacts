@@ -33,22 +33,46 @@ Feature: Live editing
     When the user clicks the Live button in the header
     Then the Pick indicator in the dock shows pick mode is on (accent tint)
     But the Pick control is a display-only span, not a clickable button
-    And the frame picker stays armed until the user closes live mode
+    And the frame picker is armed while the dock is in PICKING
+    And after an element is picked, the frame picker locks while its prompt is open
+    And committing the prompt re-arms the frame picker for the next item
+
+  Scenario: The header shows whether a Live watcher is connected
+    When an agent runs `node artifact.mjs live <id> --watch`
+    And the watcher heartbeats for the artifact
+    Then the Live control in the header visibly says "Connected"
+    And when the watcher stops, the Connected indicator clears after the presence window
+
+  Scenario: An offline Live toggle guides the user to start the watcher
+    Given no agent is connected to the artifact
+    When the user activates the Live toggle
+    Then the Live toggle opens a copyable startup prompt
+    And the prompt tells the agent to run `node artifact.mjs live <id> --watch`
+    And the Live editor still opens in PICKING mode so the user can select an element
 
   Scenario: The browser picks an element inside the sandboxed frame
     When the user clicks Live (pick is armed on entry)
     Then the frame picker highlights the hovered element
     And on click the frame postMessages oa:element:picked with a context blob
+    And the host locks the frame picker while the prompt input is open
+    And subsequent clicks cannot pick another element until the prompt is committed
     But the context is NOT a CSS selector - it is {tagName, id, classes, outerHTML, computedStyles, parentContext, boundingRect}
 
   Scenario: The agent edits source once and republishes
     When the browser sends a generate event over the WebSocket with items [{element, prompt, rect}]
     Then the agent CLI polls GET /api/artifacts/<id>/live/poll and receives {type:'generate', items}
-    And the agent edits the artifact source and runs `node artifact.mjs update <id>` to republish as v+1
-    And the agent runs `node artifact.mjs live <id> --reply <eid> done --version <v+1>`
+    And the agent edits the artifact source and runs `node artifact.mjs update <id> --live` to replace the current version
+    And the agent runs `node artifact.mjs live <id> --reply <eid> done --version <v>`
     Then the DO broadcasts {type:'done', id, version} to the subscribed browser
     And the host reloads the frame and shows CONFIRMED "Applied"
-    And then re-arms pick and returns to PICKING (pick stays armed for the whole live session)
+    And then re-arms pick and returns to PICKING for the next item
+
+  Scenario: A Live edit replaces the current version in place
+    Given the artifact is currently served at version 10
+    When the agent applies the Live-edited Recipe with the Live update command
+    Then the artifact content changes while the served version remains 10
+    And the version history still contains no version 11
+    And a later ordinary update still creates version 11
 
   Scenario: Exiting during the edit-confirmed window does not strand the user
     When the agent finishes an edit and the host shows CONFIRMED "Applied"
