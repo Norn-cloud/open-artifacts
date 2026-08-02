@@ -2867,6 +2867,29 @@ describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
     expect(result.stderr).toContain("whoami");
   });
 
+  it("watch mode stays silent on poll timeouts (no event-stream noise)", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      // A poll timeout is the loop's idle heartbeat, not an event: the
+      // watcher must NOT print it (one-shot does, watch must not).
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, { type: "timeout" });
+      await new Promise((r) => setTimeout(r, 250));
+      expect(releasePoll).not.toBe(null);
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stdout, stderr } = await done;
+      expect(stdout).not.toContain("timeout");
+      expect(stderr).toContain("session ended");
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
   it("watch prints the auth hint once on 404, then keeps retrying", async () => {
     holdPoll = true;
     const { child, done } = spawnCli(["live", "testid123456", "--watch"], {

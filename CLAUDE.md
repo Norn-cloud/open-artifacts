@@ -22,6 +22,12 @@ pnpm run deploy   # wrangler deploy — direct to prod. No CI gates; review a PR
 
 Run a single Worker test: `pnpm test -- tests/worker/<file>.test.ts`.
 Run a single CLI test: `pnpm test:cli -- tests/cli/<file>.test.ts`.
+Live-mode E2E (real worker + real browser, needs `agent-browser` on PATH):
+`node tests/e2e/live-e2e.mjs` — boots `wrangler dev -c wrangler.dev.jsonc` on
+port 8788, publishes an artifact, runs `live --watch`, then drives comment /
+pick / prompt / submit / exit through the browser and asserts the watcher's
+event stream. Kills its own processes on exit; if port 8788 is occupied it
+fails with the command to clear it.
 
 ## Generated files — do not hand-edit
 

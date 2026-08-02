@@ -1753,6 +1753,11 @@ async function commandLive(rest, flags) {
       await new Promise((r) => setTimeout(r, 2000));
       continue;
     }
+    // A poll timeout is a heartbeat of the loop, not an event: printing it on
+    // stdout would spam the agent's event stream (every poll interval) and
+    // could be mistaken for something to act on. One-shot mode still prints
+    // the timeout JSON — that is its contract.
+    if (evt.type === "timeout") continue;
     delivered.add(evt.id);
     console.log(JSON.stringify(evt));
     if (evt.type === "exit") {
