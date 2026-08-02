@@ -343,6 +343,19 @@ function diffSnapshot(previous, current) {
   return changed;
 }
 
+// undici's TypeError("fetch failed") hides the real network error in a nested
+// cause chain (getaddrinfo ENOTFOUND, read ECONNRESET, TLS handshake, ...).
+// Surface the deepest message so a dead connection is diagnosable instead of
+// a bare "fetch failed".
+function deepCause(err) {
+  let root = err;
+  let guard = 0;
+  while (root?.cause && root?.cause !== root && guard++ < 10) {
+    root = root.cause;
+  }
+  return root?.message ? root.message : String(err);
+}
+
 async function request(method, url, body, token) {
   const headers = { "content-type": "application/json" };
   if (token) headers.authorization = `Bearer ${token}`;
@@ -354,7 +367,7 @@ async function request(method, url, body, token) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (cause) {
-    fail(`cannot reach ${url}: ${cause.message}`);
+    fail(`cannot reach ${url}: ${deepCause(cause)}`);
   }
   const text = await response.text();
   let json = {};
@@ -1574,7 +1587,7 @@ async function commandLive(rest, flags) {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (cause) {
-      throw new Error(`cannot reach ${url}: ${cause.message}`);
+      throw new Error(`cannot reach ${url}: ${deepCause(cause)}`);
     }
     const text = await response.text();
     let json = {};
