@@ -46,7 +46,8 @@ Feature: Live editing
   Scenario: An offline Live toggle guides the user to start the watcher
     Given no agent is connected to the artifact
     When the user activates the Live toggle
-    Then the Live toggle opens a copyable startup prompt
+    Then the Live dock opens a copyable startup prompt
+    And the startup prompt's copy button is inside the Live dock
     And the prompt tells the agent to run `node artifact.mjs live <id> --watch`
     And the Live editor still opens in PICKING mode so the user can select an element
 

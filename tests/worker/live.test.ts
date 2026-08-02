@@ -261,6 +261,24 @@ describe("live routes with LIVE_DO bound", () => {
     expect(html).toContain('__oaLivePush({type:"comment"');
   });
 
+  it("keeps the offline startup prompt and copy button inside the Live dock", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+    const dockStart = html.indexOf('<div id="oa-live-dock">');
+    const guideStart = html.indexOf('<div id="oa-live-guide"');
+    const copyButtonStart = html.indexOf('id="oa-live-guide-copy"');
+    const actionBarStart = html.indexOf('<div id="oa-live-action-bar"');
+
+    expect(dockStart).toBeGreaterThanOrEqual(0);
+    expect(html).toMatch(/<div id="oa-live-dock">\s*<div id="oa-live-guide"/);
+    expect(html.slice(0, dockStart)).not.toContain('id="oa-live-guide"');
+    expect(copyButtonStart).toBeGreaterThan(guideStart);
+    expect(html.slice(dockStart, actionBarStart)).toContain(
+      'id="oa-live-guide-copy"',
+    );
+  });
+
   it("locks element picking while the selected element prompt is open", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
@@ -349,6 +367,7 @@ describe("live routes with LIVE_DO bound", () => {
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, false);
     const html = await res.text();
     expect(html).not.toContain('class="oa-live-toggle"');
+    expect(html).not.toContain('id="oa-live-guide"');
   });
 
   it("the frame document carries the annot data reply handler", async () => {
