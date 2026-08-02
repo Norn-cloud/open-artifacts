@@ -9,7 +9,8 @@ import type { LiveEvent, LiveObject } from "./live-do";
 //   GET  /api/artifacts/:id/live        WebSocket upgrade (browser host chrome)
 //   GET  /api/artifacts/:id/live/poll   agent long-poll (sk_ bearer)
 //   POST /api/artifacts/:id/live/reply  agent reply -> broadcast to browsers
-//   GET  /api/artifacts/:id/live/status agent ack-status poll (pending events)
+//   GET  /api/artifacts/:id/live/status agent ack-status poll (pending events + presence)
+//   POST /api/artifacts/:id/live/heartbeat agent watcher presence (sk_)
 //   POST /api/artifacts/:id/live/consume-exit agent drops observed exit rows
 //
 // Auth: every route requires authorizeView on the artifact (so private/org
@@ -84,11 +85,13 @@ liveApi.get("/artifacts/:id/live/poll", async (c) => {
   const types = typesRaw
     ? (typesRaw.split(",").filter(Boolean) as LiveEvent["type"][])
     : null;
+  const excludeRaw = c.req.query("exclude");
+  const exclude = excludeRaw ? excludeRaw.split(",").filter(Boolean) : [];
   const timeout = Math.min(
     Math.max(Number(c.req.query("timeout") ?? 0) || 270_000, 1000),
     270_000,
   );
-  const event = await stubFor(c, id).rpcPoll(types, timeout);
+  const event = await stubFor(c, id).rpcPoll(types, timeout, exclude);
   return c.json(event);
 });
 
@@ -98,6 +101,14 @@ liveApi.get("/artifacts/:id/live/status", async (c) => {
   if (!(await authorizeLive(c, id))) return c.text("not found", 404);
   const status = await stubFor(c, id).rpcStatus();
   return c.json(status);
+});
+
+liveApi.post("/artifacts/:id/live/heartbeat", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const id = c.req.param("id") ?? "";
+  if (!(await authorizeLive(c, id))) return c.text("not found", 404);
+  await stubFor(c, id).rpcHeartbeat();
+  return c.json({ ok: true });
 });
 
 liveApi.post("/artifacts/:id/live/consume-exit", async (c) => {

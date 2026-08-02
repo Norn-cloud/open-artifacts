@@ -49,12 +49,16 @@ type QueueRow = {
 type PollWaiter = {
   resolve: (e: LiveEvent | { type: "timeout" }) => void;
   types: Set<LiveEvent["type"]> | null; // null = any
+  skip: Set<string>; // event ids this poller must not be offered
   timer: ReturnType<typeof setTimeout>;
 };
 
 const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
+// A watcher heartbeats roughly every 20s; an agent that has not been seen
+// within this window is treated as offline (the viewer's Live dot drops).
+const AGENT_ACTIVE_WINDOW_MS = 60_000;
 
 export class LiveObject extends DurableObject<Record<string, unknown>> {
   // In-memory only; a missed wake after hibernation just re-polls.
@@ -117,14 +121,19 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
 
   // Block until a matching event arrives or timeout. Lease prevents
   // double-delivery: the row is marked leased for LEASE_MS; if the agent
-  // never replies, a later poll can re-acquire it.
+  // never replies, a later poll can re-acquire it. excludeIds are ids the
+  // watcher has already delivered this session — a lease-expired, unreplied
+  // event must not be re-offered ahead of newer ones (the watch loop passes
+  // its grow-only delivered set).
   async rpcPoll(
     types: LiveEvent["type"][] | null,
     timeoutMs: number = DEFAULT_POLL_TIMEOUT_MS,
+    excludeIds: string[] = [],
   ): Promise<LiveEvent | { type: "timeout" }> {
     await this.ensureSchema();
     const want = types ? new Set(types) : null;
-    const available = await this.pickAvailable(want, Date.now());
+    const skip = new Set(excludeIds);
+    const available = await this.pickAvailable(want, Date.now(), skip);
     if (available) return available;
 
     return new Promise<LiveEvent | { type: "timeout" }>((resolve) => {
@@ -132,7 +141,7 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
         this.waiters = this.waiters.filter((w) => w !== waiter);
         resolve({ type: "timeout" });
       }, timeoutMs);
-      const waiter: PollWaiter = { resolve, types: want, timer };
+      const waiter: PollWaiter = { resolve, types: want, skip, timer };
       this.waiters.push(waiter);
     });
   }
@@ -153,6 +162,9 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
   // Snapshot of the pending queue for ack-status polling. The agent CLI drains
   // this via GET /live/status to wait for its own `done` reply to clear an
   // event before polling the next (see waitForEventAck in artifact.mjs).
+  // agentActive/lastAgentSeen are the watcher's presence: the watch loop
+  // heartbeats (rpcHeartbeat) so the viewer's Live toggle can show whether an
+  // agent is online before the user starts picking.
   async rpcStatus(): Promise<{
     pendingEvents: {
       id: string;
@@ -160,6 +172,8 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       leased_until: number;
       created_at: number;
     }[];
+    agentActive: boolean;
+    lastAgentSeen: number | null;
   }> {
     await this.ensureSchema();
     const rows = this.ctx.storage.sql
@@ -172,7 +186,22 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
         `SELECT id, type, leased_until, created_at FROM pending ORDER BY seq ASC`,
       )
       .toArray();
-    return { pendingEvents: rows };
+    const lastAgentSeen =
+      (await this.ctx.storage.get<number>("lastAgentSeen")) ?? null;
+    return {
+      pendingEvents: rows,
+      agentActive:
+        lastAgentSeen !== null &&
+        Date.now() - lastAgentSeen <= AGENT_ACTIVE_WINDOW_MS,
+      lastAgentSeen,
+    };
+  }
+
+  // Watcher presence: the CLI's `--watch` loop POSTs /live/heartbeat on a
+  // fixed interval so the viewer can show an "agent connected" state. The
+  // timestamp lives in DO KV storage, so it survives hibernation.
+  async rpcHeartbeat(): Promise<void> {
+    await this.ctx.storage.put("lastAgentSeen", Date.now());
   }
 
   // Drop queued exit rows so a stale exit from a prior session can't poison a
@@ -250,6 +279,7 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
   private async pickAvailable(
     want: Set<LiveEvent["type"]> | null,
     now: number,
+    skip: Set<string> = new Set(),
   ): Promise<LiveEvent | null> {
     await this.ensureSchema();
     const rows = this.ctx.storage.sql
@@ -266,7 +296,9 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
           eventPriority(b.type as LiveEvent["type"]) || a.seq - b.seq,
     );
     const winner = sorted.find(
-      (r) => want === null || want.has(r.type as LiveEvent["type"]),
+      (r) =>
+        (want === null || want.has(r.type as LiveEvent["type"])) &&
+        !skip.has(r.id),
     );
     if (!winner) return null;
     await this.ctx.storage.sql.exec(
@@ -292,7 +324,7 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     if (this.waiters.length === 0) return;
     const now = Date.now();
     for (const waiter of [...this.waiters]) {
-      const evt = await this.pickAvailable(waiter.types, now);
+      const evt = await this.pickAvailable(waiter.types, now, waiter.skip);
       if (evt) {
         clearTimeout(waiter.timer);
         this.waiters = this.waiters.filter((w) => w !== waiter);

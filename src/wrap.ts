@@ -859,6 +859,12 @@ const LIVE_CSS = `
 .oa-live-toggle svg{display:block;width:16px;height:16px}
 .oa-live-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
+/* Agent-presence dot: set by LIVE_SCRIPT from /live/status when the CLI
+   watcher is online (heartbeats every ~20s). The pulsing halo is
+   informational, like the handoff rec dot — never on high-frequency actions. */
+.oa-live-toggle[data-agent="on"]::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--oa-accent);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 0 color-mix(in oklab,var(--oa-accent),transparent 55%)}
+@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="on"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
+@keyframes oa-live-agent-pulse{to{box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 5px transparent}}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
 #oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;pointer-events:auto;z-index:2147483645}
@@ -1458,11 +1464,17 @@ const LIVE_SCRIPT = `
     // to re-arm.
     setState('PICKING');
     toFrame({type:'oa:live:pick:arm'});
+    // Annotate on top of the picked element: comment pins + strokes ride the
+    // next generate event so the agent sees the user's marks with the change.
+    toFrame({type:'oa:live:annot:enable'});
   }
   function closeLive(){
     // Live has no irreplaceable in-flight work, so it always yields.
     if(root.hidden) return true;
-    send({type:'exit'}); reset(); ws&&ws.close(); root.hidden=true;
+    // Give the exit its OWN id: send() otherwise stamps the last generate's
+    // sessionId, and the watcher's grow-only exclude set would then hide the
+    // exit row forever (the watcher would never learn the session ended).
+    send({type:'exit', id:genId()}); reset(); ws&&ws.close(); root.hidden=true;
     if(liveToggle) liveToggle.setAttribute('aria-expanded','false');
     return true;
   }
@@ -1483,6 +1495,31 @@ const LIVE_SCRIPT = `
       if(window.__oaDock) window.__oaDock.toggle('live'); else if(root.hidden) openLive(); else closeLive();
     });
   }
+
+  // Agent presence: the CLI watcher heartbeats while connected, and the Live
+  // toggle shows a dot when an agent is online — so the user knows a watcher
+  // will pick up their changes before they start, instead of only learning
+  // it from the STALLED hint 2 minutes after submit. Same-origin fetch works
+  // on the host page (connect-src 'self'); the frame can never do this.
+  var agentTimer=null;
+  function paintAgent(on){
+    if(!liveToggle)return;
+    liveToggle.setAttribute('data-agent', on?'on':'off');
+    liveToggle.setAttribute('aria-label', on?'Open live editor — agent online':'Open live editor');
+    liveToggle.title=on?'Live — agent connected':'Live';
+  }
+  function pollAgent(){
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/status',{credentials:'same-origin'})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(s){ paintAgent(s.agentActive===true); })
+      .catch(function(){ /* keep the last state; a blip must not flick the dot */ });
+  }
+  function startAgentPoll(){ stopAgentPoll(); pollAgent(); agentTimer=setInterval(pollAgent,15000); }
+  function stopAgentPoll(){ if(agentTimer){ clearInterval(agentTimer); agentTimer=null; } }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stopAgentPoll(); else startAgentPoll();
+  });
+  if(liveToggle) startAgentPoll();
 
   var ws=null, wsReady=false, sessionId=null, state='IDLE', pendingRearm=false;
   // Multi-element batch: the user picks N elements, types a prompt for each
@@ -1583,18 +1620,53 @@ const LIVE_SCRIPT = `
     setState('PICKING');
     toFrame({type:'oa:live:pick:arm'});
   }
+  // Ask the frame for the annotations (comment pins + strokes + a screenshot
+  // with them baked in) drawn over the picked element. The frame replies
+  // oa:live:annot:data echoing the request token; if it never does (no overlay
+  // ever shown, capture unsupported, taint), fall back after 1.5s so a stalled
+  // frame can't block the submit. The token stops a slow capture from a
+  // previous submit satisfying a newer one's listener.
+  function collectAnnots(cb){
+    var done=false, req=genId();
+    function onMsg(e){
+      if(done) return;
+      if(e.source!==frame.contentWindow) return;
+      var d=e.data; if(!d||d.type!=='oa:live:annot:data'||d.req!==req) return;
+      done=true; window.removeEventListener('message',onMsg);
+      cb(d);
+    }
+    window.addEventListener('message',onMsg);
+    toFrame({type:'oa:live:annot:collect', req:req});
+    setTimeout(function(){ if(!done){ done=true; window.removeEventListener('message',onMsg); cb(null); } },1500);
+  }
   function handleSubmit(){
     // If a draft prompt is typed but not committed, commit it first.
     var ff=abar.querySelector('.oa-live-freeform');
     if(draft && ff && ff.value.trim()){ commitDraft(ff.value); }
     if(!items.length){ return; }
+    // One batch per submit: a second click while an edit is in flight would
+    // re-send the same items as a duplicate generate event.
+    if(state==='GENERATING'||state==='WORKING'){ return; }
     sessionId=genId();
     setState('GENERATING');
-    send({type:'generate', id:sessionId, items:items});
-    // If no agent picks up within ACK_TIMEOUT, show a hint instead of
-    // spinning forever — the user likely forgot to start the CLI watcher.
-    clearTimeout(ackTimer);
-    ackTimer=setTimeout(function(){ if(state==='GENERATING') setState('STALLED'); }, ACK_TIMEOUT);
+    // The user's comment pins/strokes ride the generate event (live.md):
+    // the agent sees them with the change. Omit all three when empty.
+    collectAnnots(function(annot){
+      var payload={type:'generate', id:sessionId, items:items};
+      if(annot){
+        var hasAnnot=(annot.comments&&annot.comments.length)||(annot.strokes&&annot.strokes.length)||annot.screenshot;
+        if(hasAnnot){
+          payload.comments=annot.comments||[];
+          payload.strokes=annot.strokes||[];
+          if(annot.screenshot) payload.screenshot=annot.screenshot;
+        }
+      }
+      send(payload);
+      // If no agent picks up within ACK_TIMEOUT, show a hint instead of
+      // spinning forever — the user likely forgot to start the CLI watcher.
+      clearTimeout(ackTimer);
+      ackTimer=setTimeout(function(){ if(state==='GENERATING') setState('STALLED'); }, ACK_TIMEOUT);
+    });
   }
 
   // --- WebSocket ---
@@ -1629,7 +1701,7 @@ const LIVE_SCRIPT = `
     // show the new version; arm pick now that its listener is back (a fresh
     // frame defaults to disarmed, and arming synchronously would race the
     // reload and be lost).
-    else if(d.type==='oa:ready' && pendingRearm){ pendingRearm=false; if(!root.hidden) toFrame({type:'oa:live:pick:arm'}); }
+    else if(d.type==='oa:ready' && pendingRearm){ pendingRearm=false; if(!root.hidden){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); } }
   });
 
   // --- global bar ---
@@ -1940,6 +2012,9 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     e.preventDefault();e.stopPropagation();
     picked=hovered;
     showHighlight(picked);
+    // Annotation overlay: create over the first pick, reposition on later
+    // picks so pins/strokes stay over the element the user is describing.
+    if(annotEnabled){ if(annotSvg) positionAnnot(picked); else showAnnot(picked); }
     window.__oaSend({type:'oa:element:picked', element:extractContext(picked)});
   }
   function onKey(e){
@@ -1966,6 +2041,13 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     document.removeEventListener('click',onClick,true);
     document.removeEventListener('keydown',onKey,true);
     hideHighlight();
+    // Tear the annotation overlay down so a closed Live session never leaves
+    // pointer-grabbing chrome over the artifact, and clear session state so a
+    // reopened Live never resurrects a stale picked element or overlay.
+    if(annotSvg){ annotSvg.remove(); annotSvg=null; }
+    if(annotPins){ annotPins.remove(); annotPins=null; }
+    annotState.comments=[]; annotState.strokes=[]; drawing=false; curStroke=null;
+    picked=null; hovered=null; annotEnabled=false;
   }
   // Annotation overlay: SVG strokes + comment pins over the picked element.
   function showAnnot(el){
@@ -1993,12 +2075,84 @@ const FRAME_LIVE_PICKER_SCRIPT = `
   function dropPin(p){ var id='pin_'+Date.now(); annotState.comments.push({x:p[0],y:p[1],text:''}); redrawPins(); }
   function redrawStrokes(){ if(!annotSvg)return; var ns='http://www.w3.org/2000/svg'; while(annotSvg.firstChild)annotSvg.removeChild(annotSvg.firstChild); annotState.strokes.concat(curStroke?[curStroke]:[]).forEach(function(s){ var p=document.createElementNS(ns,'path'); var d=s.points.map(function(pt,i){return (i?'L':'M')+pt[0]+' '+pt[1];}).join(' '); p.setAttribute('d',d); p.setAttribute('stroke','#6457f0'); p.setAttribute('stroke-width','3'); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); annotSvg.appendChild(p); }); }
   function redrawPins(){ if(!annotPins)return; annotPins.innerHTML=''; annotState.comments.forEach(function(c){ var d=document.createElement('div'); d.style.cssText='position:absolute;left:'+(c.x-9)+'px;top:'+(c.y-9)+'px;width:18px;height:18px;border-radius:50% 50% 50% 2px;background:#6457f0;'; annotPins.appendChild(d); }); }
+  // --- annotation collection (host asks on submit) ---
+  // Screenshot: render a clone of the picked element (computed styles copied
+  // inline, so the page stylesheet — unreachable across the foreignObject —
+  // still applies) + the annotation overlay, into an SVG foreignObject, then
+  // to canvas PNG. Best-effort: web-font CDN taint, unsupported engines, or
+  // any throw -> cb(null) (the host omits the screenshot then).
+  var CAP_MAX_NODES=300;
+  function captureShot(cb){
+    try{
+      if(!picked||!window.XMLSerializer||typeof document.createElementNS==='undefined'){ cb(null); return; }
+      var r=picked.getBoundingClientRect();
+      if(r.width<=0||r.height<=0){ cb(null); return; }
+      var clone=picked.cloneNode(true);
+      // Walk the ORIGINAL tree in lockstep with the clone: computed styles
+      // read from the detached clone resolve layout-dependent values
+      // (percentages, flex, width/height) against nothing and collapse.
+      var count=0, walk=[[clone,picked]];
+      while(walk.length){
+        var pair=walk.pop(), n=pair[0], orig=pair[1];
+        if(!n||n.nodeType!==1)continue;
+        if(++count>CAP_MAX_NODES){ cb(null); return; }
+        var cs=getComputedStyle(orig), style='';
+        for(var i=0;i<cs.length;i++){ var k=cs[i], v=cs.getPropertyValue(k); if(v)style+=k+':'+v+';'; }
+        // The clone root must sit flush in the wrapper (0,0): the copied
+        // layout props (margins, offsets, position, transform) would displace
+        // it and the overflow:hidden wrapper would crop the capture.
+        if(n===clone){
+          style+='margin:0;top:auto;left:auto;right:auto;bottom:auto;position:relative;transform:none;translate:none;';
+        }
+        n.setAttribute('style',style);
+        for(var j=0;j<n.children.length;j++)walk.push([n.children[j], orig.children[j]]);
+      }
+      var wrap=document.createElement('div');
+      wrap.style.cssText='position:relative;width:'+r.width+'px;height:'+r.height+'px;overflow:hidden';
+      wrap.appendChild(clone);
+      if(annotSvg){ var s=annotSvg.cloneNode(true); s.style.left='0'; s.style.top='0'; wrap.appendChild(s); }
+      if(annotPins){ var p=annotPins.cloneNode(true); p.style.left='0'; p.style.top='0'; wrap.appendChild(p); }
+      var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('width',String(r.width)); svg.setAttribute('height',String(r.height));
+      var fo=document.createElementNS('http://www.w3.org/2000/svg','foreignObject');
+      fo.setAttribute('width','100%'); fo.setAttribute('height','100%');
+      fo.appendChild(wrap); svg.appendChild(fo);
+      var src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var cv=document.createElement('canvas');
+          cv.width=Math.max(1,Math.round(r.width)); cv.height=Math.max(1,Math.round(r.height));
+          cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+          cb(cv.toDataURL('image/png'));
+        }catch(e){ cb(null); }
+      };
+      img.onerror=function(){ cb(null); };
+      img.src=src;
+    }catch(e){ cb(null); }
+  }
+  function sendAnnots(req){
+    // Include the in-progress stroke: redrawStrokes renders it live, so a
+    // submit mid-drag must not silently drop what the user sees on screen.
+    var strokes=annotState.strokes.concat(drawing&&curStroke?[curStroke]:[]);
+    var payload={type:'oa:live:annot:data', req:req, comments:annotState.comments.slice(), strokes:strokes, screenshot:null};
+    captureShot(function(shot){ if(shot)payload.screenshot=shot; window.__oaSend(payload); });
+  }
   window.addEventListener('message',function(e){
     if(e.source!==window.parent)return;
     var m=e.data; if(!m||typeof m!=='object')return;
     if(m.type==='oa:live:pick:arm')arm();
     else if(m.type==='oa:live:pick:disarm')disarm();
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
+    else if(m.type==='oa:live:annot:collect')sendAnnots(m.req);
+  });
+  window.addEventListener('message',function(e){
+    if(e.source!==window.parent)return;
+    var m=e.data; if(!m||typeof m!=='object')return;
+    if(m.type==='oa:live:pick:arm')arm();
+    else if(m.type==='oa:live:pick:disarm')disarm();
+    else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
+    else if(m.type==='oa:live:annot:collect')sendAnnots();
   });
 })();
 `;

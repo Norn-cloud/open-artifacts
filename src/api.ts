@@ -285,12 +285,20 @@ api.post("/artifacts", async (c) => {
     return publishToChannel(c, store, winner, parsed.value, channelRaw);
   }
 
+  // Indirect access so TS does not statically resolve the check to always-true
+  // when the deploy's generated Env types LIVE_DO as required (coda0). The
+  // engine itself declares LIVE_DO optional — a self-host without the binding
+  // reports liveSupported false and the CLI skips the watcher tip.
+  const liveSupported = Boolean(
+    (c.env as unknown as Record<string, unknown>).LIVE_DO,
+  );
   return c.json(
     {
       id,
       url: artifactUrl(c, id),
       writeToken,
       version: 1,
+      liveSupported,
       ...(channelRaw ? { channel: channelRaw } : {}),
     },
     201,
