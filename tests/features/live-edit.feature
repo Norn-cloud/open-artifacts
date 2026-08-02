@@ -71,7 +71,7 @@ Feature: Live editing
     Then GET /api/artifacts/<id>/live/status returns {pendingEvents} containing that generate event id
     But after the agent replies done via POST /api/artifacts/<id>/live/reply
     Then GET /api/artifacts/<id>/live/status no longer contains that event id
-    And the status route is write-gated (sk_/wt_/ch_), like poll and reply
+    And the status route uses the artifact view gate so a hosted sk_ watcher can poll
 
   Scenario: The watch loop waits for an event ack before polling the next
     When the agent runs `node artifact.mjs live <id> --watch`
@@ -95,7 +95,7 @@ Feature: Live editing
     Then the watcher POSTs /api/artifacts/<id>/live/heartbeat on a fixed interval while watching
     And GET /api/artifacts/<id>/live/status reports agentActive true with a lastAgentSeen timestamp
     But before any heartbeat, GET /api/artifacts/<id>/live/status reports agentActive false
-    And the heartbeat route is write-gated (sk_/wt_/ch_), like poll and reply
+    And the heartbeat route uses the artifact view gate so a hosted sk_ watcher can stay online
     And the heartbeat route 404s when the deploy has no LIVE_DO binding
 
   Scenario: Create advertises live support and the CLI prompts to start the watcher
@@ -117,7 +117,8 @@ Feature: Live editing
     And the user posts a comment
     Then the host pushes {type:'comment', id, body, author, anchor, createdAt} over the WebSocket
     And the watcher's poll delivers the comment event promptly (even during an ack-wait)
-    But the watcher does not auto-ack or exit on a comment — it just prints and keeps polling
+    And delivering the comment removes it from the pending event queue
+    But the watcher does not enter edit-ack waiting or exit on a comment — it just prints and keeps polling
 
   Scenario: A live poll failure tells the operator why
     When the agent CLI polls /api/artifacts/<id>/live/poll and the instance responds 401, 403, or 404

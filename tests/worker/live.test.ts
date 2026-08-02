@@ -298,22 +298,27 @@ describe("live routes with LIVE_DO bound", () => {
     expect(typeof status.lastAgentSeen).toBe("number");
   });
 
-  it("GET /live/status and POST /live/heartbeat are write-gated", async () => {
+  it("GET /live/status and POST /live/heartbeat use the artifact view gate", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
-    // Default authorizer + no token: the route maps every auth failure to
-    // "not found" (privacy: never leak whether the artifact exists).
     const res = await fetchWith(
-      jsonRequest("POST", `/api/artifacts/${id}/live/heartbeat`),
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/heartbeat`,
+        undefined,
+        SK_BEARER,
+      ),
       ON,
       false,
     );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
     const res2 = await fetchWith(
-      new Request(`${BASE}/api/artifacts/${id}/live/status`),
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
       ON,
       false,
     );
-    expect(res2.status).toBe(404);
+    expect(res2.status).toBe(200);
   });
 
   it("agentActive goes false once lastAgentSeen falls outside the window", async () => {
@@ -359,6 +364,27 @@ describe("live routes with LIVE_DO bound", () => {
     expect(status.pendingEvents.some((e) => e.id === "ev1")).toBe(true);
   });
 
+  it("a hosted sk watcher can poll through the artifact view gate", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    await enqueueRaw(id, {
+      type: "comment",
+      id: "c_sk_view1",
+      body: "hosted watcher can receive this",
+    });
+
+    const res = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      type: "comment",
+      id: "c_sk_view1",
+    });
+  });
+
   it("browser WebSocket generate and comment events reach pendingEvents (the real enqueue path)", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await liveStub(id).fetch(
@@ -400,6 +426,56 @@ describe("live routes with LIVE_DO bound", () => {
     }
     ws.close();
     expect(seen).toBe(2);
+  });
+
+  it("polling a comment returns its payload and consumes the queued event", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(res.status).toBe(101);
+    const ws = res.webSocket;
+    if (!ws) throw new Error("no websocket in upgrade response");
+    ws.accept();
+    ws.send(
+      JSON.stringify({
+        type: "comment",
+        id: "c_consume1",
+        body: "remove the stale comment",
+        author: "reviewer",
+        createdAt: "2026-08-02T10:00:00.000Z",
+      }),
+    );
+
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(await pollRes.json()).toMatchObject({
+      type: "comment",
+      id: "c_consume1",
+      body: "remove the stale comment",
+    });
+
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { id: string }[];
+    };
+    expect(
+      status.pendingEvents.some((event) => event.id === "c_consume1"),
+    ).toBe(false);
+    ws.close();
   });
 
   it("GET /live/poll honors exclude so in-flight events are never re-delivered", async () => {
