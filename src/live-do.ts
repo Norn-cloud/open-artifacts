@@ -110,6 +110,18 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       return; // ignore malformed
     }
     if (!msg?.type || !msg?.id) return;
+    // The browser channel may only enqueue user actions (generate, comment,
+    // exit). Reply types (ack/done/error) and the publish signal (version)
+    // are produced server-side — accepting them here would let a WS client
+    // inject fake events into the agent's poll queue or fake reloads into
+    // other viewers.
+    if (
+      msg.type !== "generate" &&
+      msg.type !== "comment" &&
+      msg.type !== "exit"
+    ) {
+      return;
+    }
 
     if (msg.type === "exit") {
       // Browser session ended — drop the connection; agent will see exit.

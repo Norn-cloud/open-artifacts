@@ -89,6 +89,7 @@ Feature: Live editing
     Then the DO broadcasts {type:'version', id, version} to the subscribed browser
     But the version broadcast is never enqueued - it never appears in /live/poll or /live/status pendingEvents
     And a deploy without the LIVE_DO binding publishes normally with no broadcast
+    And the browser WebSocket channel only enqueues user actions (generate, comment, exit) - reply types and the version signal cannot be injected into the agent poll queue
 
   Scenario: A staying viewer auto-refreshes when a new version lands
     Given the user is staying on the artifact page with a live channel up

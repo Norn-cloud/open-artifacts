@@ -828,7 +828,7 @@ describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
     expect(await res.json()).toMatchObject({ version: 2 });
   });
 
-  it("the host page auto-reloads on a version broadcast (pinned views and mid-work guarded)", async () => {
+  it("the host page carries the version-broadcast handler with its guards inlined", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" });
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
     const html = await res.text();
@@ -839,6 +839,58 @@ describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
     // Mid-work (compose prompt open or inline text editing) the host toasts
     // instead of reloading, so no unsaved work is destroyed.
     expect(html).toContain("New version published");
+    // The done-driven reload skips when the version broadcast already
+    // reloaded (restartAfterEdit(true) — the dedupe ordering that matters,
+    // since the agent republishes before replying done).
+    expect(html).toContain("restartAfterEdit(true)");
+  });
+
+  it("WS clients cannot inject reply or publish types into the agent poll queue", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const { ws } = await connectLive(id);
+    ws.send(JSON.stringify({ type: "version", id: "inj_v1", version: 99 }));
+    ws.send(JSON.stringify({ type: "done", id: "inj_d1" }));
+    ws.send(JSON.stringify({ type: "ack", id: "inj_a1" }));
+
+    // Nothing is queued: the poll times out and the status stays empty.
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(await pollRes.json()).toMatchObject({ type: "timeout" });
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { id: string }[];
+    };
+    expect(status.pendingEvents.length).toBe(0);
+
+    // Control: user-action types still enqueue, so the drops above are the
+    // allowlist working — not a dead WebSocket.
+    ws.send(JSON.stringify({ type: "generate", id: "inj_g1", items: [] }));
+    let seen = false;
+    for (let i = 0; i < 20 && !seen; i++) {
+      const s = await fetchWith(
+        new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+          headers: SK_BEARER,
+        }),
+        ON,
+        true,
+      );
+      const st = (await s.json()) as { pendingEvents: { id: string }[] };
+      seen = st.pendingEvents.some((e) => e.id === "inj_g1");
+      if (!seen) await new Promise((r) => setTimeout(r, 100));
+    }
+    ws.close();
+    expect(seen).toBe(true);
   });
 });
 
