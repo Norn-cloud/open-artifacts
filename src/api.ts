@@ -204,6 +204,7 @@ async function publishToChannel(
       force: false,
     });
     if (typeof result === "number") {
+      await broadcastVersionIfLive(c, snapshot.id, result);
       return c.json({
         id: snapshot.id,
         url: artifactUrl(c, snapshot.id),

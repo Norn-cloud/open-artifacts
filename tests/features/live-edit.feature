@@ -85,7 +85,7 @@ Feature: Live editing
 
   Scenario: The viewer is told when a new version is published mid-session
     Given a live channel is up (the owner's page holds a WebSocket)
-    When the agent publishes a new version via PUT /api/artifacts/<id> or the Live update command
+    When the agent publishes a new version via PUT /api/artifacts/<id>, the Live update command, or a channel republish
     Then the DO broadcasts {type:'version', id, version} to the subscribed browser
     But the version broadcast is never enqueued - it never appears in /live/poll or /live/status pendingEvents
     And a deploy without the LIVE_DO binding publishes normally with no broadcast
@@ -95,7 +95,7 @@ Feature: Live editing
     When the host receives a version broadcast
     Then the host reloads the frame in place and re-arms pick once the frame reports ready
     But a version-pinned view (?v=) never auto-reloads
-    And a version broadcast within a few seconds of a done-driven reload is suppressed (no double reload)
+    And the version reload and the done-driven reload dedupe in both orderings (one reload per publish)
     And while the user has a compose prompt open or inline text editing active, the host toasts instead of reloading
 
   Scenario: Exiting during the edit-confirmed window does not strand the user

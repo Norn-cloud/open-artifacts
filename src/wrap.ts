@@ -2110,7 +2110,11 @@ const LIVE_SCRIPT = `
           queuedEditId=null;
           refreshStash();
         }
-        setTimeout(restartAfterEdit,1200);
+        // The agent republishes before replying done, so the version
+        // broadcast usually reloaded the frame first — skip the reload (and
+        // the CONFIRMED window's restart) in that case, but still run
+        // restartAfterEdit to reset the batch and return to PICKING.
+        setTimeout(function(){ if(Date.now()-lastReloadAt<RELOAD_DEDUP_MS){ restartAfterEdit(true); } else { restartAfterEdit(); } },1200);
       }
       else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
       // 'version' = a new version was published (ordinary update or Live
@@ -2214,7 +2218,7 @@ const LIVE_SCRIPT = `
   // during the CONFIRMED window the dock is hidden: still reload (to show the
   // new version) but skip the re-arm - state stays IDLE from closeLive, so
   // reopening arms cleanly instead of stranding on a stale PICKING state.
-  function restartAfterEdit(){ lastReloadAt=Date.now(); reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
+  function restartAfterEdit(skipReload){ if(!skipReload){ lastReloadAt=Date.now(); reloadFrame(); } if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
 
   connect();
 })();
