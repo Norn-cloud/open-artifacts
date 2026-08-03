@@ -25,7 +25,8 @@ export const hasNewEvent = (status, knownIds) => {
   if (!knownIds || knownIds.size === 0) return false;
   return (status?.pendingEvents || []).some(
     (e) =>
-      (e.type === "generate" || e.type === "comment") && !knownIds.has(e.id),
+      (e.type === "generate" || e.type === "comment" || e.type === "edit") &&
+      !knownIds.has(e.id),
   );
 };
 

@@ -21,11 +21,15 @@ node "$ARTIFACT_CLI" live <ID> --watch
 **Your only job in a live session is to poll.** You never operate the viewer
 page yourself — no browser automation on the artifact page, no clicking Live,
 picking elements, or typing prompts. The user drives the viewer; your watcher
-prints each `generate` event for you to act on. The viewer's Live button shows
-`Connected` while your watcher is connected (the watcher heartbeats every
-~20s, the viewer polls the status every ~15s, and the indicator clears within about
-a minute of the watcher stopping), so the user can see an agent is online
-before they start picking.
+prints each `generate`/`edit` event for you to act on. The viewer's Live
+button shows the watcher state (impeccable semantics): `Connected` accent pill
+with no dot while your watcher is online (the watcher heartbeats every ~20s,
+the viewer polls the status every ~15s, and the indicator clears within about
+a minute of the watcher stopping); while a pending event is leased to the
+agent, the accent dot pulses with the tooltip "Agent is working on an edit";
+when the watcher drops, an amber dot pulses with "Agent disconnected - run the
+watcher to connect", so the user can see an agent is online before they start
+picking.
 
 ## Give this to your coding agent
 
@@ -38,7 +42,7 @@ Live-edit artifact <ID> at coda0.com:
 2. Start the watcher (stays online for the whole session):
    node "$ARTIFACT_CLI" live <ID> --watch
    - Prints one JSON line per event on stdout (blocks until next event).
-   - Auto-replies `ack` on each `generate` so the host shows "agent is editing".
+   - Auto-replies `ack` on each `generate`/`edit` so the host shows "agent is editing".
    - Your ONLY job is this watcher — do NOT operate the viewer page yourself
      (no browser automation, no clicking Live, picking elements, or typing
      prompts). The user drives the page.
@@ -61,6 +65,10 @@ Live-edit artifact <ID> at coda0.com:
      it. The watcher never enters edit-ack waiting or exits on a comment; it
      prints like any other event and keeps polling. The comment remains in the
      artifact's persistent comment history.
+   - An `edit` event `{type:'edit', id, pageUrl, items:[{id, element, ops}]}`
+     arrives when the user applies their staged inline text edits (see "Copy
+     edits" below): apply each op's `originalText` → `newText` in the Recipe
+     source, `update <id> --live`, and reply `done --data '<json>'`.
 5. Edit the artifact source to apply each item's requested change to its picked element (match by id → class → tag → outerHTML content). Do NOT inject variant wrappers — Live is one-shot edit-and-reload, not variant cycling.
 6. Publish the Live edit in place (this does not create a new artifact version):
    node "$ARTIFACT_CLI" update <ID> --live   (use the artifact's recipe, or pass the new recipe)
@@ -148,6 +156,58 @@ are NOT classified by the browser — a closed loop, arrow, or cross is just a
 point array; you infer the intent. A cross/slash on an element means delete; a
 loop means "this thing"; an arrow means direction. No annotations → no
 screenshot is sent.
+
+## Copy edits (inline text editing)
+
+The user can edit an element's text directly in the page instead of describing
+a change: pick an element, click **Edit text**, type into the highlighted text
+rows, Save. Edits are STAGED (not delivered immediately) — the dock shows an
+"Apply copy edits (N)" pill; the user fixes several texts, then clicks Apply,
+which commits ONE `edit` event:
+
+```
+{type:'edit', id, pageUrl, items:[{id, element, ops:[{ref, tag, elementId, classes, originalText, newText, leaf, nearbyEditableTexts}]}]}
+```
+
+`ops` fields:
+
+- `originalText` — the TRUE source state of the row (kept across re-edits on
+  the same row). **Match it EXACTLY as a source substring** — never from the
+  served `outerHTML`/DOM text (whitespace, entities, and React escapes
+  differ).
+- `newText` — the user's replacement, plain text only (the browser rejects
+  `<`, `{`, `}`, and backticks before sending).
+- `ref` — `id || classes.join('.') || tagName` of the row (may repeat across
+  rows; use it with `element` to disambiguate).
+- `element` — the same context blob as `generate` (id → class → tag →
+  outerHTML).
+- `nearbyEditableTexts` — sibling rows' texts, to disambiguate repeated text.
+
+Apply loop (one `edit` event per Apply):
+
+1. Grep `originalText` across the Recipe sources (`.artifacts/recipes/**`,
+   fragments). If no match, use the element context (id/classes/tag/outerHTML)
+   to locate the containing element first, then the row by `ref`.
+2. Replace `originalText` → `newText`, preserving `newText` exactly.
+3. Verify `newText` landed: grep the touched files before republishing.
+4. Publish in place: `node "$ARTIFACT_CLI" update <ID> --live`
+5. Reply with the canonical result JSON so the browser can show what landed:
+
+```
+node "$ARTIFACT_CLI" live <ID> --reply <eid> done --data '{"status":"done","appliedEntryIds":["stash_..."],"failed":[],"files":["..."],"notes":[]}'
+```
+
+- `appliedEntryIds` = the items' ids you applied; `failed` = `[{entryId,
+  reason, candidates?}]` for ops you could not locate (e.g. the source
+  changed since the user saved). The browser shows "N applied, M failed —
+  re-edit them" and the stash clears on `done`. There is no repair loop:
+  report failures honestly and let the user re-edit.
+- An `error` reply keeps the stash so the user can retry or discard.
+
+React artifacts: expression-rendered text (like `{title}`) never appears as a
+literal substring. Quote the expression (`{"..."}`), update coupled lookup
+keys, or report it as `failed` — the user re-edits. Framework file/line
+`sourceHint` and op chunking are future work.
 
 ## Token & auth
 

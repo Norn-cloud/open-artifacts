@@ -1553,15 +1553,30 @@ async function commandLive(rest, flags) {
   }
   const base = `${config.apiUrl}/api/artifacts/${encodeURIComponent(id)}/live`;
 
-  // Reply mode: POST /reply {id, type, version} then exit.
+  // Reply mode: POST /reply {id, type, version, ...data} then exit. --data
+  // carries the canonical edit-result JSON (status/appliedEntryIds/failed/
+  // files/notes) so the browser can show what was applied, mirroring
+  // impeccable's `live-poll.mjs --reply <id> done --data '<json>'`.
   const replyId = flags.reply;
   if (replyId) {
     const status = rest[1] ?? "done";
     const version = flags.version;
+    const body = { id: replyId, type: status, version };
+    if (flags.data !== undefined) {
+      try {
+        const data = JSON.parse(flags.data);
+        if (typeof data !== "object" || data === null || Array.isArray(data)) {
+          throw new Error("object required");
+        }
+        Object.assign(body, data);
+      } catch {
+        fail(`--data must be a JSON object, got: ${flags.data}`);
+      }
+    }
     const { status: httpStatus, json } = await request(
       "POST",
       `${base}/reply`,
-      { id: replyId, type: status, version },
+      body,
       sk,
     );
     if (httpStatus !== 200) {
@@ -1773,7 +1788,7 @@ async function commandLive(rest, flags) {
       console.error("[live watch] session ended");
       break;
     }
-    if (evt.type === "generate") {
+    if (evt.type === "generate" || evt.type === "edit") {
       try {
         await reply(evt.id, "ack");
       } catch (e) {
@@ -1846,11 +1861,13 @@ commands:
   logout               remove the stored API key from credentials.json
   whoami               print the authenticated SaaS user for the current API key
   live <id>            live editing: poll one event (stdout JSON, exit),
-                       or --reply <eid> <status> --version <n> to ack
+                       or --reply <eid> <status> --version <n> [--data <json>]
+                       to ack (--data carries the canonical edit-result JSON)
   live <id> --watch    stay online for the session: poll, auto-ack each
-                       generate, print each event on stdout, exit on "exit";
-                       waits for each event's done reply (polls /live/status)
-                       before polling the next (--ack-timeout=0 disables)
+                       generate/edit, print each event on stdout, exit on
+                       "exit"; waits for each event's done reply (polls
+                       /live/status) before polling the next (--ack-timeout=0
+                       disables)
   live <id> --wait-ack <eid>
                        block until event <eid> leaves the pending queue
                        (polls /live/status) or the ack timeout elapses
@@ -1874,6 +1891,9 @@ options:
                        reply before continuing; default 600000, 0 disables
   --ack-poll <ms>      (live --watch/--wait-ack) /live/status poll interval;
                        default 1000 (remote-Worker friendly)
+  --data <json>        (live --reply) canonical edit-result JSON object,
+                       merged into the reply body (status/appliedEntryIds/
+                       failed/files/notes)
 
 auth precedence for requests: --token > OPEN_ARTIFACTS_API_KEY > credentials.json apiKey >
 OPEN_ARTIFACTS_TOKEN > config createToken
@@ -1899,6 +1919,7 @@ async function main() {
       hook: { type: "boolean" },
       v: { type: "string" },
       reply: { type: "string" },
+      data: { type: "string" },
       types: { type: "string" },
       version: { type: "string" },
       watch: { type: "boolean" },

@@ -325,14 +325,18 @@ Run it as a background task (per-harness patterns in
 for the session. **Your only job in a live session is to poll** — you never
 operate the viewer page yourself (no browser automation, no clicking Live,
 picking elements, or typing prompts on the artifact page). The user drives the
-viewer: they open the artifact URL, click Live, pick elements, type a change
-for each, and submit; your watcher prints each `generate` event for you to act
-on (edit the Recipe sources, `update`, reply `done`). The viewer's Live button
-shows `Connected` while your watcher is connected, so the user can see an agent
-is online before they start picking. If no watcher is connected, clicking Live
-still opens the picker and also shows a copyable startup prompt; start the
-watcher before submitting an edit. Read
-[references/live.md](references/live.md) before the session.
+viewer: they open the artifact URL, click Live, pick elements, then either type
+a change for each (a `generate` event) or **edit the element's text inline**
+("Edit text", an `edit` event) — see the Copy edits section in
+[references/live.md](references/live.md). Your watcher prints each event for
+you to act on (edit the Recipe sources, `update`, reply `done`). The viewer's
+Live button shows `Connected` while your watcher is connected, so the user can
+see an agent is online before they start picking; while a pending event is
+leased to you, the toggle's accent dot pulses ("Agent is working on an edit");
+if the watcher drops, the toggle shows an amber pulsing dot with the startup
+hint. If no watcher is connected, clicking Live still opens the picker and
+also shows a copyable startup prompt; start the watcher before submitting an
+edit. Read [references/live.md](references/live.md) before the session.
 
 ## Updating
 
