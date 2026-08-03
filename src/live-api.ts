@@ -75,6 +75,23 @@ function stubFor(
   ) as unknown as DurableObjectStub<LiveObject>;
 }
 
+// Publish signal for staying viewers: after a successful publish, tell the
+// LiveObject to broadcast {type:'version'} so open viewers reload in place.
+// Best-effort — a missed broadcast must never fail the publish, and a deploy
+// without LIVE_DO no-ops. Reused by the ordinary update route in api.ts.
+export async function broadcastVersionIfLive(
+  c: Context<AppContext>,
+  id: string,
+  version: number,
+): Promise<void> {
+  if (!liveEnabled(c)) return;
+  try {
+    await stubFor(c, id).rpcBroadcastVersion(version);
+  } catch {
+    // transient DO hiccup; the viewer can still manual-reload
+  }
+}
+
 liveApi.get("/artifacts/:id/live", async (c) => {
   if (!liveEnabled(c)) return c.text("not found", 404);
   if (c.req.header("Upgrade") !== "websocket") {
@@ -174,6 +191,7 @@ liveApi.put("/artifacts/:id/live", async (c) => {
       409,
     );
   }
+  await broadcastVersionIfLive(c, auth.record.id, result);
   return c.json({
     id: auth.record.id,
     url: artifactUrl(c, auth.record.id),

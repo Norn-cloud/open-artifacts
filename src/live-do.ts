@@ -24,7 +24,15 @@ import { DurableObject } from "cloudflare:workers";
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type: "generate" | "exit" | "comment" | "ack" | "done" | "error" | "edit";
+  type:
+    | "generate"
+    | "exit"
+    | "comment"
+    | "ack"
+    | "done"
+    | "error"
+    | "edit"
+    | "version";
   id: string;
   /** Best-effort base64 data-URL PNG of the picked content; omitted when capture fails. */
   screenshot?: string;
@@ -228,6 +236,15 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
   // timestamp lives in DO KV storage, so it survives hibernation.
   async rpcHeartbeat(): Promise<void> {
     await this.ctx.storage.put("lastAgentSeen", Date.now());
+  }
+
+  // Publish signal for staying viewers: when a new version lands (ordinary
+  // update or Live in-place replace), tell the connected browsers so the host
+  // can reload the frame in place. Broadcast-only — never enqueued, so a CLI
+  // poll never sees it; a viewer with no channel open simply misses it (a
+  // manual reload still works, same as before).
+  async rpcBroadcastVersion(version: number): Promise<void> {
+    this.broadcast({ type: "version", id: "version", version });
   }
 
   // Drop queued exit rows so a stale exit from a prior session can't poison a

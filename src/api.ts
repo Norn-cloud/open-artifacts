@@ -9,6 +9,7 @@ import {
   validateCreate,
   validateUpdate,
 } from "./domain";
+import { broadcastVersionIfLive } from "./live-api";
 import type { ArtifactRecord, ArtifactStore } from "./store";
 import { D1R2Store } from "./store";
 import {
@@ -354,6 +355,9 @@ api.put("/artifacts/:id", async (c) => {
       409,
     );
   }
+  // Tell staying viewers a new version landed so the host reloads in place.
+  // No-ops when the deploy did not bind LIVE_DO.
+  await broadcastVersionIfLive(c, auth.record.id, result);
   return c.json({
     id: auth.record.id,
     url: artifactUrl(c, auth.record.id),

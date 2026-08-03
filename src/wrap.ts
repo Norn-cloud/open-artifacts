@@ -1724,6 +1724,10 @@ const LIVE_SCRIPT = `
   var ackTimer=null;
   // How long to wait for an agent ack before showing the stall hint.
   var ACK_TIMEOUT=120000; // 2 min — generous for an agent spinning up
+  // A publish broadcasts 'version' while the agent's 'done' reply also
+  // triggers a reload ~1.2s later; whichever lands first reloads, and the
+  // second is suppressed within this window.
+  var lastReloadAt=0, RELOAD_DEDUP_MS=5000;
 
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
@@ -2109,6 +2113,22 @@ const LIVE_SCRIPT = `
         setTimeout(restartAfterEdit,1200);
       }
       else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
+      // 'version' = a new version was published (ordinary update or Live
+      // in-place replace). A staying viewer refreshes in place: reload the
+      // frame (its src has no version param and is no-cache, so it picks up
+      // the new version) and re-arm pick via the oa:ready handshake. Guarded:
+      // a pinned ?v= view never jumps; mid-work (compose prompt open or
+      // inline text editing) the user is told instead of losing unsaved work;
+      // and a 'done' broadcast already reloads ~1.2s later, so dedupe.
+      else if(msg.type==='version'){
+        if(/[?&]v=/.test(window.location.search)) return;
+        if(Date.now()-lastReloadAt<RELOAD_DEDUP_MS) return;
+        if(draft||state==='EDITING'||state==='COMPOSE'){ if(window.__oaShowInfo)window.__oaShowInfo('New version published — Save or cancel your edit to see it'); return; }
+        lastReloadAt=Date.now();
+        reloadFrame();
+        if(root.hidden) return;
+        pendingRearm=true;
+      }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
   }
@@ -2194,7 +2214,7 @@ const LIVE_SCRIPT = `
   // during the CONFIRMED window the dock is hidden: still reload (to show the
   // new version) but skip the re-arm - state stays IDLE from closeLive, so
   // reopening arms cleanly instead of stranding on a stale PICKING state.
-  function restartAfterEdit(){ reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
+  function restartAfterEdit(){ lastReloadAt=Date.now(); reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
 
   connect();
 })();

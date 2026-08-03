@@ -712,6 +712,136 @@ describe("live routes with LIVE_DO bound", () => {
   });
 });
 
+describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
+  // Connect the browser-side WebSocket for an artifact (the live channel the
+  // host page holds) and collect every message the DO sends.
+  async function connectLive(id: string): Promise<{
+    ws: WebSocket;
+    messages: { type: string; [key: string]: unknown }[];
+  }> {
+    const res = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(res.status).toBe(101);
+    const ws = res.webSocket;
+    if (!ws) throw new Error("no websocket in upgrade response");
+    const messages: { type: string; [key: string]: unknown }[] = [];
+    ws.addEventListener("message", (e) => {
+      messages.push(JSON.parse(e.data as string));
+    });
+    ws.accept();
+    return { ws, messages };
+  }
+
+  // Broadcast delivery is async (DO -> WS); wait bounded, like the enqueue
+  // assertions above.
+  async function waitForMessage(
+    messages: { type: string }[],
+    type: string,
+  ): Promise<{ type: string; [key: string]: unknown }> {
+    for (let i = 0; i < 50; i++) {
+      const found = messages.find((m) => m.type === type);
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`no ${type} broadcast within the wait window`);
+  }
+
+  it("an ordinary update broadcasts {type:'version', version} to staying viewers", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2 });
+
+    const msg = await waitForMessage(messages, "version");
+    expect(msg).toMatchObject({ type: "version", version: 2 });
+    ws.close();
+  });
+
+  it("the Live in-place replace broadcasts the replaced version", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}/live`, { content: "<p>r1</p>" }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 1 });
+
+    const msg = await waitForMessage(messages, "version");
+    expect(msg).toMatchObject({ type: "version", version: 1 });
+    ws.close();
+  });
+
+  it("the version broadcast is never enqueued - poll times out and status stays empty", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws } = await connectLive(id);
+
+    const putRes = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    expect(putRes.status).toBe(200);
+
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(await pollRes.json()).toMatchObject({ type: "timeout" });
+
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { type: string }[];
+    };
+    expect(status.pendingEvents.length).toBe(0);
+    ws.close();
+  });
+
+  it("a deploy without LIVE_DO publishes normally with no broadcast step", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2 });
+  });
+
+  it("the host page auto-reloads on a version broadcast (pinned views and mid-work guarded)", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+    // The live script handles the version broadcast.
+    expect(html).toContain("msg.type==='version'");
+    // A version-pinned view (?v=) never auto-reloads.
+    expect(html).toContain("[?&]v=");
+    // Mid-work (compose prompt open or inline text editing) the host toasts
+    // instead of reloading, so no unsaved work is destroyed.
+    expect(html).toContain("New version published");
+  });
+});
+
 describe("live edit stash, commit, and inline-edit chrome", () => {
   const op = { ref: "h1", originalText: "Old", newText: "New" };
   const stashBody = (pageUrl: string, ops: unknown[]) => ({
