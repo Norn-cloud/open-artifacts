@@ -24,17 +24,21 @@ import { DurableObject } from "cloudflare:workers";
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type: "generate" | "exit" | "comment" | "ack" | "done" | "error";
+  type: "generate" | "exit" | "comment" | "ack" | "done" | "error" | "edit";
   id: string;
   [key: string]: unknown;
 };
 
 // Priority: terminal user actions first (a late exit shouldn't sit behind a
-// generate), then generate, then everything else.
+// generate), then an inline edit commit (the user's immediate curation
+// action), then generate (a background described-change), then everything
+// else. `generate` was demoted from 1 to 2 when `edit` was added — an edit
+// the user just committed must beat an older generate still in flight.
 function eventPriority(type: LiveEvent["type"]): number {
   if (type === "exit") return 0;
-  if (type === "generate") return 1;
-  return 2;
+  if (type === "edit") return 1;
+  if (type === "generate") return 2;
+  return 3;
 }
 
 type QueueRow = {
@@ -56,6 +60,12 @@ type PollWaiter = {
 const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
+// Staged copy edits age out after a day. They differ from pending events: a
+// stash is the user's curated work, kept across reloads for the whole session
+// (an Apply can happen minutes after the last Save), so a 1h GC would drop
+// it mid-flow — but a forgotten draft must not live forever either. The sweep
+// rides the enqueue GC so no separate alarm wakes the DO.
+const STASH_GC_AGE_MS = 86_400_000;
 // A watcher heartbeats roughly every 20s; an agent that has not been seen
 // within this window is treated as offline (the viewer's Connected indicator clears).
 const AGENT_ACTIVE_WINDOW_MS = 60_000;
@@ -154,6 +164,20 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     payload: Record<string, unknown> = {},
   ) {
     if (type === "done" || type === "error") {
+      // A `done` that fulfills an `edit` event means the agent applied the
+      // committed ops: clear that page's stash (the host's Apply pill empties
+      // on the next refresh). An `error` reply leaves the stash intact so the
+      // user can retry or discard. The row must be read BEFORE acknowledge
+      // drops it.
+      if (type === "done") {
+        const row = await this.pendingRow(id);
+        if (row && row.type === "edit") {
+          const payloadOf = JSON.parse(row.payload) as { pageUrl?: string };
+          if (typeof payloadOf.pageUrl === "string") {
+            await this.rpcClearStash(payloadOf.pageUrl);
+          }
+        }
+      }
       await this.acknowledge(id);
     }
     this.broadcast({ type, id, ...payload } as LiveEvent);
@@ -215,6 +239,193 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     await this.ctx.storage.sql.exec(`DELETE FROM pending WHERE type = 'exit'`);
   }
 
+  // Cancel a queued edit event before any agent picks it up (the host's
+  // "Queued — click to cancel" pill). Only un-leased edit rows are
+  // cancellable: once a watcher polled the event, the agent may already be
+  // applying it — deleting the row would not stop the work, so refuse.
+  async rpcCancelEvent(
+    eid: string,
+  ): Promise<
+    { ok: true } | { ok: false; error: "not found" | "already picked up" }
+  > {
+    await this.ensureSchema();
+    const row = await this.pendingRow(eid);
+    if (row === null || row.type !== "edit") {
+      return { ok: false, error: "not found" };
+    }
+    if (row.leased_until > Date.now()) {
+      return { ok: false, error: "already picked up" };
+    }
+    await this.ctx.storage.sql.exec(
+      `DELETE FROM pending WHERE id = ? AND type = 'edit'`,
+      eid,
+    );
+    return { ok: true };
+  }
+
+  // --- inline copy-edit stash (impeccable-style manual edits) ---
+  //
+  // The browser stages text edits into `stashed_edits` (one row per picked
+  // element, keyed by (page_url, ref)) instead of delivering them as events
+  // immediately. The user fixes several texts, then clicks Apply once — the
+  // host POSTs /live/edit-commit, which bundles every staged op for the page
+  // into a SINGLE `edit` event for the agent to apply in one pass.
+
+  async rpcStashEdit(entry: {
+    pageUrl: string;
+    ref: string;
+    element: Record<string, unknown>;
+    ops: Record<string, unknown>[];
+  }): Promise<{ pendingCount: number }> {
+    await this.ensureSchema();
+    const now = Date.now();
+    const existing = this.ctx.storage.sql
+      .exec<{ id: string; ops: string }>(
+        `SELECT id, ops FROM stashed_edits WHERE page_url = ? AND ref = ?`,
+        entry.pageUrl,
+        entry.ref,
+      )
+      .toArray()[0];
+    let ops: Record<string, unknown>[];
+    let id: string;
+    if (existing) {
+      // Merge by (pageUrl, ref): a re-edit replaces newText but keeps the
+      // original originalText — that is the true source state the agent must
+      // match, even if the user has since reworded the row twice. The op key
+      // is (ref, originalText): ref alone can repeat across rows of one
+      // element (two <p> rows without ids/classes both resolve to "p"), so
+      // keying on ref alone would collapse them onto one op.
+      id = existing.id;
+      const keyOf = (o: Record<string, unknown>) =>
+        `${String(o.ref)}|${String(o.originalText)}`;
+      const old = JSON.parse(existing.ops) as Record<string, unknown>[];
+      const fresh = new Map(entry.ops.map((o) => [keyOf(o), o]));
+      ops = old.map((o) => {
+        const next = fresh.get(keyOf(o));
+        return next ? { ...o, newText: next.newText } : o;
+      });
+      for (const o of entry.ops) {
+        if (!old.some((prev) => keyOf(prev) === keyOf(o))) {
+          ops.push(o);
+        }
+      }
+      await this.ctx.storage.sql.exec(
+        `UPDATE stashed_edits SET element = ?, ops = ?, updated_at = ? WHERE page_url = ? AND ref = ?`,
+        JSON.stringify(entry.element),
+        JSON.stringify(ops),
+        now,
+        entry.pageUrl,
+        entry.ref,
+      );
+    } else {
+      id = `stash_${Math.random().toString(36).slice(2, 10)}`;
+      ops = entry.ops;
+      await this.ctx.storage.sql.exec(
+        `INSERT INTO stashed_edits (id, page_url, ref, element, ops, staged_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        entry.pageUrl,
+        entry.ref,
+        JSON.stringify(entry.element),
+        JSON.stringify(ops),
+        now,
+        now,
+      );
+    }
+    const count = await this.stashOpCount(entry.pageUrl);
+    return { pendingCount: count };
+  }
+
+  async rpcListStash(pageUrl: string | null = null): Promise<{
+    pendingCount: number;
+    entries: {
+      id: string;
+      pageUrl: string;
+      ref: string;
+      element: unknown;
+      ops: unknown[];
+      stagedAt: number;
+    }[];
+  }> {
+    await this.ensureSchema();
+    const rowType = {} as {
+      id: string;
+      page_url: string;
+      ref: string;
+      element: string;
+      ops: string;
+      staged_at: number;
+    };
+    const rows =
+      pageUrl === null
+        ? this.ctx.storage.sql
+            .exec<typeof rowType>(
+              `SELECT id, page_url, ref, element, ops, staged_at FROM stashed_edits ORDER BY staged_at ASC`,
+            )
+            .toArray()
+        : this.ctx.storage.sql
+            .exec<typeof rowType>(
+              `SELECT id, page_url, ref, element, ops, staged_at FROM stashed_edits WHERE page_url = ? ORDER BY staged_at ASC`,
+              pageUrl,
+            )
+            .toArray();
+    const entries = rows.map((r) => ({
+      id: r.id,
+      pageUrl: r.page_url,
+      ref: r.ref,
+      element: JSON.parse(r.element),
+      ops: JSON.parse(r.ops) as unknown[],
+      stagedAt: r.staged_at,
+    }));
+    return {
+      pendingCount: entries.reduce((n, e) => n + e.ops.length, 0),
+      entries,
+    };
+  }
+
+  async rpcClearStash(pageUrl: string | null = null): Promise<void> {
+    await this.ensureSchema();
+    if (pageUrl === null) {
+      await this.ctx.storage.sql.exec(`DELETE FROM stashed_edits`);
+    } else {
+      await this.ctx.storage.sql.exec(
+        `DELETE FROM stashed_edits WHERE page_url = ?`,
+        pageUrl,
+      );
+    }
+  }
+
+  // Commit the page's staged edits as ONE `edit` event. The event id is minted
+  // here (ev_ + random + time, mirroring the host's genId) so the browser and
+  // the agent refer to the same id for the reply; enqueue dedupes by id+type,
+  // and `edit` is a new type so ev_ ids never collide with generate's.
+  async rpcCommitEdit(
+    pageUrl: string,
+  ): Promise<
+    { ok: true; eventId: string } | { ok: false; error: "no stashed edits" }
+  > {
+    await this.ensureSchema();
+    const rows = this.ctx.storage.sql
+      .exec<{ id: string; element: string; ops: string }>(
+        `SELECT id, element, ops FROM stashed_edits WHERE page_url = ? ORDER BY staged_at ASC`,
+        pageUrl,
+      )
+      .toArray();
+    if (rows.length === 0) return { ok: false, error: "no stashed edits" };
+    const items = rows.map((r) => ({
+      id: r.id,
+      element: JSON.parse(r.element),
+      ops: JSON.parse(r.ops),
+    }));
+    const eventId = `ev_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    await this.enqueue({
+      type: "edit",
+      id: eventId,
+      pageUrl,
+      items,
+    } as LiveEvent);
+    return { ok: true, eventId };
+  }
+
   // --- internals ---
 
   private async ensureSchema(): Promise<void> {
@@ -232,7 +443,49 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       )`,
     );
     sql.exec(`CREATE INDEX IF NOT EXISTS pending_seq ON pending(seq)`);
+    // Staged copy edits (impeccable-style manual edits): one row per picked
+    // element on a page, merged by (page_url, ref). CREATE TABLE IF NOT EXISTS
+    // is idempotent, so an existing deploy's DO gets the table on its next
+    // wake without a migration.
+    sql.exec(
+      `CREATE TABLE IF NOT EXISTS stashed_edits (
+        id TEXT NOT NULL,
+        page_url TEXT NOT NULL,
+        ref TEXT NOT NULL,
+        element TEXT NOT NULL,
+        ops TEXT NOT NULL,
+        staged_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (page_url, ref)
+      )`,
+    );
     this.schemaReady = true;
+  }
+
+  // The pending row for an id, if any — used by rpcReply to decide whether a
+  // `done` fulfills an edit event (and thus clears that page's stash).
+  private async pendingRow(id: string): Promise<QueueRow | null> {
+    await this.ensureSchema();
+    const row = this.ctx.storage.sql
+      .exec<QueueRow>(
+        `SELECT id, type, payload, seq, leased_until, created_at FROM pending WHERE id = ?`,
+        id,
+      )
+      .toArray()[0];
+    return row ?? null;
+  }
+
+  private async stashOpCount(pageUrl: string): Promise<number> {
+    const rows = this.ctx.storage.sql
+      .exec<{ ops: string }>(
+        `SELECT ops FROM stashed_edits WHERE page_url = ?`,
+        pageUrl,
+      )
+      .toArray();
+    return rows.reduce(
+      (n, r) => n + ((JSON.parse(r.ops) as unknown[]).length ?? 0),
+      0,
+    );
   }
 
   private async enqueue(event: LiveEvent): Promise<void> {
@@ -242,6 +495,14 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     await this.ctx.storage.sql.exec(
       `DELETE FROM pending WHERE created_at < ?`,
       cutoff,
+    );
+    // Stale staged edits age out on the same sweep (see STASH_GC_AGE_MS): a
+    // draft untouched for a day is abandoned; the user's Apply flow needs
+    // minutes, not hours, so the longer window is safe.
+    const stashCutoff = Date.now() - STASH_GC_AGE_MS;
+    await this.ctx.storage.sql.exec(
+      `DELETE FROM stashed_edits WHERE updated_at < ?`,
+      stashCutoff,
     );
     // Dedupe by id+type.
     const exists =

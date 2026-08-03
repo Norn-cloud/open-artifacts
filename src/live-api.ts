@@ -21,6 +21,10 @@ import type { LiveEvent, LiveObject } from "./live-do";
 //   POST /api/artifacts/:id/live/heartbeat agent watcher presence (sk_)
 //   POST /api/artifacts/:id/live/consume-exit agent drops observed exit rows
 //   PUT  /api/artifacts/:id/live agent Live edit -> replace current version
+//   POST /api/artifacts/:id/live/edit-stash stage inline copy edits (owner)
+//   GET  /api/artifacts/:id/live/edit-stash restore the staged-edits pill (owner)
+//   DELETE /api/artifacts/:id/live/edit-stash discard staged edits (owner)
+//   POST /api/artifacts/:id/live/edit-commit bundle staged edits into one edit event (owner)
 //
 // Auth: coordination routes require authorizeView on the artifact (so
 // private/org artifacts only expose live to the owner / org members, just like
@@ -175,6 +179,126 @@ liveApi.put("/artifacts/:id/live", async (c) => {
     url: artifactUrl(c, auth.record.id),
     version: result,
   });
+});
+
+// Inline copy edits are staged in the LiveObject's stashed_edits table and
+// committed as ONE `edit` event per Apply. These routes are WRITE-gated
+// (authorizeWrite, like PUT /live) — staging leads to source edits — while the
+// coordination routes above stay on the view gate so any viewer can observe
+// agent presence. A staged body is a handful of text ops; 256KiB is far above
+// a legit batch and below the D1/R2 content caps, checked in bytes so
+// multibyte CJK text is counted correctly.
+const MAX_STASH_BODY_BYTES = 262_144;
+
+function isStashOp(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const op = value as Record<string, unknown>;
+  return (
+    typeof op.ref === "string" &&
+    typeof op.originalText === "string" &&
+    typeof op.newText === "string"
+  );
+}
+
+liveApi.post("/artifacts/:id/live/edit-stash", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+
+  const raw = await c.req.text();
+  if (new TextEncoder().encode(raw).length > MAX_STASH_BODY_BYTES) {
+    return c.json({ error: "stash body too large" }, 413);
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  const { pageUrl, ref, element, ops } = body;
+  if (
+    typeof pageUrl !== "string" ||
+    typeof ref !== "string" ||
+    typeof element !== "object" ||
+    element === null ||
+    !Array.isArray(ops) ||
+    !ops.every(isStashOp)
+  ) {
+    return c.json(
+      {
+        error:
+          "pageUrl, ref, element, and ops (each with ref/originalText/newText) are required",
+      },
+      400,
+    );
+  }
+  const result = await stubFor(c, c.req.param("id") ?? "").rpcStashEdit({
+    pageUrl,
+    ref,
+    element: element as Record<string, unknown>,
+    ops: ops as Record<string, unknown>[],
+  });
+  return c.json({ ok: true, ...result });
+});
+
+liveApi.get("/artifacts/:id/live/edit-stash", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+  const pageUrl = c.req.query("pageUrl") ?? null;
+  return c.json(
+    await stubFor(c, c.req.param("id") ?? "").rpcListStash(pageUrl),
+  );
+});
+
+liveApi.delete("/artifacts/:id/live/edit-stash", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+  const pageUrl = c.req.query("pageUrl") ?? null;
+  await stubFor(c, c.req.param("id") ?? "").rpcClearStash(pageUrl);
+  return c.json({ ok: true });
+});
+
+liveApi.post("/artifacts/:id/live/edit-commit", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "request body must be JSON" }, 400);
+  }
+  const pageUrl = typeof body.pageUrl === "string" ? body.pageUrl : null;
+  if (!pageUrl) return c.json({ error: "pageUrl required" }, 400);
+  const result = await stubFor(c, c.req.param("id") ?? "").rpcCommitEdit(
+    pageUrl,
+  );
+  if (!result.ok) return c.json({ error: result.error }, 409);
+  return c.json({ ok: true, eventId: result.eventId });
+});
+
+liveApi.delete("/artifacts/:id/live/events/:eid", async (c) => {
+  if (!liveEnabled(c)) return c.text("not found", 404);
+  const store = storeFrom(c);
+  const auth = await authorizeWrite(c, store, c.req.param("id"));
+  if (!auth.ok) return auth.response;
+  const eid = c.req.param("eid") ?? "";
+  const result = (await stubFor(c, c.req.param("id") ?? "").rpcCancelEvent(
+    eid,
+  )) as { ok: true } | { ok: false; error: string };
+  if (!result.ok) {
+    return c.json(
+      { error: result.error },
+      result.error === "already picked up" ? 409 : 404,
+    );
+  }
+  return c.json({ ok: true });
 });
 
 liveApi.post("/artifacts/:id/live/reply", async (c) => {

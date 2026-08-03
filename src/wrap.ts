@@ -865,26 +865,36 @@ const LIVE_CSS = `
 .oa-live-toggle:active{transform:translateY(1px)}
 .oa-live-toggle svg{display:block;width:16px;height:16px}
 .oa-live-toggle[aria-expanded="true"]{color:var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 88%)}
-.oa-live-toggle[data-agent="on"]{width:auto;gap:.35rem;padding-inline:.4rem}
+.oa-live-toggle[data-agent="on"],.oa-live-toggle[data-agent="busy"]{width:auto;gap:.35rem;padding-inline:.4rem}
 .oa-live-connection{display:none;align-items:center;gap:.25rem;color:var(--oa-accent);font-size:.7rem;font-weight:600;white-space:nowrap}
 .oa-live-connection[hidden]{display:none}
-.oa-live-toggle[data-agent="on"] .oa-live-connection{display:inline-flex}
+.oa-live-toggle[data-agent="on"] .oa-live-connection,.oa-live-toggle[data-agent="busy"] .oa-live-connection{display:inline-flex}
 .oa-live-connection::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 @media (hover:hover) and (pointer:fine){.oa-live-toggle:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
-/* Agent-presence dot: set by LIVE_SCRIPT from /live/status when the CLI
-   watcher is online (heartbeats every ~20s). The pulsing halo is
-   informational, like the handoff rec dot — never on high-frequency actions. */
-.oa-live-toggle[data-agent="on"]::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--oa-accent);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 0 color-mix(in oklab,var(--oa-accent),transparent 55%)}
-@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="on"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
+/* Agent-presence dot: set by LIVE_SCRIPT from /live/status. The pulsing halo
+   is informational, like the handoff rec dot — never on high-frequency
+   actions. Three states (impeccable semantics): on = accent pill, no dot;
+   busy (a pending event is leased to the agent) = the accent dot pulses;
+   off = the mark dims and an amber dot pulses, so the user knows the watcher
+   dropped before they start picking. */
+.oa-live-toggle[data-agent="busy"]::after{content:"";position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--oa-accent);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 0 color-mix(in oklab,var(--oa-accent),transparent 55%)}
+@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="busy"]::after{animation:oa-live-agent-pulse 2s ease-out infinite}}
 @keyframes oa-live-agent-pulse{to{box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%),0 0 0 5px transparent}}
+.oa-live-toggle[data-agent="off"]::after{content:"";position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:oklch(77% 0.13 82);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-bg),transparent 10%)}
+@media (prefers-reduced-motion:no-preference){.oa-live-toggle[data-agent="off"]::after{animation:oa-live-agent-off-pulse 1.4s ease-in-out infinite}}
+@keyframes oa-live-agent-off-pulse{0%,100%{opacity:.45;transform:scale(.9)}50%{opacity:1;transform:scale(1)}}
+#oa-live-apply[hidden],#oa-live-discard[hidden]{display:none}
 .oa-live-guide[hidden]{display:none}
-.oa-live-guide{width:100%;box-sizing:border-box;padding:.75rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font);font-size:.8rem;line-height:1.45}
-.oa-live-guide-head{display:flex;align-items:center;gap:.75rem}
-.oa-live-guide-head strong{flex:1;font-size:.85rem;font-weight:600}
+.oa-live-guide{width:100%;box-sizing:border-box;padding:.4rem .6rem;border:1px solid var(--oa-border);border-radius:10px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font);font-size:.8rem;line-height:1.45}
+.oa-live-guide-bar{display:flex;align-items:center;gap:.75rem}
+.oa-live-guide-bar strong{flex:1;font-size:.85rem;font-weight:600}
 .oa-live-guide-close{border:0;background:transparent;color:var(--oa-muted);font:inherit;font-size:.75rem;cursor:pointer;padding:.25rem;border-radius:4px}
 .oa-live-guide-close:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 92%)}
 .oa-live-guide-close:focus-visible,.oa-live-guide-copy:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
-.oa-live-guide p{margin:.65rem 0;color:var(--oa-muted)}
+#oa-live-guide-details[hidden]{display:none}
+#oa-live-guide-details p{margin:.65rem 0 0;color:var(--oa-muted)}
+.oa-live-add:disabled{opacity:.5;cursor:default}
+.oa-live-discard.oa-dock-btn--danger{background:color-mix(in oklab,var(--oa-danger),transparent 88%);color:var(--oa-danger);border-color:color-mix(in oklab,var(--oa-danger),transparent 60%);opacity:1}
 .oa-live-guide-text{display:block;width:100%;min-height:8rem;resize:vertical;padding:.55rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.75rem;line-height:1.45}
 .oa-live-guide-text:focus{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 .oa-live-guide-actions{display:flex;justify-content:flex-end;margin-top:.65rem}
@@ -893,7 +903,7 @@ const LIVE_CSS = `
 .oa-live-guide-copy:active{transform:translateY(1px)}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:1rem;width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645}
+#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + env(safe-area-inset-bottom));width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645}
 #oa-live-chips{display:flex;flex-direction:column;gap:.35rem;min-height:0;overflow-y:auto;padding:.1rem}
 #oa-live-chips:empty{display:none}
 #oa-live-chips .oa-live-chip{position:relative;display:block;padding:.5rem .6rem .5rem .65rem;border-radius:8px;background:color-mix(in oklab,var(--oa-surface),transparent 4%);border:0;font-size:.8rem;line-height:1.4}
@@ -910,7 +920,7 @@ const LIVE_CSS = `
 #oa-live-dock:not(:has(#oa-live-chips:not(:empty))) #oa-live-controls{padding-bottom:0;border-bottom:0}
 #oa-live-submit-wrap{margin-left:.35rem}
 #oa-live-submit-wrap:empty{display:none}
-#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + 5rem);display:flex;pointer-events:auto;z-index:2147483645}
+#oa-live-action-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + 5rem + env(safe-area-inset-bottom));display:flex;pointer-events:auto;z-index:2147483645}
 #oa-live-action-bar[hidden]{display:none}
 #oa-live-action-bar .oa-live-row{display:flex;align-items:center;gap:.35rem;padding:.4rem .45rem;border-radius:12px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 6px 24px -4px color-mix(in oklab,var(--oa-fg),transparent 88%)}
 #oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:32px;font:inherit;font-size:.8rem;color:var(--oa-fg);background:var(--oa-surface);border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);border-radius:6px;padding:0 .6rem;transition:border-color .15s,box-shadow .15s}
@@ -928,6 +938,26 @@ const LIVE_CSS = `
 @keyframes oa-live-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#oa-live-status .oa-live-spin{animation:none}}
 #oa-live-action-bar .oa-live-spin{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 70%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-live-spin .7s linear infinite;vertical-align:-2px;flex-shrink:0}
+/* Touch: coarse pointers get WCAG-friendly targets without disturbing the
+   desktop chrome (LAYOUT_SCRIPT measures the header's actual height, so a
+   44px toggle just grows the header a little on touch devices). */
+@media (pointer:coarse){
+  .oa-live-toggle{width:44px;height:44px}
+  .oa-dock-btn{height:44px}
+  #oa-live-action-bar .oa-live-row>input,#oa-live-action-bar .oa-live-row>button{height:44px}
+}
+/* Narrow viewports: the floating bar wraps instead of overflowing; on phones
+   the prompt input takes its own line so the row reads predictably and every
+   control is a wide touch target. */
+#oa-live-action-bar{max-width:calc(100vw - 1.5rem)}
+#oa-live-action-bar .oa-live-row{flex-wrap:wrap}
+@media (max-width:480px){
+  #oa-live-action-bar .oa-live-row>input{min-width:0;flex:1 1 100%;order:2}
+  /* The floating bar is shrink-to-fit (positionBar pins it inline), so
+     flex-grow has no free space to distribute — a min-width is what actually
+     widens the touch targets. */
+  #oa-live-action-bar .oa-live-row>button{min-width:4.5rem}
+}
 `;
 
 // Positions the embedded artifact frame below the sticky service header
@@ -1401,12 +1431,16 @@ function liveChromeHtml(
   artifactId: string,
   canManage: boolean,
 ): string {
+  // The offline guide is a one-line banner with the startup prompt behind a
+  // disclosure — the full wall occluded the pick surface on every reopen.
   const guide = canManage
-    ? `<div id="oa-live-guide" class="oa-live-guide" role="dialog" aria-labelledby="oa-live-guide-title" hidden>
-      <div class="oa-live-guide-head"><strong id="oa-live-guide-title">Live agent not connected</strong><button id="oa-live-guide-close" class="oa-live-guide-close" type="button">Close</button></div>
-      <p>Copy this prompt to the coding agent, then keep its Live watcher running while you make edits here.</p>
-      <textarea id="oa-live-guide-text" class="oa-live-guide-text" readonly aria-label="Live watcher startup prompt"></textarea>
-      <div class="oa-live-guide-actions"><button id="oa-live-guide-copy" class="oa-live-guide-copy" type="button">Copy start prompt</button></div>
+    ? `<div id="oa-live-guide" class="oa-live-guide" role="group" aria-label="Live watcher setup" hidden>
+      <div class="oa-live-guide-bar"><strong id="oa-live-guide-title">Live agent not connected</strong><button id="oa-live-guide-toggle" class="oa-live-guide-close" type="button" aria-expanded="false" aria-controls="oa-live-guide-details">Show start prompt</button></div>
+      <div id="oa-live-guide-details" hidden>
+        <p>Copy this prompt to the coding agent, then keep its Live watcher running while you make edits here.</p>
+        <textarea id="oa-live-guide-text" class="oa-live-guide-text" readonly aria-label="Live watcher startup prompt"></textarea>
+        <div class="oa-live-guide-actions"><button id="oa-live-guide-copy" class="oa-live-guide-copy" type="button">Copy start prompt</button></div>
+      </div>
     </div>`
     : "";
   return `<div id="oa-live-root" hidden>
@@ -1415,8 +1449,10 @@ function liveChromeHtml(
     <div id="oa-live-status" role="status" aria-live="polite"></div>
     <div id="oa-live-controls" role="toolbar" aria-label="Live editor">
       <span class="oa-dock-btn oa-dock-btn--active oa-dock-btn--indicator" id="oa-live-pick-toggle" title="Pick mode is on"><span class="oa-dock-icon" aria-hidden="true">${LIVE_SVG}</span><span class="oa-dock-label">Pick</span></span>
-      <button type="button" class="oa-dock-btn oa-dock-btn--exit" id="oa-live-exit" title="Exit live editor"><span class="oa-dock-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-dock-label">Exit</span></button>
       <div id="oa-live-submit-wrap"></div>
+      <button type="button" class="oa-dock-btn oa-dock-btn--primary oa-live-apply" id="oa-live-apply" hidden><span class="oa-dock-label">Apply copy edits</span></button>
+      <button type="button" class="oa-dock-btn oa-dock-btn--discard oa-live-discard" id="oa-live-discard" title="Discard staged edits" aria-label="Discard staged edits" hidden><span class="oa-dock-icon" aria-hidden="true">${CLOSE_SVG}</span></button>
+      <button type="button" class="oa-dock-btn oa-dock-btn--exit" id="oa-live-exit" title="Exit live editor"><span class="oa-dock-icon" aria-hidden="true">${CLOSE_SVG}</span><span class="oa-dock-label">Exit</span></button>
     </div>
     <div id="oa-live-chips" role="list" aria-label="Collected changes"></div>
   </div>
@@ -1466,6 +1502,20 @@ const DOCK_SCRIPT = `
   // surfaces the dock's refuseMessage instead.
   document.addEventListener('keydown',function(e){
     if(e.key!=='Escape'||!active)return;
+    // A visible live guide takes the first Escape — close the banner (and its
+    // disclosure) instead of the whole dock. This capture handler runs before
+    // the guide's own bubble handler, which is why the check lives here.
+    var guide=document.getElementById('oa-live-guide');
+    if(guide&&!guide.hidden){
+      guide.hidden=true;
+      var details=document.getElementById('oa-live-guide-details');
+      if(details&&!details.hidden){
+        details.hidden=true;
+        var t=document.getElementById('oa-live-guide-toggle');
+        if(t)t.setAttribute('aria-expanded','false');
+      }
+      return;
+    }
     if(document.querySelector('.oa-cm-drawer[data-open], #oa-cm-compose:not([hidden]), .oa-cm-menu:not([hidden])'))return;
     close(active);
   }, true);
@@ -1482,6 +1532,8 @@ const LIVE_SCRIPT = `
   var statusEl=document.getElementById('oa-live-status');
   var chipsEl=document.getElementById('oa-live-chips');
   var submitEl=document.getElementById('oa-live-submit-wrap');
+  var applyBtn=document.getElementById('oa-live-apply');
+  var discardBtn=document.getElementById('oa-live-discard');
   var abar=document.getElementById('oa-live-action-bar');
   var exitBtn=document.getElementById('oa-live-exit');
   var frame=document.getElementById('oa-frame');
@@ -1490,10 +1542,14 @@ const LIVE_SCRIPT = `
   var liveGuide=document.getElementById('oa-live-guide');
   var guideText=document.getElementById('oa-live-guide-text');
   var guideCopy=document.getElementById('oa-live-guide-copy');
-  var guideClose=document.getElementById('oa-live-guide-close');
+  var guideToggle=document.getElementById('oa-live-guide-toggle');
+  var guideDetails=document.getElementById('oa-live-guide-details');
   if(!root||!dock||!statusEl||!chipsEl||!submitEl||!abar||!exitBtn||!frame) return;
 
   var agentOnline=null;
+  // The guide banner auto-shows once per session; later offline opens keep
+  // the slim status row instead of re-occluding the pick surface.
+  var guideAutoShown=false;
   if(guideText){
     var guideOrigin=window.location.origin||'';
     guideText.value=[
@@ -1504,13 +1560,26 @@ const LIVE_SCRIPT = `
       'Keep the watcher running while I make Live edits.'
     ].join(String.fromCharCode(10));
   }
-  function hideGuide(){ if(liveGuide)liveGuide.hidden=true; }
+  function hideGuide(){
+    if(liveGuide)liveGuide.hidden=true;
+    // Collapse the disclosure so the next banner opens slim.
+    if(guideDetails&&!guideDetails.hidden){
+      guideDetails.hidden=true;
+      if(guideToggle)guideToggle.setAttribute('aria-expanded','false');
+    }
+  }
   function showGuide(){
     if(!liveGuide)return;
     liveGuide.hidden=false;
-    // The guide lives inside the dock, which is still hidden until the
-    // toggle's click handler opens it. Defer focus until the dock is visible.
-    setTimeout(function(){ if(!root.hidden&&liveGuide&&!liveGuide.hidden&&guideCopy)guideCopy.focus(); },0);
+    // The banner itself never steals focus — the artifact stays the focus of
+    // the session; expanding the prompt moves focus to the copy button.
+  }
+  function toggleGuideDetails(){
+    if(!guideDetails)return;
+    var open=guideDetails.hidden;
+    guideDetails.hidden=!open;
+    if(guideToggle)guideToggle.setAttribute('aria-expanded', open?'true':'false');
+    if(open&&guideCopy)guideCopy.focus();
   }
   function markGuideCopied(ok){
     if(!guideCopy)return;
@@ -1536,7 +1605,7 @@ const LIVE_SCRIPT = `
     }
     fallbackGuideCopy();
   }
-  if(guideClose)guideClose.addEventListener('click',hideGuide);
+  if(guideToggle)guideToggle.addEventListener('click',toggleGuideDetails);
   if(guideCopy)guideCopy.addEventListener('click',copyGuide);
   document.addEventListener('click',function(e){
     var target=e.target;
@@ -1564,6 +1633,8 @@ const LIVE_SCRIPT = `
     // Annotate on top of the picked element: comment pins + strokes ride the
     // next generate event so the agent sees the user's marks with the change.
     toFrame({type:'oa:live:annot:enable'});
+    // Restore the Apply pill: staged edits from before a reload must survive.
+    refreshStash();
   }
   function closeLive(){
     // Live has no irreplaceable in-flight work, so it always yields.
@@ -1584,7 +1655,7 @@ const LIVE_SCRIPT = `
   }
   if(liveToggle){
     liveToggle.addEventListener('click', function(){
-      if(root.hidden&&agentOnline===false)showGuide();else hideGuide();
+      if(root.hidden&&agentOnline===false&&!guideAutoShown){ guideAutoShown=true; showGuide(); }else hideGuide();
       // Toggle (open/close) through the dock manager, like the comments toggle
       // (.oa-cm-toggle) opens/closes its drawer. The manager enforces mutual
       // exclusion with Handoff and toasts when Handoff refuses to yield
@@ -1599,20 +1670,41 @@ const LIVE_SCRIPT = `
   // will pick up their changes before they start, instead of only learning
   // it from the STALLED hint 2 minutes after submit. Same-origin fetch works
   // on the host page (connect-src 'self'); the frame can never do this.
+  // Three states (impeccable semantics): on = accent pill, no dot; busy (a
+  // pending event is leased to the agent) = accent dot pulses, tooltip says
+  // the agent is working; off = amber dot pulses with the watcher tooltip.
   var agentTimer=null;
-  function paintAgent(on){
+  function paintAgent(on, busy){
+    // The PICKING status text mentions presence — refresh it only when the
+    // flag actually flips (a full renderBar would rebuild the compose row and
+    // drop a prompt the user is typing).
+    var changed=on!==agentOnline;
     agentOnline=on;
     if(!liveToggle)return;
-    liveToggle.setAttribute('data-agent', on?'on':'off');
+    liveToggle.setAttribute('data-agent', on?(busy?'busy':'on'):'off');
     if(connection)connection.hidden=!on;
-    liveToggle.setAttribute('aria-label', on?'Open live editor — agent connected':'Open live editor — no agent connected');
-    liveToggle.title=on?'Live — agent connected':'Live';
+    liveToggle.setAttribute('aria-label', on?'Open live editor — agent connected':'Open live editor — live agent not connected');
+    liveToggle.title=on?(busy?'Agent is working on an edit':'Live — agent connected'):'Live agent not connected - run the watcher to connect';
     if(on)hideGuide();
+    if(changed)renderStatus();
   }
   function pollAgent(){
     fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/status',{credentials:'same-origin'})
       .then(function(r){ if(!r.ok) throw 0; return r.json(); })
-      .then(function(s){ paintAgent(s.agentActive===true); })
+      .then(function(s){
+        // busy = a pending event is leased to the agent (leased_until in the
+        // future): the toggle shows the agent is working, not just online.
+        var busy=Array.isArray(s.pendingEvents)&&s.pendingEvents.some(function(e){return e.leased_until>Date.now();});
+        paintAgent(s.agentActive===true, busy);
+        // An unleased queued edit event (from a reload or a prior session)
+        // restores the "Queued — click to cancel" pill.
+        if(Array.isArray(s.pendingEvents)&&!queuedEditId){
+          for(var i=0;i<s.pendingEvents.length;i++){
+            var pe=s.pendingEvents[i];
+            if(pe.type==='edit'&&pe.leased_until<=Date.now()){ queuedEditId=pe.id; paintQueued(); break; }
+          }
+        }
+      })
       .catch(function(){ /* keep the last state; a blip must not flick the indicator */ });
   }
   function startAgentPoll(){ stopAgentPoll(); pollAgent(); agentTimer=setInterval(pollAgent,15000); }
@@ -1647,6 +1739,137 @@ const LIVE_SCRIPT = `
     send(msg);
   };
 
+  // --- inline copy edits (impeccable-style) ---
+  // The frame's contenteditable rows are staged server-side (POST
+  // /live/edit-stash) instead of delivered immediately; Apply bundles every
+  // staged op for this page into ONE 'edit' event (POST /live/edit-commit) —
+  // fixing five typos means one agent round trip, not five. lastSubmitType
+  // distinguishes an edit-done from a generate-done in the WS handler; the
+  // protocol payload decides first (Array.isArray appliedEntryIds) and this
+  // flag only backs up older agents that reply without it.
+  var lastSubmitType=null;
+  var stashCount=0;
+  // In-register inline confirm (the native confirm dialog is off-register):
+  // the first Apply/Discard/Exit click arms the control ("Confirm apply?" /
+  // danger tint), a second click within the window commits, otherwise it
+  // reverts.
+  var applyArmed=null, discardArmed=null, cancelArmed=null;
+  // A committed edit event waits in the DO queue until a watcher applies it.
+  // The pill then becomes the cancel affordance ("Queued — click to cancel",
+  // DELETE /live/events/:eid) so "it will queue" is a promise the UI can keep.
+  var queuedEditId=null;
+  function paintQueued(){
+    if(!applyBtn)return;
+    if(queuedEditId){
+      applyBtn.querySelector('.oa-dock-label').textContent='Queued ('+stashCount+') — click to cancel';
+      applyBtn.setAttribute('aria-label','Cancel the queued edit');
+    }else{
+      applyBtn.querySelector('.oa-dock-label').textContent='Apply copy edits ('+stashCount+')';
+      applyBtn.removeAttribute('aria-label');
+    }
+  }
+  function resetApplyArm(){
+    if(applyArmed){ clearTimeout(applyArmed); applyArmed=null; }
+    if(cancelArmed){ clearTimeout(cancelArmed); cancelArmed=null; }
+    if(discardArmed){ clearTimeout(discardArmed); discardArmed=null; }
+    if(discardBtn)discardBtn.classList.remove('oa-dock-btn--danger');
+    paintQueued();
+  }
+  function refreshStash(){
+    if(!applyBtn)return;
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/edit-stash?pageUrl='+encodeURIComponent(window.location.pathname),{credentials:'same-origin'})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(s){
+        stashCount=Number(s&&s.pendingCount)||0;
+        applyBtn.hidden=stashCount===0&&!queuedEditId;
+        if(discardBtn)discardBtn.hidden=stashCount===0;
+        resetApplyArm();
+      })
+      .catch(function(){ /* transient; the pill keeps its last state */ });
+  }
+  function commitEdits(){
+    if(!stashCount)return;
+    if(!applyArmed){
+      applyBtn.querySelector('.oa-dock-label').textContent='Confirm apply?';
+      applyArmed=setTimeout(function(){ applyArmed=null; paintQueued(); },4000);
+      return;
+    }
+    clearTimeout(applyArmed); applyArmed=null;
+    lastSubmitType='edit';
+    setState('APPLYING');
+    // A dead watcher still queues the edit server-side (the DO persists
+    // pending events) — say so up front, and time out fast instead of a 2-min
+    // silent spin before the stall hint.
+    if(agentOnline===false){
+      statusEl.innerHTML='No agent connected — the edit will queue until a watcher connects';
+      statusEl.hidden=false;
+    }
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/edit-commit',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({pageUrl:window.location.pathname})})
+      .then(function(r){ if(!r.ok) throw {status:r.status}; return r.json(); })
+      .then(function(s){
+        // Committed: the event sits in the queue until a watcher applies it.
+        queuedEditId=String(s&&s.eventId||'');
+        paintQueued();
+      })
+      .catch(function(err){
+        // 409 = the stash changed under us (empty/consumed); anything else is
+        // a network blip — the stash is still there either way. Surface the
+        // difference instead of the old "still here" line, which lied once
+        // the event was queued.
+        if(window.__oaShowError)window.__oaShowError(err&&err.status===409?'Apply failed — the stash changed; refresh and try again':'Apply failed — the staged edits are still here, try again');
+        setState('PICKING');
+      });
+    clearTimeout(ackTimer);
+    ackTimer=setTimeout(function(){ if(state==='APPLYING') setState('STALLED'); }, agentOnline===false?20000:ACK_TIMEOUT);
+  }
+  function cancelQueued(){
+    if(!queuedEditId)return;
+    if(!cancelArmed){
+      applyBtn.querySelector('.oa-dock-label').textContent='Cancel queued edit?';
+      cancelArmed=setTimeout(function(){ cancelArmed=null; paintQueued(); },4000);
+      return;
+    }
+    clearTimeout(cancelArmed); cancelArmed=null;
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/events/'+encodeURIComponent(queuedEditId),{method:'DELETE',credentials:'same-origin'})
+      .then(function(r){ if(!r.ok) throw {status:r.status}; return r.json(); })
+      .then(function(){
+        queuedEditId=null;
+        paintQueued();
+        refreshStash();
+        // Back to picking — the stall/queue warning no longer applies.
+        setState('PICKING');
+        if(window.__oaShowSuccess)window.__oaShowSuccess('Queued edit cancelled — the stash is still here');
+      })
+      .catch(function(err){
+        // 409 = the watcher already leased it; the row is gone either way.
+        if(err&&err.status===409){
+          if(window.__oaShowError)window.__oaShowError('The agent already picked up the edit — it is being applied');
+        }else{
+          if(window.__oaShowError)window.__oaShowError('Cancel failed — try again');
+        }
+        queuedEditId=null;
+        paintQueued();
+        setState('PICKING');
+      });
+  }
+  function discardEdits(){
+    if(!stashCount)return;
+    if(!discardArmed){
+      discardBtn.classList.add('oa-dock-btn--danger');
+      discardBtn.setAttribute('aria-label','Confirm discard staged edits');
+      discardArmed=setTimeout(function(){ discardArmed=null; discardBtn.classList.remove('oa-dock-btn--danger'); discardBtn.setAttribute('aria-label','Discard staged edits'); },4000);
+      return;
+    }
+    clearTimeout(discardArmed); discardArmed=null;
+    discardBtn.classList.remove('oa-dock-btn--danger');
+    discardBtn.setAttribute('aria-label','Discard staged edits');
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/edit-stash?pageUrl='+encodeURIComponent(window.location.pathname),{method:'DELETE',credentials:'same-origin'})
+      .then(function(r){ if(!r.ok) throw 0; refreshStash(); })
+      .catch(function(){});
+  }
+  if(applyBtn)applyBtn.onclick=function(){ if(queuedEditId) cancelQueued(); else commitEdits(); };
+  if(discardBtn)discardBtn.onclick=discardEdits;
+
   function setState(s){ state=s; renderBar(); }
 
   // Float the action bar near the drafted element. draft.rect is the element's
@@ -1670,25 +1893,52 @@ const LIVE_SCRIPT = `
     if(x>vw-150){ abar.style.left=(vw-150)+'px'; }
   }
 
-  // --- bar rendering (Pick / Compose / Generating / Confirmed) ---
+  // --- bar rendering (Pick / Compose / Edit / Generating / Applying / Confirmed) ---
+  // Live state machine (see the state var below):
+  //   COMPOSE --Edit chip--> EDITING        (frame arms contenteditable rows)
+  //   EDITING --cancel--> COMPOSE           (frame restores the original texts)
+  //   EDITING --save ok--> PICKING          (ops stashed; pick re-armed)
+  //   COMPOSE --Apply--> APPLYING           (one edit event committed)
+  //   APPLYING --ack--> WORKING
+  //   APPLYING --done--> CONFIRMED          (stash cleared, frame reloads)
+  //   APPLYING --error--> PICKING           (stash kept for retry or discard)
+  //   APPLYING --timeout--> STALLED
+  //   Closing the dock mid-EDITING/APPLYING runs reset(), which clears
+  //   lastSubmitType and cancels frame edit mode; reopening arms cleanly.
   function el(tag, cls, html){ var d=document.createElement(tag); if(cls)d.className=cls; if(html!=null)d.innerHTML=html; return d; }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function renderBar(){
-    // Status row lives INSIDE the dock — it can never overlap the controls.
+  // Status row lives INSIDE the dock — it can never overlap the controls.
+  // Presence surfaces here too (PICKING names a missing agent), so the
+  // disconnected state is visible without hovering the toggle — its tooltip
+  // is the hover-only channel, the aria-label covers assistive tech.
+  function renderStatus(){
     var status='';
-    if(state==='PICKING') status= items.length? 'Pick another element, or Submit below' : 'Pick an element in the page';
+    if(state==='PICKING') status= items.length? 'Pick another element, or Submit below' : (agentOnline===false?'Pick an element in the page — live agent not connected':'Pick an element in the page');
+    else if(state==='COMPOSE') status='';
+    else if(state==='EDITING') status='Editing text — edit the text lines, then Save or Cancel';
     else if(state==='GENERATING') status='<span class="oa-live-spin"></span> Sent — waiting for agent…';
+    else if(state==='APPLYING') status='<span class="oa-live-spin"></span> Applying copy edits…';
     else if(state==='WORKING') status='<span class="oa-live-spin"></span> Agent is editing…';
-    else if(state==='STALLED') status='<span class="oa-live-stall">No agent picked up — is your CLI watcher running?</span>';
+    // A stalled edit-commit still has its event queued server-side — the hint
+    // must acknowledge the queue instead of implying the work is lost.
+    else if(state==='STALLED') status= lastSubmitType==='edit' ? '<span class="oa-live-stall">No agent picked up — the edit is queued and will apply when a watcher connects</span>' : '<span class="oa-live-stall">No agent picked up — is your CLI watcher running?</span>';
     else if(state==='CONFIRMED') status='✓ Applied';
     statusEl.innerHTML=status||'';
     statusEl.hidden=!status;
-    // Floating action bar: ONLY for COMPOSE (prompt input + Add), pinned to
-    // the picked element. All other states are text in the dock status row.
+  }
+  function renderBar(){
+    renderStatus();
+    // Floating action bar: ONLY for COMPOSE (prompt input + Add) and EDITING
+    // (Save/Cancel), pinned to the picked element. All other states are text
+    // in the dock status row.
     abar.innerHTML='';
     if(state==='COMPOSE'){
       abar.hidden=false;
       abar.appendChild(buildComposeRow());
+      positionBar();
+    }else if(state==='EDITING'){
+      abar.hidden=false;
+      abar.appendChild(buildEditRow());
       positionBar();
     }else{
       abar.hidden=true;
@@ -1701,10 +1951,11 @@ const LIVE_SCRIPT = `
     submitEl.innerHTML='';
     if(!items.length) return;
     items.forEach(function(it, i){
-      var chip=el('div','oa-live-chip');
+      var chip=el('div','oa-live-chip'); chip.setAttribute('role','listitem');
       chip.appendChild(el('span','oa-live-chip-tag', esc(it.element.tagName)+(it.element.id?'#'+esc(it.element.id):'')));
       chip.appendChild(el('span','oa-live-chip-txt', esc(it.prompt)));
-      var rm=el('button','oa-live-chip-rm','×'); rm.type='button'; rm.title='Remove';
+      var rm=el('button','oa-live-chip-rm','×'); rm.type='button';
+      rm.setAttribute('aria-label','Remove '+esc(it.element.tagName)+(it.element.id?'#'+esc(it.element.id):''));
       rm.onclick=function(){ items.splice(i,1); if(!items.length&&!draft){ setState('PICKING'); } else renderBar(); };
       chip.appendChild(rm);
       chipsEl.appendChild(chip);
@@ -1715,17 +1966,57 @@ const LIVE_SCRIPT = `
   }
   function buildComposeRow(){
     var r=el('div','oa-live-row');
+    // Two input modes for a picked element: describe the change as a prompt
+    // (default), or edit the element's text directly (impeccable-style).
+    var edit=el('button','oa-dock-btn oa-live-edit-chip','Edit text'); edit.type='button'; edit.title='Edit the element text directly';
+    edit.onclick=function(){ toFrame({type:'oa:live:edit:arm'}); setState('EDITING'); };
     var ff=el('input','oa-live-freeform'); ff.type='text'; ff.placeholder='describe the change; Enter to commit'; ff.setAttribute('aria-label','prompt for picked element');
     ff.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); commitDraft(ff.value); } };
-    var done=el('button','oa-live-add','Add'); done.type='button'; done.onclick=function(){ commitDraft(ff.value); };
-    r.appendChild(ff); r.appendChild(done);
+    // Add stays disabled until the prompt has text — an empty instruction must
+    // never ship to the agent (commitDraft guards it too).
+    var done=el('button','oa-live-add','Add'); done.type='button'; done.disabled=true;
+    done.onclick=function(){ commitDraft(ff.value); };
+    ff.addEventListener('input',function(){ done.disabled=!ff.value.trim(); });
+    // Un-pick: cancel the draft and re-arm the picker (disarm clears the
+    // frame's picked element, highlight, and annotation overlay).
+    var unpick=el('button','oa-dock-btn oa-live-unpick','${CLOSE_SVG}'); unpick.type='button';
+    unpick.setAttribute('aria-label','Cancel this pick'); unpick.title='Cancel this pick';
+    unpick.onclick=function(){ toFrame({type:'oa:live:pick:disarm'}); draft=null; setState('PICKING'); toFrame({type:'oa:live:pick:arm'}); };
+    r.appendChild(edit); r.appendChild(ff); r.appendChild(done); r.appendChild(unpick);
+    // Once the batch has items, the bar carries the batch action too — the
+    // user does not have to look away from the element to submit everything
+    // (the dock Submit stays for the no-draft states).
+    if(items.length){
+      var sendAll=el('button','oa-dock-btn oa-dock-btn--primary oa-live-send-all','Send all ('+items.length+')'); sendAll.type='button';
+      sendAll.onclick=handleSubmit;
+      r.appendChild(sendAll);
+    }
     // focus the input after the bar lands
     setTimeout(function(){ var f=abar.querySelector('.oa-live-freeform'); if(f) f.focus(); },0);
     return r;
   }
+  // EDITING action bar: Save asks the frame to validate + postMessage the
+  // ops; Cancel restores the original texts and returns to the prompt row.
+  function buildEditRow(){
+    var r=el('div','oa-live-row');
+    var save=el('button','oa-dock-btn oa-dock-btn--primary','Save'); save.type='button'; save.title='Save the edited text';
+    save.onclick=function(){ toFrame({type:'oa:live:edit:save'}); };
+    var cancel=el('button','oa-dock-btn','Cancel'); cancel.type='button'; cancel.title='Discard edits and go back';
+    cancel.onclick=function(){ toFrame({type:'oa:live:edit:cancel'}); setState('COMPOSE'); };
+    r.appendChild(save); r.appendChild(cancel);
+    return r;
+  }
   function commitDraft(prompt){
     if(!draft) return;
-    items.push({element:draft.element, prompt:String(prompt||'').trim(), rect:draft.rect});
+    var text=String(prompt||'').trim();
+    if(!text){
+      // An empty instruction must not ship to the agent — keep the draft open
+      // and tell the user what's missing (the Add button is disabled anyway;
+      // this guards Enter).
+      if(window.__oaShowError)window.__oaShowError('Type a change first');
+      return;
+    }
+    items.push({element:draft.element, prompt:text, rect:draft.rect});
     draft=null;
     // Back to picking the next element; the prompt lock is over.
     setState('PICKING');
@@ -1759,6 +2050,9 @@ const LIVE_SCRIPT = `
     // re-send the same items as a duplicate generate event.
     if(state==='GENERATING'||state==='WORKING'){ return; }
     sessionId=genId();
+    // A generate-done must not inherit a stale edit-done classification: the
+    // lastSubmitType fallback only applies to the event this submit produces.
+    lastSubmitType=null;
     setState('GENERATING');
     // The user's comment pins/strokes ride the generate event (live.md):
     // the agent sees them with the change. Omit all three when empty.
@@ -1794,7 +2088,26 @@ const LIVE_SCRIPT = `
       // 'ack' = agent picked up the event, is editing. Clear the stall timer.
       if(msg.type==='ack'){ clearTimeout(ackTimer); setState('WORKING'); }
       // 'done' = the agent finished editing + republished. Reload the frame.
-      else if(msg.type==='done'){ clearTimeout(ackTimer); setState('CONFIRMED'); setTimeout(restartAfterEdit,1200); }
+      else if(msg.type==='done'){
+        clearTimeout(ackTimer);
+        // An edit-done is decided by the protocol payload — the canonical
+        // reply JSON always carries appliedEntryIds (possibly an empty array
+        // when status:'error' also rides a done broadcast), so Array.isArray
+        // is the truth — with lastSubmitType as a fallback for older agents.
+        var isEditDone=Array.isArray(msg.appliedEntryIds)||lastSubmitType==='edit';
+        setState('CONFIRMED');
+        if(isEditDone){
+          var applied=Array.isArray(msg.appliedEntryIds)?msg.appliedEntryIds.length:0;
+          var failed=Array.isArray(msg.failed)?msg.failed.length:0;
+          var summary='✓ Applied '+applied+' edit'+(applied===1?'':'s');
+          if(failed)summary+=' — '+failed+' failed, re-edit them';
+          statusEl.innerHTML=summary;
+          statusEl.hidden=false;
+          queuedEditId=null;
+          refreshStash();
+        }
+        setTimeout(restartAfterEdit,1200);
+      }
       else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
@@ -1816,6 +2129,27 @@ const LIVE_SCRIPT = `
       if(pendingRearm){ pendingRearm=false; if(!root.hidden){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); } }
       else if(!root.hidden&&state==='PICKING'&&!draft){ toFrame({type:'oa:live:pick:arm'}); toFrame({type:'oa:live:annot:enable'}); }
     }
+    // Inline copy edits: the frame validated + captured the changed rows and
+    // replies with the ops; stage them server-side (the pill appears), then
+    // re-arm pick for the next element. Empty ops = the user changed nothing.
+    else if(d.type==='oa:live:edit:data'){
+      var ops=Array.isArray(d.ops)?d.ops:[];
+      var elCtx=d.element;
+      if(ops.length&&elCtx){
+        var eref=elCtx.id||(elCtx.classes&&elCtx.classes.length?elCtx.classes.join('.'):null)||elCtx.tagName||'element';
+        fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/edit-stash',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({pageUrl:window.location.pathname,ref:eref,element:elCtx,ops:ops})})
+          .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+          .then(function(){ refreshStash(); if(window.__oaShowSuccess)window.__oaShowSuccess('Saved. Click Apply copy edits to write changes.'); })
+          .catch(function(){ if(window.__oaShowError)window.__oaShowError('Failed to save the copy edits'); });
+      }else if(window.__oaShowInfo){
+        window.__oaShowInfo('No changes to save');
+      }
+      draft=null;
+      setState('PICKING');
+      toFrame({type:'oa:live:pick:arm'});
+    }
+    else if(d.type==='oa:live:edit:none'){ if(window.__oaShowInfo)window.__oaShowInfo('No editable text in this element'); setState('COMPOSE'); }
+    else if(d.type==='oa:live:edit:rejected'){ if(window.__oaShowError)window.__oaShowError('Edit rejected: '+(d.reason||'plain text only — no markup')); }
   });
 
   // --- global bar ---
@@ -1823,7 +2157,17 @@ const LIVE_SCRIPT = `
   // button - no click handler. Pick is armed on open, locked while the prompt
   // is open, and re-armed after each committed item; the indicator's static
   // --active tint reflects the Live session.
+  var exitArmed=null;
   function exitLive(){
+    // A prompt batch is lost on exit — arm a confirm when one exists (same
+    // vocabulary as Apply/Discard); with no items, Exit closes immediately.
+    if(items.length&&!exitArmed){
+      exitBtn.querySelector('.oa-dock-label').textContent='Discard '+items.length+' changes?';
+      exitBtn.classList.add('oa-dock-btn--danger');
+      exitArmed=setTimeout(function(){ exitArmed=null; exitBtn.querySelector('.oa-dock-label').textContent='Exit'; exitBtn.classList.remove('oa-dock-btn--danger'); },4000);
+      return;
+    }
+    if(exitArmed){ clearTimeout(exitArmed); exitArmed=null; }
     // Route through the dock manager so active-state, focus restore, and
     // mutual-exclusion bookkeeping stay consistent with the header toggle.
     // closeLive is a no-op when already closed.
@@ -1831,7 +2175,18 @@ const LIVE_SCRIPT = `
   }
   exitBtn.onclick=exitLive;
 
-  function reset(){ state='IDLE'; items=[]; draft=null; pendingRearm=false; renderBar(); abar.hidden=true; toFrame({type:'oa:live:pick:disarm'}); }
+  function reset(){
+    state='IDLE'; items=[]; draft=null; pendingRearm=false; lastSubmitType=null;
+    // Restore the Exit control if a batch confirm was armed.
+    if(exitArmed){ clearTimeout(exitArmed); exitArmed=null; }
+    exitBtn.querySelector('.oa-dock-label').textContent='Exit';
+    exitBtn.classList.remove('oa-dock-btn--danger');
+    renderBar(); abar.hidden=true;
+    toFrame({type:'oa:live:pick:disarm'});
+    // A closing session must not leave the frame in edit mode: restore the
+    // original texts (the frame's disableEditMode(true) unwraps + restores).
+    toFrame({type:'oa:live:edit:cancel'});
+  }
   // After a successful edit the frame reloads to show the new version. Clear
   // the batch and return to PICKING - arming the next-item picker once the
   // reloaded frame reports ready (a fresh frame defaults to disarmed; arming
@@ -2119,12 +2474,8 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(!t||!pickable(t)||t===hovered)return;
     hovered=t; showHighlight(t);
   }
-  function onClick(e){
-    if(!armed)return;
-    if(own(e.target))return;
-    if(!hovered||!pickable(hovered))return;
-    e.preventDefault();e.stopPropagation();
-    picked=hovered;
+  function pickAt(el){
+    picked=el;
     // Lock immediately so a second click cannot replace this draft while the
     // host is opening the prompt. Keep picked/annotation state for submit.
     lock();
@@ -2133,6 +2484,22 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     // picks so pins/strokes stay over the element the user is describing.
     if(annotEnabled){ if(annotSvg) positionAnnot(picked); else showAnnot(picked); }
     window.__oaSend({type:'oa:element:picked', element:extractContext(picked)});
+  }
+  function onClick(e){
+    if(!armed)return;
+    if(own(e.target))return;
+    if(!hovered||!pickable(hovered))return;
+    e.preventDefault();e.stopPropagation();
+    pickAt(hovered);
+  }
+  // Touch taps fire no mousemove before the click, so hovered stays null and
+  // the click path bails — select directly on pointerdown for touch pointers.
+  function onPointerDown(e){
+    if(!armed||e.pointerType!=='touch')return;
+    var t=e.target;
+    if(own(t)||!pickable(t))return;
+    e.preventDefault();e.stopPropagation();
+    pickAt(t);
   }
   function onKey(e){
     if(!armed)return;
@@ -2151,12 +2518,14 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     hovered=null;
     document.removeEventListener('mousemove',onMove,true);
     document.removeEventListener('click',onClick,true);
+    document.removeEventListener('pointerdown',onPointerDown,true);
     document.removeEventListener('keydown',onKey,true);
   }
   function arm(){
     armed=true;
     document.addEventListener('mousemove',onMove,true);
     document.addEventListener('click',onClick,true);
+    document.addEventListener('pointerdown',onPointerDown,true);
     document.addEventListener('keydown',onKey,true);
   }
   function disarm(){
@@ -2168,6 +2537,9 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(annotSvg){ annotSvg.remove(); annotSvg=null; }
     if(annotPins){ annotPins.remove(); annotPins=null; }
     annotState.comments=[]; annotState.strokes=[]; drawing=false; curStroke=null;
+    // A closing session must not leave contenteditable rows in the artifact —
+    // restore the original texts and unwrap the mixed-content markers.
+    if(editRoot)disableEditMode(true);
     picked=null; hovered=null; annotEnabled=false;
   }
   // Annotation overlay: SVG strokes + comment pins over the picked element.
@@ -2259,6 +2631,200 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     var payload={type:'oa:live:annot:data', req:req, comments:annotState.comments.slice(), strokes:strokes, screenshot:null};
     captureShot(function(shot){ if(shot)payload.screenshot=shot; window.__oaSend(payload); });
   }
+
+  // --- inline text editing (impeccable-style manual copy edits) ---
+  // The host arms edit mode on the picked element: pure-text leaf rows become
+  // contenteditable with a data-original-text snapshot; mixed-content nodes
+  // get marker spans first so their text can be edited too. input events fill
+  // a drafts map; Save validates (plain text only) and postMessages the
+  // changed ops; the host stages them server-side for a batch Apply. Escape
+  // restores the original texts without leaving edit mode.
+  var MIXED_WRAP_SKIP=new Set(['SCRIPT','STYLE','TEMPLATE','NOSCRIPT','SVG','CODE','PRE']);
+  var editRoot=null, editRows=null, editDrafts=null, editStyleEl=null;
+  // Editable rows get a dashed outline affordance + a solid focus ring, so
+  // the user (and a keyboard user's focus) can tell which rows are editable.
+  // Injected as a <style> — the frame CSP allows style-src 'unsafe-inline'.
+  function ensureEditStyle(){
+    if(editStyleEl)return;
+    editStyleEl=document.createElement('style');
+    editStyleEl.id=PREFIX+'-edit-style';
+    editStyleEl.textContent='[data-oa-editable]{outline:1px dashed color-mix(in oklab,var(--oa-accent,#6457f0),transparent 45%);outline-offset:2px;border-radius:2px;cursor:text}[data-oa-editable]:focus-visible{outline:2px solid var(--oa-accent,#6457f0);outline-offset:1px}';
+    document.head.appendChild(editStyleEl);
+  }
+  // Pasted rich content is stripped to plain text so no markup enters a row
+  // (Save's plain-text validation would otherwise reject the whole batch).
+  function onEditPaste(e){
+    var el=e.target;
+    if(!el||el.nodeType!==1||el.getAttribute('contenteditable')!=='true')return;
+    var cd=e.clipboardData||window.clipboardData, text='';
+    if(cd){
+      text=cd.getData('text/plain');
+      if(!text){
+        var html=cd.getData('text/html');
+        if(html){ var tmp=document.createElement('div'); tmp.innerHTML=html; text=tmp.textContent||''; }
+      }
+    }
+    if(!text)return;
+    e.preventDefault();
+    var sel=window.getSelection();
+    if(!sel||!sel.rangeCount){ try{el.focus();}catch(err){} sel=window.getSelection(); }
+    if(!sel||!sel.rangeCount)return;
+    sel.deleteFromDocument();
+    var node=document.createTextNode(text);
+    var range=sel.getRangeAt(0);
+    range.insertNode(node);
+    range.setStartAfter(node); range.collapse(true);
+    sel.removeAllRanges(); sel.addRange(range);
+    // insertNode does not fire 'input' — record the draft directly.
+    for(var i=0;i<editRows.length;i++){
+      if(editRows[i].el===el){ editDrafts[i]=el.textContent; break; }
+    }
+  }
+  function wrapMixedTextNodes(root){
+    var walk=[root];
+    while(walk.length){
+      var el=walk.pop();
+      if(!el||el.nodeType!==1)continue;
+      if(MIXED_WRAP_SKIP.has(String(el.tagName||'').toUpperCase()))continue;
+      var textNodes=[];
+      for(var i=0;i<el.childNodes.length;i++){
+        var n=el.childNodes[i];
+        if(n.nodeType===3&&n.textContent.trim())textNodes.push(n);
+      }
+      // Mixed content (text + element children): wrap each text node so the
+      // row becomes addressable (a row is an element whose children are ALL
+      // text nodes).
+      if(textNodes.length&&textNodes.length<el.childNodes.length){
+        for(var j=0;j<textNodes.length;j++){
+          var s=document.createElement('span');
+          s.setAttribute('data-oa-text-wrap','1');
+          var t=textNodes[j];
+          t.parentNode.insertBefore(s,t);
+          s.appendChild(t);
+        }
+      }
+      for(var k=0;k<el.children.length;k++)walk.push(el.children[k]);
+    }
+  }
+  function unwrapMixedTextNodes(root){
+    var spans=root.querySelectorAll('[data-oa-text-wrap]');
+    for(var i=0;i<spans.length;i++){
+      var s=spans[i], p=s.parentNode;
+      while(s.firstChild)p.insertBefore(s.firstChild,s);
+      p.removeChild(s);
+    }
+  }
+  function collectEditableTextRows(root){
+    var rows=[];
+    (function walk(el){
+      if(!el||el.nodeType!==1)return;
+      if(MIXED_WRAP_SKIP.has(String(el.tagName||'').toUpperCase()))return;
+      var kids=el.childNodes, hasText=false, allText=kids.length>0;
+      for(var i=0;i<kids.length;i++){
+        if(kids[i].nodeType===3){ if(kids[i].textContent.trim())hasText=true; }
+        else allText=false;
+      }
+      if(hasText&&allText){
+        rows.push({el:el, text:el.textContent});
+        return; // leaf row; do not descend
+      }
+      for(var j=0;j<el.children.length;j++)walk(el.children[j]);
+    })(root);
+    return rows;
+  }
+  function rowRef(el){
+    return el.id||[].slice.call(el.classList).join('.')||String(el.tagName).toLowerCase();
+  }
+  function onEditInput(e){
+    for(var i=0;i<editRows.length;i++){
+      if(editRows[i].el===e.currentTarget){ editDrafts[i]=e.currentTarget.textContent; break; }
+    }
+  }
+  function enableEditMode(root){
+    if(editRoot||!root)return;
+    editRoot=root;
+    wrapMixedTextNodes(root);
+    var rows=collectEditableTextRows(root);
+    if(!rows.length){
+      unwrapMixedTextNodes(root);
+      editRoot=null;
+      window.__oaSend({type:'oa:live:edit:none'});
+      return;
+    }
+    editRows=rows;
+    editDrafts={};
+    ensureEditStyle();
+    editRoot.addEventListener('paste',onEditPaste,true);
+    rows.forEach(function(row,i){
+      row.el.setAttribute('contenteditable','true');
+      row.el.setAttribute('data-original-text',row.text);
+      row.el.setAttribute('data-oa-row',String(i));
+      row.el.setAttribute('data-oa-editable','');
+      row.el.addEventListener('input',onEditInput);
+    });
+    // The annotation overlay sits over the picked element with pointer events
+    // on — it would swallow the clicks that edit the text rows underneath.
+    if(annotSvg)annotSvg.style.pointerEvents='none';
+    // Focus the first row with the caret collapsed at the end; a focus throw
+    // (rare engine quirk) must not leave edit mode half-armed.
+    try{
+      if(rows[0].el.focus)rows[0].el.focus();
+      var sel=window.getSelection();
+      if(sel){ sel.selectAllChildren(rows[0].el); sel.collapseToEnd(); }
+    }catch(e){}
+  }
+  function disableEditMode(restore){
+    if(!editRoot)return;
+    editRows.forEach(function(row,i){
+      if(restore&&editDrafts&&editDrafts[i]!==undefined){
+        row.el.textContent=row.el.getAttribute('data-original-text')||'';
+      }
+      row.el.removeAttribute('contenteditable');
+      row.el.removeAttribute('data-original-text');
+      row.el.removeAttribute('data-oa-row');
+      row.el.removeAttribute('data-oa-editable');
+      row.el.removeEventListener('input',onEditInput);
+    });
+    editRoot.removeEventListener('paste',onEditPaste,true);
+    if(editStyleEl){ editStyleEl.remove(); editStyleEl=null; }
+    unwrapMixedTextNodes(editRoot);
+    if(annotSvg)annotSvg.style.pointerEvents='auto';
+    editRoot=null; editRows=null; editDrafts=null;
+  }
+  function onEditKey(e){
+    if(!editRoot||e.key!=='Escape')return;
+    // Restore every edited row, stay in edit mode.
+    editRows.forEach(function(row,i){
+      if(editDrafts[i]!==undefined)row.el.textContent=row.el.getAttribute('data-original-text')||'';
+    });
+    editDrafts={};
+  }
+  function saveEdit(){
+    if(!editRoot)return;
+    // Snapshot the element context BEFORE tearing the edit mode down.
+    var element=extractContext(editRoot);
+    var ops=[];
+    for(var i=0;i<editRows.length;i++){
+      if(editDrafts[i]===undefined)continue; // unchanged row
+      var row=editRows[i], candidate=row.el.textContent;
+      if(!candidate.trim()){ rejectEdit('empty text'); return; }
+      if(/[<{}\`]/.test(candidate)){ rejectEdit('plain text only — no < { } or backtick'); return; }
+      var classes=[].slice.call(row.el.classList);
+      var ref=rowRef(row.el);
+      var originalText=row.el.getAttribute('data-original-text')||'';
+      var op={ref:ref, tag:String(row.el.tagName).toLowerCase(), elementId:row.el.id||null, classes:classes, originalText:originalText, newText:candidate, leaf:{ref:ref, tag:String(row.el.tagName).toLowerCase(), id:row.el.id||null, classes:classes, originalText:originalText, newText:candidate, textContent:candidate, outerHTML:row.el.outerHTML.slice(0,5000)}, nearbyEditableTexts:editRows.map(function(r){return r.text;}).filter(function(t){return t!==originalText;})};
+      ops.push(op);
+    }
+    disableEditMode(false);
+    window.__oaSend({type:'oa:live:edit:data', element:element, ops:ops});
+  }
+  function rejectEdit(reason){
+    window.__oaSend({type:'oa:live:edit:rejected', reason:reason});
+  }
+  document.addEventListener('keydown',onEditKey,true);
+
+  // ONE message listener (the duplicate was merged — the second copy called
+  // sendAnnots() without the request token, dropping the req on submits).
   window.addEventListener('message',function(e){
     if(e.source!==window.parent)return;
     var m=e.data; if(!m||typeof m!=='object')return;
@@ -2267,15 +2833,9 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     else if(m.type==='oa:live:pick:disarm')disarm();
     else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
     else if(m.type==='oa:live:annot:collect')sendAnnots(m.req);
-  });
-  window.addEventListener('message',function(e){
-    if(e.source!==window.parent)return;
-    var m=e.data; if(!m||typeof m!=='object')return;
-    if(m.type==='oa:live:pick:arm')arm();
-    else if(m.type==='oa:live:pick:lock')lock();
-    else if(m.type==='oa:live:pick:disarm')disarm();
-    else if(m.type==='oa:live:annot:enable'){annotEnabled=true;if(picked)showAnnot(picked);}
-    else if(m.type==='oa:live:annot:collect')sendAnnots();
+    else if(m.type==='oa:live:edit:arm')enableEditMode(picked);
+    else if(m.type==='oa:live:edit:cancel')disableEditMode(true);
+    else if(m.type==='oa:live:edit:save')saveEdit();
   });
 })();
 `;

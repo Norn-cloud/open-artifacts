@@ -139,6 +139,13 @@ and a lightness staircase for depth.
 **The One Accent Rule.** Signal Indigo is the only interactive color. Danger is
 for destruction only. No second accent, no semantic red/yellow/green in the
 chrome (semantic state lives in the artifact, not the chrome).
+
+**Exception — live disconnect dot.** The Live toggle's disconnected indicator
+is a fixed 6px amber dot (`oklch(77% 0.13 82)`, 1.4s pulse, static under
+`prefers-reduced-motion`), aligned with the impeccable live-mode reference the
+live editor is built from. It is the ONLY semantic color in the chrome and
+means exactly one thing (agent watcher offline); it never carries interactive
+state — the toggle stays a normal button.
 **The Bridge Rule.** The chrome reads `--oa-*`, which the token contract mirrors
 from the artifact's identity tokens. Never hand-override `--oa-*` in an artifact
 theme fragment - the bridge already covers it, and overriding breaks the

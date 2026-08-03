@@ -1,7 +1,9 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "tests/cli/artifact-cli.test.ts"
+    ],
     "ignoreValues": [
       {
         "rule": "design-system-font-size",
@@ -20,6 +22,72 @@
         "value": "8rem",
         "createdAt": "2026-07-28T12:49:57.309Z",
         "reason": "Full-screen countdown overlay display number, not product UI typography; 48px display step is too small for a viewport-filling countdown"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "14px",
+        "createdAt": "2026-08-03T08:23:15.499Z",
+        "reason": "Live dock floating-panel radius (bottom-center pill, backdrop blur); the 4-8px ramp covers controls/cards"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "12px",
+        "createdAt": "2026-08-03T08:23:15.541Z",
+        "reason": "Live action bar floating-row radius, same panel register as the dock"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "10px",
+        "createdAt": "2026-08-03T08:23:15.584Z",
+        "reason": "Live offline-guide card radius, dock's inner surface"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "50% 50% 50% 2px",
+        "createdAt": "2026-08-03T08:23:15.625Z",
+        "reason": "Live annotation pin teardrop shape"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "18px",
+        "createdAt": "2026-08-03T08:23:15.666Z",
+        "reason": "Live chip remove glyph size in a 24px square button"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": "0.85rem",
+        "createdAt": "2026-08-03T08:23:15.711Z",
+        "reason": "Live dock status/guide-head secondary text size"
+      },
+      {
+        "rule": "design-system-color",
+        "value": "oklch(77% 0.13 82)",
+        "createdAt": "2026-08-03T08:23:15.752Z",
+        "reason": "Live disconnect amber dot; documented DESIGN.md exception (One Accent Rule)"
+      },
+      {
+        "rule": "design-system-radius",
+        "value": "2px",
+        "files": [
+          "src/wrap.ts"
+        ],
+        "createdAt": "2026-08-03T08:23:15.792Z",
+        "reason": "Editable-row outline radius inside the frame's injected [data-oa-editable] contract string"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/wrap.ts"
+        ],
+        "createdAt": "2026-08-03T08:23:15.836Z",
+        "reason": "Markdown blockquote left border convention in the artifact prose styles"
+      },
+      {
+        "rule": "design-system-font-size",
+        "value": ".85rem",
+        "createdAt": "2026-08-03T08:24:16.282Z",
+        "reason": "Live dock status/guide-head and toast secondary text size"
       }
     ]
   }
