@@ -26,6 +26,8 @@ import { DurableObject } from "cloudflare:workers";
 export type LiveEvent = {
   type: "generate" | "exit" | "comment" | "ack" | "done" | "error" | "edit";
   id: string;
+  /** Best-effort base64 data-URL PNG of the picked content; omitted when capture fails. */
+  screenshot?: string;
   [key: string]: unknown;
 };
 
