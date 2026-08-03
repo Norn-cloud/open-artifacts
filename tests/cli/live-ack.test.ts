@@ -50,6 +50,16 @@ describe("live-ack: isEventPending / hasExit / hasNewEvent", () => {
     // An already-delivered comment is not new.
     expect(hasNewEvent(status, new Set(["ev1", "c1"]))).toBe(false);
   });
+
+  it("hasNewEvent treats a committed edit as a new event", () => {
+    const known = new Set(["ev1"]);
+    const status = {
+      pendingEvents: [ev("ev1", "generate"), ev("e1", "edit")],
+    };
+    expect(hasNewEvent(status, known)).toBe(true);
+    // An already-delivered edit is not new.
+    expect(hasNewEvent(status, new Set(["ev1", "e1"]))).toBe(false);
+  });
 });
 
 describe("live-ack: waitForEventAck", () => {

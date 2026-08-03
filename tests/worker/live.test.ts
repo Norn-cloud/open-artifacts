@@ -206,6 +206,63 @@ describe("live routes without LIVE_DO binding", () => {
     expect(res.status).toBe(404);
   });
 
+  it("POST /api/artifacts/:id/live/edit-stash returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-stash`, {
+        pageUrl: `/a/${id}`,
+        ref: "h1",
+        element: { tagName: "h1" },
+        ops: [],
+      }),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("GET /api/artifacts/:id/live/edit-stash returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /api/artifacts/:id/live/edit-stash returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/edit-stash`),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/artifacts/:id/live/edit-commit returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, {
+        pageUrl: `/a/${id}`,
+      }),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /api/artifacts/:id/live/events/:eid returns 404 without LIVE_DO", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/ev_x`),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("the viewer host page renders no Live button without the binding", async () => {
     const { id } = await create({ content: "<p>hi</p>", format: "html" }, OFF);
     const res = await fetchWith(new Request(`${BASE}/a/${id}`), OFF, true);
@@ -238,10 +295,10 @@ describe("live routes with LIVE_DO bound", () => {
     expect(html).toContain("oa-live-connection");
     expect(html).toContain("Copy start prompt");
     expect(html).toContain("navigator.clipboard.writeText");
-    // Offline guidance must not block the Live toggle from opening the picker.
-    expect(html).toContain(
-      "if(root.hidden&&agentOnline===false)showGuide();else hideGuide();",
-    );
+    // Offline guidance must not block the Live toggle from opening the picker,
+    // and the guide banner auto-shows only once per session.
+    expect(html).toContain("guideAutoShown=true");
+    expect(html).toContain("agentOnline===false&&!guideAutoShown");
     // If the first arm message races the iframe load, oa:ready re-arms it
     // while the newly opened dock is still in PICKING.
     expect(html).toContain(
@@ -292,7 +349,7 @@ describe("live routes with LIVE_DO bound", () => {
 
     const frameRes = await fetchWith(new Request(`${BASE}/a/${id}/frame`), ON);
     const frameHtml = await frameRes.text();
-    const framePickStart = frameHtml.indexOf("picked=hovered;");
+    const framePickStart = frameHtml.indexOf("function pickAt(");
     expect(framePickStart).toBeGreaterThanOrEqual(0);
     expect(frameHtml.slice(framePickStart, framePickStart + 300)).toContain(
       "lock();",
@@ -652,5 +709,508 @@ describe("live routes with LIVE_DO bound", () => {
     const off = await create({ content: "<p>hi</p>", format: "html" }, OFF);
     expect(on.liveSupported).toBe(true);
     expect(off.liveSupported).toBe(false);
+  });
+});
+
+describe("live edit stash, commit, and inline-edit chrome", () => {
+  const op = { ref: "h1", originalText: "Old", newText: "New" };
+  const stashBody = (pageUrl: string, ops: unknown[]) => ({
+    pageUrl,
+    ref: "h1",
+    element: { tagName: "h1" },
+    ops,
+  });
+
+  it("stages ops and merges by (pageUrl, ref): a re-save replaces newText but keeps originalText", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+
+    let res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, pendingCount: 1 });
+
+    // Re-saving the same (pageUrl, ref) replaces newText but keeps originalText.
+    res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [{ ...op, newText: "Newer" }]),
+      ),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, pendingCount: 1 });
+
+    res = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+      ON,
+      true,
+    );
+    const list = (await res.json()) as {
+      pendingCount: number;
+      entries: {
+        pageUrl: string;
+        ref: string;
+        ops: { originalText: string; newText: string }[];
+      }[];
+    };
+    expect(list.pendingCount).toBe(1);
+    expect(list.entries[0]).toMatchObject({
+      pageUrl,
+      ref: "h1",
+      ops: [{ originalText: "Old", newText: "Newer" }],
+    });
+  });
+
+  it("keeps distinct ops when rows share a ref (merge keys by ref + originalText)", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    const ops = [
+      { ref: "p", originalText: "First line", newText: "First edited" },
+      { ref: "p", originalText: "Second line", newText: "Second edited" },
+    ];
+    let res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, ops),
+      ),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, pendingCount: 2 });
+
+    // Re-saving only the first row updates it and keeps the second untouched
+    // (ref alone cannot distinguish two <p> rows without ids/classes).
+    res = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [{ ...ops[0], newText: "First newer" }]),
+      ),
+      ON,
+      true,
+    );
+    expect(await res.json()).toMatchObject({ ok: true, pendingCount: 2 });
+
+    res = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+      ON,
+      true,
+    );
+    const list = (await res.json()) as {
+      entries: {
+        ops: { ref: string; originalText: string; newText: string }[];
+      }[];
+    };
+    expect(list.entries[0].ops).toEqual([
+      { ref: "p", originalText: "First line", newText: "First newer" },
+      { ref: "p", originalText: "Second line", newText: "Second edited" },
+    ]);
+  });
+
+  it("rejects a malformed stash body with 400", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-stash`, {
+        pageUrl: 7,
+      }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("DELETE /live/edit-stash discards the staged ops", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    const res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/edit-stash`),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    const list = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+      ON,
+      true,
+    );
+    expect(((await list.json()) as { pendingCount: number }).pendingCount).toBe(
+      0,
+    );
+  });
+
+  it("POST /live/edit-commit enqueues one edit event and 409s on an empty stash", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+
+    let res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, { pageUrl }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(409);
+
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    res = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, { pageUrl }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    const { eventId } = (await res.json()) as { eventId: string };
+    expect(eventId).toMatch(/^ev_/);
+
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { id: string; type: string }[];
+    };
+    expect(
+      status.pendingEvents.some((e) => e.id === eventId && e.type === "edit"),
+    ).toBe(true);
+  });
+
+  it("an edit event is polled ahead of a pending generate", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    await enqueueRaw(id, { type: "generate", id: "ev_gen1", items: [] });
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    const commitRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, { pageUrl }),
+      ON,
+      true,
+    );
+    const { eventId } = (await commitRes.json()) as { eventId: string };
+
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const evt = (await pollRes.json()) as { type: string; id: string };
+    expect(evt.type).toBe("edit");
+    expect(evt.id).toBe(eventId);
+  });
+
+  it("a done reply clears the staged edits and an error reply keeps them", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    const stash = async () =>
+      fetchWith(
+        jsonRequest(
+          "POST",
+          `/api/artifacts/${id}/live/edit-stash`,
+          stashBody(pageUrl, [op]),
+        ),
+        ON,
+        true,
+      );
+    const commit = async () => {
+      const res = await fetchWith(
+        jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, {
+          pageUrl,
+        }),
+        ON,
+        true,
+      );
+      return ((await res.json()) as { eventId: string }).eventId;
+    };
+    const pendingCount = async () => {
+      const res = await fetchWith(
+        new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+        ON,
+        true,
+      );
+      return ((await res.json()) as { pendingCount: number }).pendingCount;
+    };
+
+    // done clears the stash for the page.
+    await stash();
+    const evtId1 = await commit();
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(((await pollRes.json()) as { id: string }).id).toBe(evtId1);
+    const doneRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+        id: evtId1,
+        type: "done",
+        status: "done",
+        appliedEntryIds: [],
+        failed: [],
+        files: ["recipe.html"],
+        notes: [],
+      }),
+      ON,
+      true,
+    );
+    expect(doneRes.status).toBe(200);
+    expect(await pendingCount()).toBe(0);
+
+    // error keeps the stash so the user can retry or discard.
+    await stash();
+    const evtId2 = await commit();
+    await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+        id: evtId2,
+        type: "error",
+        status: "error",
+      }),
+      ON,
+      true,
+    );
+    expect(await pendingCount()).toBe(1);
+  });
+
+  it("DELETE /live/events/:eid cancels an unleased queued edit and keeps the stash", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    const commitRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, { pageUrl }),
+      ON,
+      true,
+    );
+    const { eventId } = (await commitRes.json()) as { eventId: string };
+
+    const res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/${eventId}`),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true });
+
+    // The event left the queue...
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { id: string }[];
+    };
+    expect(status.pendingEvents.some((e) => e.id === eventId)).toBe(false);
+    // ...but the stash is intact, so Apply can run again.
+    const list = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/edit-stash`),
+      ON,
+      true,
+    );
+    expect(((await list.json()) as { pendingCount: number }).pendingCount).toBe(
+      1,
+    );
+  });
+
+  it("DELETE /live/events/:eid returns 409 once the agent has leased the event", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const pageUrl = `/a/${id}`;
+    await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(pageUrl, [op]),
+      ),
+      ON,
+      true,
+    );
+    const commitRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/edit-commit`, { pageUrl }),
+      ON,
+      true,
+    );
+    const { eventId } = (await commitRes.json()) as { eventId: string };
+    // The watcher polls the event → it is leased for 30s.
+    await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/${eventId}`),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("DELETE /live/events/:eid returns 404 for unknown or non-edit events", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    let res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/ev_unknown`),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(404);
+    await enqueueRaw(id, { type: "generate", id: "ev_gen1", items: [] });
+    res = await fetchWith(
+      jsonRequest("DELETE", `/api/artifacts/${id}/live/events/ev_gen1`),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("a viewer can GET /live/status but cannot POST /live/edit-stash", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`),
+      ON,
+      false,
+    );
+    expect(statusRes.status).toBe(200);
+    const stashRes = await fetchWith(
+      jsonRequest(
+        "POST",
+        `/api/artifacts/${id}/live/edit-stash`,
+        stashBody(`/a/${id}`, [op]),
+      ),
+      ON,
+      false,
+    );
+    expect(stashRes.status).toBe(401);
+  });
+
+  it("the owner host chrome carries the edit chip, Apply/Discard, and the three-state indicator", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+    // Edit chip + stash plumbing.
+    expect(html).toContain("Edit text");
+    expect(html).toContain('id="oa-live-apply"');
+    expect(html).toContain('id="oa-live-discard"');
+    expect(html).toContain("live/edit-stash");
+    expect(html).toContain("live/edit-commit");
+    // Three-state indicator: off-state amber dot, busy tooltip, disconnected tooltip.
+    expect(html).toContain('data-agent="off"]::after');
+    expect(html).toContain("oa-live-agent-off-pulse");
+    expect(html).toContain(
+      "Live agent not connected - run the watcher to connect",
+    );
+    expect(html).toContain("Agent is working on an edit");
+    expect(html).toContain("prefers-reduced-motion");
+    // Presence also surfaces in the dock status row (visible without hover).
+    expect(html).toContain(
+      "Pick an element in the page — live agent not connected",
+    );
+    // Critique fixes: in-register inline confirm, un-pick, empty-prompt guard,
+    // the slim guide banner with its disclosure, and the offline-Apply queue
+    // warning with its short ack timeout.
+    expect(html).toContain("Confirm apply?");
+    expect(html).toContain("Cancel this pick");
+    expect(html).toContain("Type a change first");
+    expect(html).toContain("Show start prompt");
+    expect(html).toContain("oa-live-guide-details");
+    expect(html).toContain("the edit will queue until a watcher connects");
+    expect(html).toContain("agentOnline===false?20000:ACK_TIMEOUT");
+    // Deepening round: queued-edit cancel pill, Send all on the bar, armed
+    // Exit, safe-area insets, and the queued stall hint.
+    expect(html).toContain("Queued (");
+    expect(html).toContain("click to cancel");
+    expect(html).toContain("Send all (");
+    expect(html).toContain("changes?");
+    expect(html).toContain("live/events/");
+    expect(html).toContain("env(safe-area-inset-bottom)");
+    expect(html).toContain(
+      "the edit is queued and will apply when a watcher connects",
+    );
+    // Touch: coarse pointers get WCAG-friendly targets for the live chrome.
+    expect(html).toContain("(pointer:coarse)");
+    // done-branch discrimination: the protocol field decides, lastSubmitType backs it up.
+    expect(html).toContain("Array.isArray(msg.appliedEntryIds)");
+    expect(html).toContain("lastSubmitType==='edit'");
+  });
+
+  it("the frame picker carries the inline edit-mode machinery and a single message listener", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}/frame`), ON);
+    const html = await res.text();
+    expect(html).toContain("contenteditable");
+    expect(html).toContain("data-original-text");
+    expect(html).toContain("oa:live:edit:data");
+    expect(html).toContain("oa:live:edit:none");
+    expect(html).toContain("oa:live:edit:rejected");
+    // Editable-row affordance (dashed outline + focus ring) and the plain-text
+    // paste strip ship with the edit mode.
+    expect(html).toContain("data-oa-editable");
+    expect(html).toContain("-edit-style");
+    expect(html).toContain("onEditPaste");
+    // Touch: a tap selects directly on pointerdown (no mousemove hover needed).
+    expect(html).toContain("e.pointerType!=='touch'");
+    expect(html).toContain("onPointerDown");
+    const pickerStart = html.indexOf("var PREFIX='impeccable-live'");
+    expect(pickerStart).toBeGreaterThanOrEqual(0);
+    const pickerEnd = html.indexOf("</script>", pickerStart);
+    const picker = html.slice(pickerStart, pickerEnd);
+    // The duplicate listener was merged into one, and the annotation reply
+    // keeps its request token (the second copy dropped it — a real bug).
+    expect((picker.match(/addEventListener\('message'/g) ?? []).length).toBe(1);
+    expect(picker).toContain("sendAnnots(m.req)");
   });
 });

@@ -2939,6 +2939,88 @@ describe("live watch: heartbeats, 404 hints, prompt delivery", () => {
       child.kill();
     }
   });
+
+  it("watch auto-replies ack for an edit event and keeps polling", async () => {
+    holdPoll = true;
+    const { child, done } = spawnCli(["live", "testid123456", "--watch"], {
+      ...skEnv,
+      OPEN_ARTIFACTS_LIVE_HEARTBEAT_MS: "5000",
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 250));
+      releasePoll?.(200, {
+        type: "edit",
+        id: "ev_edit1",
+        pageUrl: "/a/testid123456",
+        items: [],
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      const acks = requests.filter(
+        (r) =>
+          r.method === "POST" &&
+          r.path.includes("/live/reply") &&
+          r.body.type === "ack",
+      );
+      expect(acks.some((a) => a.body.id === "ev_edit1")).toBe(true);
+      releasePoll?.(200, { type: "exit", id: "ev9" });
+      const { stderr } = await done;
+      expect(stderr).toContain("session ended");
+    } finally {
+      if (releasePoll) releasePoll(500, { error: "test teardown" });
+      child.kill();
+    }
+  });
+
+  it("live --reply done --data merges the canonical edit JSON into the reply body", async () => {
+    nextResponse = { status: 200, body: { ok: true } };
+    const result = await run(
+      [
+        "live",
+        "testid123456",
+        "--reply",
+        "ev_edit1",
+        "done",
+        "--data",
+        JSON.stringify({
+          status: "done",
+          appliedEntryIds: ["stash_1"],
+          failed: [],
+          files: ["recipe.html"],
+          notes: ["applied copy edits"],
+        }),
+      ],
+      { env: skEnv },
+    );
+    expect(result.code).toBe(0);
+    const reply = requests.find(
+      (r) => r.method === "POST" && r.path.includes("/live/reply"),
+    );
+    expect(reply?.body).toMatchObject({
+      id: "ev_edit1",
+      type: "done",
+      status: "done",
+      appliedEntryIds: ["stash_1"],
+      failed: [],
+      files: ["recipe.html"],
+      notes: ["applied copy edits"],
+    });
+  });
+
+  it("live --reply fails on invalid --data JSON", async () => {
+    const result = await run(
+      [
+        "live",
+        "testid123456",
+        "--reply",
+        "ev_edit1",
+        "done",
+        "--data",
+        "{oops",
+      ],
+      { env: skEnv, expectFailure: true },
+    );
+    expect(result.stderr).toMatch(/--data|JSON/i);
+  });
 });
 
 describe("CLI SaaS login", () => {

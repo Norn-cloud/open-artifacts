@@ -6,11 +6,13 @@
 //
 //   1. comment posted through the real comments UI   -> watcher prints comment
 //   2. Live opened, element picked with real mouse   -> compose bar
-//   3. prompt typed + Submit                         -> watcher prints generate
-//   4. Exit clicked                                  -> watcher prints exit, exits 0
-//   5. /live/status reports agentActive while online
-//   6. the header renders Connected while the watcher is online
-//   7. the watcher stream never prints timeout noise (polls time out at 1s)
+//   3. Edit text flow: chip -> inline edit -> Save    -> "Apply copy edits (1)" pill
+//   4. Apply clicked + done --data reply             -> watcher prints edit, pill clears
+//   5. prompt typed + Submit                         -> watcher prints generate
+//   6. Exit clicked                                  -> watcher prints exit, exits 0
+//   7. /live/status reports agentActive while online
+//   8. the header renders Connected while the watcher is online
+//   9. the watcher stream never prints timeout noise (polls time out at 1s)
 //
 // Requires: agent-browser on PATH, node >= 22 (global WebSocket), pnpm.
 // Run:      node tests/e2e/live-e2e.mjs
@@ -281,6 +283,18 @@ try {
   // to the JSON TEXT of the value; parse again to get the value itself.
   const evalStr = (expr) =>
     JSON.parse(JSON.parse(ab(`eval "JSON.stringify(${expr})"`)));
+  // Throwing variant for retry loops: ab() calls fail() which process-exits,
+  // so a daemon reply loss there cannot be caught — this one throws instead.
+  const evalRaw = (expr) =>
+    JSON.parse(
+      JSON.parse(
+        execSync(`agent-browser eval "JSON.stringify(${expr})"`, {
+          stdio: ["ignore", "pipe", "pipe"],
+          encoding: "utf8",
+          timeout: 30_000,
+        }).trim(),
+      ),
+    );
   await waitFor(
     () =>
       evalStr(
@@ -332,31 +346,184 @@ try {
   const composeShown = () =>
     evalStr(`!!document.querySelector('.oa-live-freeform')`) === true;
 
-  let picked = false;
-  for (let i = 0; i < 5 && !picked; i++) {
-    const rect = await frameRect();
-    if (!rect) fail("the artifact frame never resolved in the browser");
-    const px = Math.round(rect.x + rect.width / 2);
-    const py = Math.round(rect.y + 80);
-    ab(`mouse move ${px} ${py}`);
-    await sleep(600);
-    ab(`mouse down`);
-    await sleep(400);
-    ab(`mouse up`);
-    try {
-      await waitFor(composeShown, "compose bar after pick", 4000);
-      picked = true;
-    } catch {
-      // pick can miss on the first mouse pass — retry at the same point
+  const pickElement = async () => {
+    for (let i = 0; i < 5; i++) {
+      const rect = await frameRect();
+      if (!rect) return false;
+      const px = Math.round(rect.x + rect.width / 2);
+      const py = Math.round(rect.y + 80);
+      ab(`mouse move ${px} ${py}`);
+      await sleep(600);
+      ab(`mouse down`);
+      await sleep(400);
+      ab(`mouse up`);
+      try {
+        await waitFor(composeShown, "compose bar after pick", 4000);
+        return true;
+      } catch {
+        // pick can miss on the first mouse pass — retry at the same point
+      }
     }
-  }
-  if (!picked) {
+    return false;
+  };
+
+  if (!(await pickElement())) {
     ab("screenshot /tmp/oa-e2e-pick-failed.png");
     fail("element never picked after retries");
   }
   console.log("element picked, compose bar shown ✓");
 
-  // 3) prompt + submit -> generate
+  // 3) Edit text flow: chip -> inline edit (contenteditable row) -> Save ->
+  //    "Apply copy edits (1)" pill -> Apply -> watcher prints edit -> reply
+  //    done --data -> the pill clears. The frame is opaque-origin, so every
+  //    assertion is host-side (pill/bar) or watcher-side (event JSON).
+  ab("click .oa-live-edit-chip");
+  await waitFor(
+    async () => {
+      const btns = await evalStr(
+        `[].slice.call(document.querySelectorAll('#oa-live-action-bar .oa-live-row button')).map(function(x){return x.textContent})`,
+      );
+      return Array.isArray(btns) && btns[0] === "Save" && btns[1] === "Cancel";
+    },
+    "edit bar with Save/Cancel after the Edit text chip",
+    10_000,
+  );
+  await sleep(500); // let the frame arm contenteditable rows
+  // The first editable row is auto-focused; select-all + insert replaces it.
+  // inserttext (no key events) is steadier than keyboard type, which can hang
+  // on back-to-back CDP connects — retry once before failing.
+  ab("press Control+a");
+  let typed = false;
+  for (let i = 0; i < 3 && !typed; i++) {
+    try {
+      execSync('agent-browser keyboard inserttext "E2E EDITED TITLE"', {
+        stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8",
+        timeout: 30_000,
+      });
+      typed = true;
+    } catch {
+      await sleep(1000);
+    }
+  }
+  if (!typed) fail("typing into the edited text row failed after retries");
+  await sleep(300);
+  // Click Save from the host page (a DOM click — the same event a user's click
+  // fires). agent-browser's click selector resolution is flaky against the
+  // re-rendered floating action bar, so the click goes through eval. The
+  // daemon can also LOSE the eval reply after a keyboard insert (the click
+  // still executes — the "Saved" toast proves it), so drive by the functional
+  // outcome below (the Apply pill), retrying on a lost reply. A second Save
+  // after the first landed is a no-op (no drafts left, the bar is gone).
+  let saveTried = false;
+  for (let i = 0; i < 3 && !saveTried; i++) {
+    try {
+      evalRaw(
+        `(function(){var bar=document.getElementById('oa-live-action-bar');var b=bar&&bar.querySelector('.oa-live-row .oa-dock-btn--primary');if(b)b.click();return 'done';})()`,
+      );
+      saveTried = true;
+    } catch {
+      await sleep(1000);
+    }
+  }
+  if (!saveTried) fail("Save click never confirmed after retries");
+  await waitFor(
+    async () => {
+      const label = await evalStr(
+        `document.getElementById('oa-live-apply') ? document.getElementById('oa-live-apply').querySelector('.oa-dock-label').textContent : ''`,
+      );
+      return label === "Apply copy edits (1)";
+    },
+    "Apply pill with count 1 after Save",
+    10_000,
+  );
+  console.log("edit stashed, Apply pill shown ✓");
+  // In-register inline confirm: the first click arms the pill ("Confirm
+  // apply?"), the second click within the window commits. Same lost-reply
+  // retry pattern as Save — two landed clicks always commit.
+  const clickApply = async () => {
+    for (let i = 0; i < 3; i++) {
+      try {
+        evalRaw(
+          `(function(){var a=document.getElementById('oa-live-apply');if(a)a.click();return 'done';})()`,
+        );
+        return;
+      } catch {
+        await sleep(1000);
+      }
+    }
+  };
+  await clickApply();
+  await sleep(400);
+  await clickApply();
+  await waitFor(
+    () =>
+      watcherLines.some((l) => {
+        try {
+          return JSON.parse(l).type === "edit";
+        } catch {
+          return false;
+        }
+      }),
+    "watcher to print the edit event",
+    15_000,
+  );
+  const editLine = watcherLines
+    .map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    })
+    .find((e) => e && e.type === "edit");
+  console.log("edit streamed to watcher ✓");
+  // Agent applies the ops, republishes, and replies with the canonical JSON.
+  execFileSync(
+    process.execPath,
+    [
+      CLI,
+      "live",
+      id,
+      "--reply",
+      editLine.id,
+      "done",
+      "--data",
+      JSON.stringify({
+        status: "done",
+        appliedEntryIds: (editLine.items || []).map((i) => i.id),
+        failed: [],
+        files: ["e2e-fragments/body.html"],
+        notes: ["e2e copy edits applied"],
+      }),
+    ],
+    {
+      cwd: projDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        OPEN_ARTIFACTS_URL: BASE,
+        OPEN_ARTIFACTS_API_KEY: "sk_e2e",
+      },
+    },
+  );
+  await waitFor(
+    async () =>
+      evalStr(
+        `document.getElementById('oa-live-apply') ? document.getElementById('oa-live-apply').hidden : true`,
+      ) === true,
+    "Apply pill to clear after the done reply",
+    15_000,
+  );
+  console.log("Apply pill cleared after done ✓");
+  // The frame reloaded after done; pick again for the generate flow.
+  if (!(await pickElement())) {
+    ab("screenshot /tmp/oa-e2e-repick-failed.png");
+    fail("element never re-picked after the edit reload");
+  }
+  console.log("element re-picked, compose bar shown ✓");
+
+  // 4) prompt + submit -> generate
   ab(`type .oa-live-freeform "make the heading 20% bigger"`);
   ab("press Enter"); // commit the draft
   await sleep(300);
@@ -373,7 +540,7 @@ try {
   );
   console.log("generate streamed to watcher ✓");
 
-  // 4) exit live -> watcher terminates cleanly (class selector: a bare `#`
+  // 6) exit live -> watcher terminates cleanly (class selector: a bare `#`
   // in the command line would be eaten as a shell comment)
   ab("click .oa-dock-btn--exit");
   await waitFor(
@@ -386,7 +553,7 @@ try {
   }
   console.log("watcher exited cleanly on session end ✓");
 
-  // 5) no timeout noise on the event stream (1s poll timeouts throughout)
+  // 9) no timeout noise on the event stream (1s poll timeouts throughout)
   const noise = watcherLines.filter((l) => l.includes('"type":"timeout"'));
   if (noise.length > 0) {
     fail(
