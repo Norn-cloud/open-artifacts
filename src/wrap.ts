@@ -1724,10 +1724,14 @@ const LIVE_SCRIPT = `
   var ackTimer=null;
   // How long to wait for an agent ack before showing the stall hint.
   var ACK_TIMEOUT=120000; // 2 min — generous for an agent spinning up
-  // A publish broadcasts 'version' while the agent's 'done' reply also
-  // triggers a reload ~1.2s later; whichever lands first reloads, and the
-  // second is suppressed within this window.
-  var lastReloadAt=0, RELOAD_DEDUP_MS=5000;
+  // One reload per publish, two signals: the version broadcast and the
+  // agent's done reply (which lands ~1-3s later, after the republish).
+  // 'done' owns the reload — exactly one per interactive edit, like before
+  // this feature; the version branch is the fallback for publishes with no
+  // live reply (another session, or no live session at all): it defers
+  // past the window in which a done would land and reloads only if none
+  // did (versionSeenAt reset by the done handler).
+  var versionSeenAt=0, VERSION_DONE_WINDOW_MS=5000;
 
   function toFrame(msg){ try{ if(frame.contentWindow) frame.contentWindow.postMessage(msg,'*'); }catch(e){} }
   function send(msg){ if(!ws||ws.readyState!==1) return; msg.id=msg.id||sessionId; try{ ws.send(JSON.stringify(msg)); }catch(e){} }
@@ -2094,6 +2098,9 @@ const LIVE_SCRIPT = `
       // 'done' = the agent finished editing + republished. Reload the frame.
       else if(msg.type==='done'){
         clearTimeout(ackTimer);
+        // This done owns the reload (below) — cancel the version branch's
+        // fallback timer if one is pending for the same publish.
+        versionSeenAt=0;
         // An edit-done is decided by the protocol payload — the canonical
         // reply JSON always carries appliedEntryIds (possibly an empty array
         // when status:'error' also rides a done broadcast), so Array.isArray
@@ -2110,36 +2117,32 @@ const LIVE_SCRIPT = `
           queuedEditId=null;
           refreshStash();
         }
-        // The agent republishes before replying done, so the version
-        // broadcast usually reloaded the frame first — skip the reload (and
-        // the CONFIRMED window's restart) in that case, but still run
-        // restartAfterEdit to reset the batch and return to PICKING.
-        setTimeout(function(){ if(Date.now()-lastReloadAt<RELOAD_DEDUP_MS){ restartAfterEdit(true); } else { restartAfterEdit(); } },1200);
+        setTimeout(restartAfterEdit,1200);
       }
       else if(msg.type==='error'){ clearTimeout(ackTimer); setState(draft?'COMPOSE':'PICKING'); }
       // 'version' = a new version was published (ordinary update or Live
-      // in-place replace). A staying viewer refreshes in place: reload the
-      // frame (its src has no version param and is no-cache, so it picks up
-      // the new version) and re-arm pick via the oa:ready handshake. Guarded:
-      // a pinned ?v= view never jumps; mid-work (compose prompt open or
-      // inline text editing) the user is told instead of losing unsaved work;
-      // and a 'done' broadcast already reloads ~1.2s later, so dedupe.
+      // in-place replace). In the interactive flow the agent republishes and
+      // then replies done ~1-3s later — done owns that reload (exactly one
+      // per edit, as before this feature), so here it only arms a fallback:
+      // if no done lands within the window the publish had no live reply
+      // (another session, or no live session), and the staying viewer
+      // refreshes in place (the frame src has no version param and is
+      // no-cache, so a reload picks up the new version). Guarded: a pinned
+      // ?v= view never jumps; mid-work (compose prompt open or inline text
+      // editing) the user is told instead of losing unsaved work.
       else if(msg.type==='version'){
         if(/[?&]v=/.test(window.location.search)) return;
         if(draft||state==='EDITING'||state==='COMPOSE'){ if(window.__oaShowInfo)window.__oaShowInfo('New version published — Save or cancel your edit to see it'); return; }
-        var wait=RELOAD_DEDUP_MS-(Date.now()-lastReloadAt);
-        if(wait>0){
-          // A reload already ran within the dedup window (an earlier publish
-          // or the done-driven restart). Defer instead of dropping: this
-          // publish's done timer already fired and skips its own reload, so
-          // returning here would leave the frame on the stale version.
-          setTimeout(function(){ lastReloadAt=Date.now(); reloadFrame(); if(!root.hidden) pendingRearm=true; },wait+50);
-          return;
-        }
-        lastReloadAt=Date.now();
-        reloadFrame();
-        if(root.hidden) return;
-        pendingRearm=true;
+        // A second publish inside the window is covered by the pending
+        // fallback timer — don't stack timers.
+        if(versionSeenAt&&Date.now()-versionSeenAt<VERSION_DONE_WINDOW_MS) return;
+        versionSeenAt=Date.now();
+        setTimeout(function(){
+          if(!versionSeenAt) return; // a done landed and owned the reload
+          versionSeenAt=0;
+          reloadFrame();
+          if(!root.hidden) pendingRearm=true;
+        },VERSION_DONE_WINDOW_MS+1200);
       }
     };
     ws.onclose=function(){ wsReady=false; setTimeout(function(){ if(state!=='IDLE') connect(); },1000); };
@@ -2226,7 +2229,7 @@ const LIVE_SCRIPT = `
   // during the CONFIRMED window the dock is hidden: still reload (to show the
   // new version) but skip the re-arm - state stays IDLE from closeLive, so
   // reopening arms cleanly instead of stranding on a stale PICKING state.
-  function restartAfterEdit(skipReload){ if(!skipReload){ lastReloadAt=Date.now(); reloadFrame(); } if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
+  function restartAfterEdit(){ reloadFrame(); if(root.hidden) return; items=[]; draft=null; pendingRearm=true; setState('PICKING'); }
 
   connect();
 })();
