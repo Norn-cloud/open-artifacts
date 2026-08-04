@@ -97,8 +97,8 @@ Feature: Live editing
     When the host receives a version broadcast
     Then the host reloads the frame in place and re-arms pick once the frame reports ready
     But a version-pinned view (?v=) never auto-reloads
-    And the version reload and the done-driven reload dedupe in both orderings (one reload per publish)
-    And a publish arriving within the dedup window defers its reload until the window clears instead of dropping it
+    And in the interactive flow the done reply owns the reload (exactly one reload per edit) and the version broadcast arms only a fallback
+    And when a publish carries no live reply (no done lands within the window), the version fallback reloads the staying viewer
     And while the user has a compose prompt open or inline text editing active, the host toasts instead of reloading
 
   Scenario: Exiting during the edit-confirmed window does not strand the user

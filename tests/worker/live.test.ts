@@ -839,10 +839,10 @@ describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
     // Mid-work (compose prompt open or inline text editing) the host toasts
     // instead of reloading, so no unsaved work is destroyed.
     expect(html).toContain("New version published");
-    // The done-driven reload skips when the version broadcast already
-    // reloaded (restartAfterEdit(true) — the dedupe ordering that matters,
-    // since the agent republishes before replying done).
-    expect(html).toContain("restartAfterEdit(true)");
+    // The version branch arms a done-window fallback instead of reloading
+    // immediately, so the interactive flow keeps exactly one reload per
+    // edit (owned by the done-driven restartAfterEdit, as before).
+    expect(html).toContain("VERSION_DONE_WINDOW_MS");
   });
 
   it("WS clients cannot inject reply or publish types into the agent poll queue", async () => {
