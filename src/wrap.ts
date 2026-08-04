@@ -2126,8 +2126,16 @@ const LIVE_SCRIPT = `
       // and a 'done' broadcast already reloads ~1.2s later, so dedupe.
       else if(msg.type==='version'){
         if(/[?&]v=/.test(window.location.search)) return;
-        if(Date.now()-lastReloadAt<RELOAD_DEDUP_MS) return;
         if(draft||state==='EDITING'||state==='COMPOSE'){ if(window.__oaShowInfo)window.__oaShowInfo('New version published — Save or cancel your edit to see it'); return; }
+        var wait=RELOAD_DEDUP_MS-(Date.now()-lastReloadAt);
+        if(wait>0){
+          // A reload already ran within the dedup window (an earlier publish
+          // or the done-driven restart). Defer instead of dropping: this
+          // publish's done timer already fired and skips its own reload, so
+          // returning here would leave the frame on the stale version.
+          setTimeout(function(){ lastReloadAt=Date.now(); reloadFrame(); if(!root.hidden) pendingRearm=true; },wait+50);
+          return;
+        }
         lastReloadAt=Date.now();
         reloadFrame();
         if(root.hidden) return;

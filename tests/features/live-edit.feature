@@ -90,6 +90,7 @@ Feature: Live editing
     But the version broadcast is never enqueued - it never appears in /live/poll or /live/status pendingEvents
     And a deploy without the LIVE_DO binding publishes normally with no broadcast
     And the browser WebSocket channel only enqueues user actions (generate, comment, exit) - reply types and the version signal cannot be injected into the agent poll queue
+    And POST /live/reply accepts only agent-reply types (ack, done, error) - any other type returns 400 instead of broadcasting a fake signal
 
   Scenario: A staying viewer auto-refreshes when a new version lands
     Given the user is staying on the artifact page with a live channel up
@@ -97,6 +98,7 @@ Feature: Live editing
     Then the host reloads the frame in place and re-arms pick once the frame reports ready
     But a version-pinned view (?v=) never auto-reloads
     And the version reload and the done-driven reload dedupe in both orderings (one reload per publish)
+    And a publish arriving within the dedup window defers its reload until the window clears instead of dropping it
     And while the user has a compose prompt open or inline text editing active, the host toasts instead of reloading
 
   Scenario: Exiting during the edit-confirmed window does not strand the user

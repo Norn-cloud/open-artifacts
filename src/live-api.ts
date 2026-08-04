@@ -330,8 +330,15 @@ liveApi.post("/artifacts/:id/live/reply", async (c) => {
     return c.json({ error: "request body must be JSON" }, 400);
   }
   const eventId = typeof body.id === "string" ? body.id : null;
+  // Agent-reply types only. Any other type would broadcast a fake signal to
+  // every staying viewer — version force-reloads the page, and done/error
+  // even drop pending events via acknowledge — the same injection the
+  // browser WS channel's allowlist rejects (LiveObject.webSocketMessage).
   const type =
-    typeof body.type === "string" ? (body.type as LiveEvent["type"]) : null;
+    typeof body.type === "string" &&
+    (body.type === "ack" || body.type === "done" || body.type === "error")
+      ? (body.type as LiveEvent["type"])
+      : null;
   if (!eventId || !type) {
     return c.json({ error: "id and type required" }, 400);
   }

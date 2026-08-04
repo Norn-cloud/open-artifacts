@@ -892,6 +892,46 @@ describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
     ws.close();
     expect(seen).toBe(true);
   });
+
+  it("POST /live/reply rejects non-agent-reply types before they broadcast", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    // Only ack/done/error are agent replies. Everything else must be
+    // rejected: version force-reloads every staying viewer; done/error drop
+    // pending events via acknowledge; generate/comment/exit are browser- or
+    // server-originated types no agent ever replies with.
+    for (const type of ["version", "generate", "comment", "exit", "edit"]) {
+      const res = await fetchWith(
+        jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+          id: "ev_x",
+          type,
+        }),
+        ON,
+        true,
+      );
+      expect(res.status).toBe(400);
+    }
+
+    // No broadcast reached the viewer.
+    await new Promise((r) => setTimeout(r, 250));
+    expect(messages.find((m) => m.type === "version")).toBeUndefined();
+
+    // Control: the legitimate agent-reply types still pass.
+    const okRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+        id: "ev_x",
+        type: "done",
+        status: "done",
+      }),
+      ON,
+      true,
+    );
+    expect(okRes.status).toBe(200);
+    const done = await waitForMessage(messages, "done");
+    expect(done).toMatchObject({ type: "done", id: "ev_x" });
+    ws.close();
+  });
 });
 
 describe("live edit stash, commit, and inline-edit chrome", () => {
