@@ -24,7 +24,15 @@ import { DurableObject } from "cloudflare:workers";
 // message wakes it. webSocketMessage/webSocketClose are the hibernation handlers.
 
 export type LiveEvent = {
-  type: "generate" | "exit" | "comment" | "ack" | "done" | "error" | "edit";
+  type:
+    | "generate"
+    | "exit"
+    | "comment"
+    | "ack"
+    | "done"
+    | "error"
+    | "edit"
+    | "version";
   id: string;
   /** Best-effort base64 data-URL PNG of the picked content; omitted when capture fails. */
   screenshot?: string;
@@ -102,6 +110,18 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
       return; // ignore malformed
     }
     if (!msg?.type || !msg?.id) return;
+    // The browser channel may only enqueue user actions (generate, comment,
+    // exit). Reply types (ack/done/error) and the publish signal (version)
+    // are produced server-side — accepting them here would let a WS client
+    // inject fake events into the agent's poll queue or fake reloads into
+    // other viewers.
+    if (
+      msg.type !== "generate" &&
+      msg.type !== "comment" &&
+      msg.type !== "exit"
+    ) {
+      return;
+    }
 
     if (msg.type === "exit") {
       // Browser session ended — drop the connection; agent will see exit.
@@ -228,6 +248,15 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
   // timestamp lives in DO KV storage, so it survives hibernation.
   async rpcHeartbeat(): Promise<void> {
     await this.ctx.storage.put("lastAgentSeen", Date.now());
+  }
+
+  // Publish signal for staying viewers: when a new version lands (ordinary
+  // update or Live in-place replace), tell the connected browsers so the host
+  // can reload the frame in place. Broadcast-only — never enqueued, so a CLI
+  // poll never sees it; a viewer with no channel open simply misses it (a
+  // manual reload still works, same as before).
+  async rpcBroadcastVersion(version: number): Promise<void> {
+    this.broadcast({ type: "version", id: "version", version });
   }
 
   // Drop queued exit rows so a stale exit from a prior session can't poison a

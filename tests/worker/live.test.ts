@@ -712,6 +712,228 @@ describe("live routes with LIVE_DO bound", () => {
   });
 });
 
+describe("version broadcast on publish (staying-viewer auto-refresh)", () => {
+  // Connect the browser-side WebSocket for an artifact (the live channel the
+  // host page holds) and collect every message the DO sends.
+  async function connectLive(id: string): Promise<{
+    ws: WebSocket;
+    messages: { type: string; [key: string]: unknown }[];
+  }> {
+    const res = await liveStub(id).fetch(
+      new Request(`${BASE}/api/artifacts/${id}/live`, {
+        headers: { Upgrade: "websocket" },
+      }),
+    );
+    expect(res.status).toBe(101);
+    const ws = res.webSocket;
+    if (!ws) throw new Error("no websocket in upgrade response");
+    const messages: { type: string; [key: string]: unknown }[] = [];
+    ws.addEventListener("message", (e) => {
+      messages.push(JSON.parse(e.data as string));
+    });
+    ws.accept();
+    return { ws, messages };
+  }
+
+  // Broadcast delivery is async (DO -> WS); wait bounded, like the enqueue
+  // assertions above.
+  async function waitForMessage(
+    messages: { type: string }[],
+    type: string,
+  ): Promise<{ type: string; [key: string]: unknown }> {
+    for (let i = 0; i < 50; i++) {
+      const found = messages.find((m) => m.type === type);
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`no ${type} broadcast within the wait window`);
+  }
+
+  it("an ordinary update broadcasts {type:'version', version} to staying viewers", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2 });
+
+    const msg = await waitForMessage(messages, "version");
+    expect(msg).toMatchObject({ type: "version", version: 2 });
+    ws.close();
+  });
+
+  it("the Live in-place replace broadcasts the replaced version", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}/live`, { content: "<p>r1</p>" }),
+      ON,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 1 });
+
+    const msg = await waitForMessage(messages, "version");
+    expect(msg).toMatchObject({ type: "version", version: 1 });
+    ws.close();
+  });
+
+  it("the version broadcast is never enqueued - poll times out and status stays empty", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" });
+    const { ws } = await connectLive(id);
+
+    const putRes = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+      true,
+    );
+    expect(putRes.status).toBe(200);
+
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(await pollRes.json()).toMatchObject({ type: "timeout" });
+
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { type: string }[];
+    };
+    expect(status.pendingEvents.length).toBe(0);
+    ws.close();
+  });
+
+  it("a deploy without LIVE_DO publishes normally with no broadcast step", async () => {
+    const { id } = await create({ content: "<p>v1</p>", format: "html" }, OFF);
+    const res = await fetchWith(
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      OFF,
+      true,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2 });
+  });
+
+  it("the host page carries the version-broadcast handler with its guards inlined", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const res = await fetchWith(new Request(`${BASE}/a/${id}`), ON, true);
+    const html = await res.text();
+    // The live script handles the version broadcast.
+    expect(html).toContain("msg.type==='version'");
+    // A version-pinned view (?v=) never auto-reloads.
+    expect(html).toContain("[?&]v=");
+    // Mid-work (compose prompt open or inline text editing) the host toasts
+    // instead of reloading, so no unsaved work is destroyed.
+    expect(html).toContain("New version published");
+    // The version branch arms a done-window fallback instead of reloading
+    // immediately, so the interactive flow keeps exactly one reload per
+    // edit (owned by the done-driven restartAfterEdit, as before).
+    expect(html).toContain("VERSION_DONE_WINDOW_MS");
+  });
+
+  it("WS clients cannot inject reply or publish types into the agent poll queue", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const { ws } = await connectLive(id);
+    ws.send(JSON.stringify({ type: "version", id: "inj_v1", version: 99 }));
+    ws.send(JSON.stringify({ type: "done", id: "inj_d1" }));
+    ws.send(JSON.stringify({ type: "ack", id: "inj_a1" }));
+
+    // Nothing is queued: the poll times out and the status stays empty.
+    const pollRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/poll?timeout=1000`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    expect(await pollRes.json()).toMatchObject({ type: "timeout" });
+    const statusRes = await fetchWith(
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+      true,
+    );
+    const status = (await statusRes.json()) as {
+      pendingEvents: { id: string }[];
+    };
+    expect(status.pendingEvents.length).toBe(0);
+
+    // Control: user-action types still enqueue, so the drops above are the
+    // allowlist working — not a dead WebSocket.
+    ws.send(JSON.stringify({ type: "generate", id: "inj_g1", items: [] }));
+    let seen = false;
+    for (let i = 0; i < 20 && !seen; i++) {
+      const s = await fetchWith(
+        new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+          headers: SK_BEARER,
+        }),
+        ON,
+        true,
+      );
+      const st = (await s.json()) as { pendingEvents: { id: string }[] };
+      seen = st.pendingEvents.some((e) => e.id === "inj_g1");
+      if (!seen) await new Promise((r) => setTimeout(r, 100));
+    }
+    ws.close();
+    expect(seen).toBe(true);
+  });
+
+  it("POST /live/reply rejects non-agent-reply types before they broadcast", async () => {
+    const { id } = await create({ content: "<p>hi</p>", format: "html" });
+    const { ws, messages } = await connectLive(id);
+
+    // Only ack/done/error are agent replies. Everything else must be
+    // rejected: version force-reloads every staying viewer; done/error drop
+    // pending events via acknowledge; generate/comment/exit are browser- or
+    // server-originated types no agent ever replies with.
+    for (const type of ["version", "generate", "comment", "exit", "edit"]) {
+      const res = await fetchWith(
+        jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+          id: "ev_x",
+          type,
+        }),
+        ON,
+        true,
+      );
+      expect(res.status).toBe(400);
+    }
+
+    // No broadcast reached the viewer.
+    await new Promise((r) => setTimeout(r, 250));
+    expect(messages.find((m) => m.type === "version")).toBeUndefined();
+
+    // Control: the legitimate agent-reply types still pass.
+    const okRes = await fetchWith(
+      jsonRequest("POST", `/api/artifacts/${id}/live/reply`, {
+        id: "ev_x",
+        type: "done",
+        status: "done",
+      }),
+      ON,
+      true,
+    );
+    expect(okRes.status).toBe(200);
+    const done = await waitForMessage(messages, "done");
+    expect(done).toMatchObject({ type: "done", id: "ev_x" });
+    ws.close();
+  });
+});
+
 describe("live edit stash, commit, and inline-edit chrome", () => {
   const op = { ref: "h1", originalText: "Old", newText: "New" };
   const stashBody = (pageUrl: string, ops: unknown[]) => ({

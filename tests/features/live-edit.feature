@@ -83,6 +83,24 @@ Feature: Live editing
     And the version history still contains no version 11
     And a later ordinary update still creates version 11
 
+  Scenario: The viewer is told when a new version is published mid-session
+    Given a live channel is up (the owner's page holds a WebSocket)
+    When the agent publishes a new version via PUT /api/artifacts/<id>, the Live update command, or a channel republish
+    Then the DO broadcasts {type:'version', id, version} to the subscribed browser
+    But the version broadcast is never enqueued - it never appears in /live/poll or /live/status pendingEvents
+    And a deploy without the LIVE_DO binding publishes normally with no broadcast
+    And the browser WebSocket channel only enqueues user actions (generate, comment, exit) - reply types and the version signal cannot be injected into the agent poll queue
+    And POST /live/reply accepts only agent-reply types (ack, done, error) - any other type returns 400 instead of broadcasting a fake signal
+
+  Scenario: A staying viewer auto-refreshes when a new version lands
+    Given the user is staying on the artifact page with a live channel up
+    When the host receives a version broadcast
+    Then the host reloads the frame in place and re-arms pick once the frame reports ready
+    But a version-pinned view (?v=) never auto-reloads
+    And in the interactive flow the done reply owns the reload (exactly one reload per edit) and the version broadcast arms only a fallback
+    And when a publish carries no live reply (no done lands within the window), the version fallback reloads the staying viewer
+    And while the user has a compose prompt open or inline text editing active, the host toasts instead of reloading
+
   Scenario: Exiting during the edit-confirmed window does not strand the user
     When the agent finishes an edit and the host shows CONFIRMED "Applied"
     And the user exits live mode before the auto-re-arm timer fires
