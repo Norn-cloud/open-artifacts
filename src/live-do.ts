@@ -34,8 +34,6 @@ export type LiveEvent = {
     | "edit"
     | "version";
   id: string;
-  /** Best-effort base64 data-URL PNG of the picked content; omitted when capture fails. */
-  screenshot?: string;
   [key: string]: unknown;
 };
 
@@ -65,9 +63,17 @@ type PollWaiter = {
   types: Set<LiveEvent["type"]> | null; // null = any
   skip: Set<string>; // event ids this poller must not be offered
   timer: ReturnType<typeof setTimeout>;
+  watcher: string; // the CLI watcher session this poll belongs to ("", none)
 };
 
-const DEFAULT_POLL_TIMEOUT_MS = 270_000; // under undici's 300s header ceiling
+// A poll must complete (an event or {type:'timeout'}) well before the edge
+// drops an idle client connection. Cloudflare's edge kills an idle long-poll
+// at ~127s with no response — a poll requested above this ceiling always dies
+// mid-hold and the CLI sees "other side closed" (its retry loop), instead of
+// completing with a timeout JSON. 60s is a comfortable margin under that
+// cutoff; the route clamps any requested timeout to this value.
+export const MAX_LIVE_POLL_MS = 60_000;
+const DEFAULT_POLL_TIMEOUT_MS = MAX_LIVE_POLL_MS;
 const LEASE_MS = 30_000; // a poll holds an event for 30s before re-offering it
 const GC_AGE_MS = 3600_000; // drop undelivered events after 1h
 // Staged copy edits age out after a day. They differ from pending events: a
@@ -161,6 +167,7 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
     types: LiveEvent["type"][] | null,
     timeoutMs: number = DEFAULT_POLL_TIMEOUT_MS,
     excludeIds: string[] = [],
+    watcher = "",
   ): Promise<LiveEvent | { type: "timeout" }> {
     await this.ensureSchema();
     const want = types ? new Set(types) : null;
@@ -173,7 +180,24 @@ export class LiveObject extends DurableObject<Record<string, unknown>> {
         this.waiters = this.waiters.filter((w) => w !== waiter);
         resolve({ type: "timeout" });
       }, timeoutMs);
-      const waiter: PollWaiter = { resolve, types: want, skip, timer };
+      // A watcher polls sequentially, so an in-flight poll is superseded the
+      // moment that watcher's next poll lands — its previous poll's connection
+      // died on the edge and the watch loop re-polled. Prune the superseded
+      // waiter: left in place it would consume an event via flushWaiters and
+      // drop it (its response is dead), the comment-loss behind the "other side
+      // closed" retry loop. Resolve it (timeout) so its timer is cleared and
+      // its promise doesn't dangle until the original timeout. Polls without a
+      // watcher id keep the old behavior.
+      if (watcher) {
+        for (const stale of this.waiters) {
+          if (stale.watcher === watcher) {
+            clearTimeout(stale.timer);
+            stale.resolve({ type: "timeout" });
+          }
+        }
+        this.waiters = this.waiters.filter((w) => w.watcher !== watcher);
+      }
+      const waiter: PollWaiter = { resolve, types: want, skip, timer, watcher };
       this.waiters.push(waiter);
     });
   }
