@@ -3,7 +3,7 @@
 // Used by the "artifacts" agent skill; also usable by humans.
 
 import { execFile } from "node:child_process";
-import { createHash, webcrypto } from "node:crypto";
+import { createHash, randomBytes, webcrypto } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -1588,9 +1588,18 @@ async function commandLive(rest, flags) {
 
   // Poll mode: long-poll one event, print JSON, exit. --watch loops.
   const typesRaw = flags.types;
+  // Default 60s: a long-poll must complete before the edge drops an idle
+  // client connection (~127s; a longer request dies mid-hold as "other side
+  // closed" and the watch loop retries). 60s is comfortable margin under that.
   const timeoutMs = Number(process.env.OPEN_ARTIFACTS_LIVE_TIMEOUT_MS);
   const timeout =
-    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 270_000;
+    Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 60_000;
+  // Per-process watcher id (v4), sent on every poll. The DO uses it to
+  // supersede a dead in-flight poll when the watch loop re-polls, so a stale
+  // waiter can't consume a comment the watcher would then miss (the "other
+  // side closed" retry loop). Unique per watcher process so two watchers on
+  // one artifact never prune each other's waiters.
+  const watcherId = `w_${randomBytes(8).toString("hex")}`;
   // Inline fetch wrapper that does NOT process.exit on network error — watch
   // mode must survive transient failures and retry. (`request()` below calls
   // fail()/process.exit on fetch throw, which would kill the watcher.)
@@ -1620,6 +1629,7 @@ async function commandLive(rest, flags) {
   };
   const pollOnce = async (exclude = []) => {
     const params = new URLSearchParams({ timeout: String(timeout) });
+    params.set("watcher", watcherId);
     if (typesRaw) params.set("types", typesRaw);
     if (exclude.length) params.set("exclude", exclude.join(","));
     const { status: httpStatus, json } = await fetchJson(
@@ -1695,6 +1705,17 @@ async function commandLive(rest, flags) {
   };
   const ackTimeoutMs = parseMs(flags["ack-timeout"], 600_000);
   const ackPollMs = parseMs(flags["ack-poll"], 1000, 1);
+  // Strip a base64 screenshot from an event before printing it to stdout. The
+  // live protocol does not transmit screenshots, but a stale cached page could
+  // still submit one (the browser channel is untrusted); a multi-MB base64 blob
+  // would flood the agent's context and hide the actual request content. The
+  // browser stops sending it after this change, so this is a defensive guard,
+  // not the primary path.
+  const stripForAgent = (evt) => {
+    if (!evt || typeof evt !== "object" || !("screenshot" in evt)) return evt;
+    const { screenshot: _screenshot, ...clean } = evt;
+    return clean;
+  };
 
   // `live <id> --wait-ack <eid>`: block until the event leaves pendingEvents
   // (or the ack timeout / session exit). Standalone defensive probe.
@@ -1717,7 +1738,7 @@ async function commandLive(rest, flags) {
 
   if (!flags.watch) {
     // One-shot: print one event and exit.
-    console.log(JSON.stringify(await pollOnce()));
+    console.log(JSON.stringify(stripForAgent(await pollOnce())));
     return;
   }
 
@@ -1781,7 +1802,7 @@ async function commandLive(rest, flags) {
     // the timeout JSON — that is its contract.
     if (evt.type === "timeout") continue;
     delivered.add(evt.id);
-    console.log(JSON.stringify(evt));
+    console.log(JSON.stringify(stripForAgent(evt)));
     if (evt.type === "exit") {
       clearInterval(heartbeatTimer);
       await consumeExit();
@@ -1891,6 +1912,9 @@ options:
                        reply before continuing; default 600000, 0 disables
   --ack-poll <ms>      (live --watch/--wait-ack) /live/status poll interval;
                        default 1000 (remote-Worker friendly)
+
+poll timeout: OPEN_ARTIFACTS_LIVE_TIMEOUT_MS (default 60000). The server
+clamps polls to its own ceiling (60s); keep this under it.
   --data <json>        (live --reply) canonical edit-result JSON object,
                        merged into the reply body (status/appliedEntryIds/
                        failed/files/notes)
