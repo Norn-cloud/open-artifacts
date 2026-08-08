@@ -1572,8 +1572,13 @@ const LIVE_SCRIPT = `
   function showGuide(){
     if(!liveGuide)return;
     liveGuide.hidden=false;
-    // The banner itself never steals focus — the artifact stays the focus of
-    // the session; expanding the prompt moves focus to the copy button.
+    // Auto-expand the prompt text (the details section) so the user sees the
+    // startup prompt immediately. The disclosure toggle still works to close it.
+    if(guideDetails&&guideDetails.hidden){
+      guideDetails.hidden=false;
+      if(guideToggle)guideToggle.setAttribute('aria-expanded','true');
+      if(guideCopy)guideCopy.focus();
+    }
   }
   function toggleGuideDetails(){
     if(!guideDetails)return;
