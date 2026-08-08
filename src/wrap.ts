@@ -1561,12 +1561,17 @@ const LIVE_SCRIPT = `
       'Keep the watcher running while I make Live edits.'
     ].join(String.fromCharCode(10));
   }
+  function setGuideToggleLabel(open){
+    if(!guideToggle)return;
+    guideToggle.textContent=open?'Hide start prompt':'Show start prompt';
+  }
   function hideGuide(){
     if(liveGuide)liveGuide.hidden=true;
     // Collapse the disclosure so the next banner opens slim.
     if(guideDetails&&!guideDetails.hidden){
       guideDetails.hidden=true;
       if(guideToggle)guideToggle.setAttribute('aria-expanded','false');
+      setGuideToggleLabel(false);
     }
   }
   function showGuide(){
@@ -1577,6 +1582,7 @@ const LIVE_SCRIPT = `
     if(guideDetails&&guideDetails.hidden){
       guideDetails.hidden=false;
       if(guideToggle)guideToggle.setAttribute('aria-expanded','true');
+      setGuideToggleLabel(true);
       if(guideCopy)guideCopy.focus();
     }
   }
@@ -1585,6 +1591,7 @@ const LIVE_SCRIPT = `
     var open=guideDetails.hidden;
     guideDetails.hidden=!open;
     if(guideToggle)guideToggle.setAttribute('aria-expanded', open?'true':'false');
+    setGuideToggleLabel(!!open);
     if(open&&guideCopy)guideCopy.focus();
   }
   function markGuideCopied(ok){
