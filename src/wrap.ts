@@ -1480,6 +1480,15 @@ const DOCK_SCRIPT = `
   function open(name){
     var d=docks[name]; if(!d)return false;
     if(active===name)return true;
+    // Close the comments drawer if it is open — docks and comments are
+    // mutually exclusive, like Live and Handoff.
+    var cmDrawer=document.getElementById('oa-cm-drawer');
+    if(cmDrawer&&cmDrawer.hasAttribute('data-open')){
+      var cmToggle=document.querySelector('.oa-cm-toggle');
+      cmDrawer.removeAttribute('data-open');
+      cmDrawer.setAttribute('aria-hidden','true');
+      if(cmToggle)cmToggle.setAttribute('aria-expanded','false');
+    }
     if(active){ var o=docks[active]; if(o&&!o.close()){ refuse(o); return false; } }
     d.open(); active=name; return true;
   }
@@ -1493,7 +1502,8 @@ const DOCK_SCRIPT = `
     open:open,
     close:close,
     toggle:function(name){ var d=docks[name]; if(!d)return false; return active===name?close(name):open(name); },
-    isActive:function(name){return active===name;}
+    isActive:function(name){return active===name;},
+    getActive:function(){return active;}
   };
   // One Escape closes the active dock, but only after any open comments surface
   // (drawer/compose/menu) has had its turn. The surfaces' own Escape handlers
@@ -2414,7 +2424,13 @@ const COMMENTS_SCRIPT = `
     toggle.setAttribute('aria-expanded','false');
     setTimeout(function(){transitioning=false},180);
   }
-  toggle.addEventListener('click',function(){drawer.hasAttribute('data-open')?shut():open()});
+  toggle.addEventListener('click',function(){
+    if(drawer.hasAttribute('data-open')){shut();return;}
+    // Close the active dock (Live/Handoff) when opening comments — mutual
+    // exclusion in the other direction.
+    if(window.__oaDock&&window.__oaDock.getActive())window.__oaDock.close(window.__oaDock.getActive());
+    open();
+  });
   if(closeBtn)closeBtn.addEventListener('click',shut);
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawer.hasAttribute('data-open'))shut()});
 })();
