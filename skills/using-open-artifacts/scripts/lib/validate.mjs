@@ -504,6 +504,50 @@ function validateContainer(authoredStyles, authoredBody, authoredScripts) {
   }
 }
 
+// A body-level scroll container silently kills position:sticky. Per CSS, any
+// non-visible overflow value (overflow:hidden|auto|scroll, or overflow-x:
+// hidden|auto) on an ancestor promotes that element to a scroll container, so
+// a sticky nav sticks to its box instead of the viewport — the recurring
+// "sticky nav won't stick" defect, re-fixed by hand each time. overflow-x:
+// clip is the sanctioned escape hatch: it clips horizontally without creating
+// a scroll container. Detect-only — no sticky element in the body, gate
+// silent. overflow-y:hidden alone is NOT a scroll container and passes.
+// Selector surface: the universal rule (bare `*` clips body too) and the body
+// element itself as html/body/:root with any qualifiers (`body.foo`,
+// `html[data-theme=...]`, `:root[data-theme=...]` — `:root` IS html and is
+// the canonical theme hook, so a clip there is the likeliest hiding spot).
+// A descendant-universal like `section *` or `body > *` does NOT fire: it
+// clips sections/children, not body, so sticky still works. Sticky is scanned
+// comment-stripped so `<!-- position: sticky -->` in the body is not a false
+// positive. Uses collectStyleRules (like the trope gate) so an overflow rule
+// nested inside @media/@supports/@layer is still seen with its real selector.
+function validateOverflowAndSticky(authoredStyles, authoredBody) {
+  const body = authoredBody.replace(/<!--[\s\S]*?-->/g, "");
+  if (!/\bposition\s*:\s*sticky\b/i.test(body)) return;
+  const overflowDecl =
+    /(?:^|[;{}])\s*(?:overflow|overflow-x)\s*:\s*(hidden|auto|scroll)\b/i;
+  for (const { selector, decls } of collectStyleRules(authoredStyles)) {
+    const hit = selector
+      .split(",")
+      .map((part) => part.trim())
+      .find((part) => {
+        if (part === "*") return true;
+        const lastCompound =
+          part
+            .split(/[\s>+~]+/)
+            .filter(Boolean)
+            .pop() ?? "";
+        return /^(?:html|body|:root)\b/i.test(lastCompound);
+      });
+    if (!hit) continue;
+    const value = overflowDecl.exec(decls)?.[1];
+    if (!value) continue;
+    fail(
+      `banned trope — sticky nav broken by a body-level scroll container: "${hit}" sets overflow(-x):${value} and becomes the scrollport, so a position:sticky element in the body never sticks — it sticks to the scroll container's box instead of the viewport. Use overflow-x: clip (or overflow: clip) on the scroll container to keep the horizontal clip without creating a scroll container, or move the clip onto a real wrapper element (per design.md, "the body never scrolls sideways")`,
+    );
+  }
+}
+
 // Level 1 non-canvas HTML documents must constrain body width somewhere —
 // either a `max-width` on body/html in the theme/styles, or the opt-in
 // `.oa-prose` baseline (which carries the cap). Without it, a doc that
@@ -1279,6 +1323,7 @@ export function validateBuild(loaded, composed) {
       composed.authoredScripts,
     );
     validateScrollspy(composed.authoredScripts);
+    validateOverflowAndSticky(composed.authoredStyles, composed.authoredBody);
     validateTropes(composed.authoredStyles);
     validateIconAlignment(composed.authoredBody, composed.authoredStyles);
     validateMeasureCap(loaded, composed);

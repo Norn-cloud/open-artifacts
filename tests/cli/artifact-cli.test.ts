@@ -721,6 +721,33 @@ describe("Recipe builder", () => {
     expect(result.code).toBe(0);
   });
 
+  it("fails a body-level scroll container under a sticky nav and points to overflow-x:clip", async () => {
+    const sticky = writeRecipe("sticky-hidden", {
+      body: '<main class="oa-prose"><nav style="position:sticky;top:0">Nav</nav><h1>R</h1></main>\n',
+    });
+    writeFileSync(
+      sticky.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nbody{overflow-x:hidden}\n',
+    );
+    const result = await run(["validate", sticky.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("overflow-x: clip");
+    expect(requests).toHaveLength(0);
+  });
+
+  it("passes overflow-x:clip on the body even with a sticky nav", async () => {
+    const clipped = writeRecipe("sticky-clipped", {
+      body: '<main class="oa-prose"><nav style="position:sticky;top:0">Nav</nav><h1>R</h1></main>\n',
+    });
+    writeFileSync(
+      clipped.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nbody{overflow-x:clip}\n',
+    );
+    const result = await run(["validate", clipped.recipePath]);
+    expect(result.code).toBe(0);
+  });
+
   it("rejects a start tag carrying style= twice and tells the author to merge", async () => {
     const dupStyle = writeRecipe("dup-style", {
       mutate: (recipe) => {

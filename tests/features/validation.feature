@@ -128,6 +128,19 @@ Feature: Build validation catches silent layout defects
     When the agent runs the artifact script with validate
     Then the build succeeds and no scrollspy-related message is emitted
 
+  Scenario: A body scroll container with a sticky nav fails validation
+    Given an HTML recipe whose theme sets overflow-x:hidden on body and whose body
+      carries a position:sticky nav
+    When the agent runs the artifact script with validate
+    Then the build fails naming the body scroll container and pointing to overflow-x:clip as the fix
+    And no publish request is made
+
+  Scenario: A body overflow-x:clip with a sticky nav passes validation
+    Given an HTML recipe whose theme sets overflow-x:clip on body and whose body
+      carries a position:sticky nav
+    When the agent runs the artifact script with validate
+    Then the build succeeds
+
   Scenario: Two canvas frames with a 0 world-px gap fail validation
     Given a canvas recipe with two frames stacked at 0 gap on the Y axis
     When the agent runs the artifact script with validate
