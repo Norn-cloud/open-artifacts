@@ -293,7 +293,10 @@ export function createApp(
       canManage,
       visibility: record.visibility,
       liveEnabled: c.env.LIVE_DO !== undefined,
-      liveWsUrl: liveWsUrl(c, record.id),
+      liveWsUrl:
+        rawVersion !== undefined
+          ? `${liveWsUrl(c, record.id)}?v=${encodeURIComponent(rawVersion)}`
+          : liveWsUrl(c, record.id),
       handoffEnabled: handoffEnabled(c),
       handoffs: handoffEnabled(c)
         ? (await store.listHandoffs(record.id)).filter((handoff) =>
