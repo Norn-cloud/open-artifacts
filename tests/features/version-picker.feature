@@ -31,6 +31,14 @@ Feature: Version selection in the viewer
     And its label is carried as a title tooltip, not dropped
     And on a narrow viewport the select is width-clamped
 
+  Scenario: A public non-owner can only see the latest version
+    Given a public artifact has versions 1 and 2
+    And the viewer is not the artifact owner
+    When the viewer opens the artifact
+    Then only version 2 is available
+    And selecting version 1 returns not found
+    And the version picker is not rendered
+
   Scenario: Single-version artifact shows no picker
     Given an artifact has only version 1
     When a viewer opens it

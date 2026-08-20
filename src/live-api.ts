@@ -5,6 +5,7 @@ import {
   artifactUrl,
   authorizeWrite,
   bodyCapFor,
+  parseVersionParam,
   resolveMaxContentBytes,
   storeFrom,
 } from "./api";
@@ -60,12 +61,27 @@ async function authorizeLive(c: Context<AppContext>, id: string) {
   const store = storeFrom(c);
   const record = await store.get(id);
   if (record === null) return null;
+  // Keep the unpinned coordination path identical to the historical behavior:
+  // authorizeView receives only the record. A pinned view must carry its
+  // version through the same gate used by /a, /frame, and /raw, otherwise a
+  // watcher could coordinate against a version the viewer cannot access.
+  const rawVersion = c.req.query("v");
+  const version =
+    rawVersion === undefined
+      ? undefined
+      : parseVersionParam(rawVersion, record.currentVersion);
+  if (rawVersion !== undefined && typeof version !== "number") return null;
   // Live routes use the artifact's view gate so a hosted `sk_` watcher can
   // receive comment/generate notifications. The watcher publishes edits with
   // its artifact `wt_`/`ch_` capability through the normal update route; Live
   // only coordinates the browser channel and must not make the watcher's API
   // key look like an artifact write token.
-  if (!(await c.get("authorizer").authorizeView(c, record))) return null;
+  const authorizer = c.get("authorizer");
+  const authorized =
+    typeof version === "number"
+      ? await authorizer.authorizeView(c, record, version)
+      : await authorizer.authorizeView(c, record);
+  if (!authorized) return null;
   return record;
 }
 

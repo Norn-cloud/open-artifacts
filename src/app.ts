@@ -215,15 +215,29 @@ export function createApp(
       });
     }
 
-    if (!(await c.get("authorizer").authorizeView(c, resolved.record))) {
-      return new Response(signInToViewPage(brand), {
-        status: 401,
+    if (
+      !(await c
+        .get("authorizer")
+        .authorizeView(c, resolved.record, resolved.version))
+    ) {
+      const page =
+        rawVersion === undefined
+          ? signInToViewPage(brand)
+          : notFoundPage(brand);
+      return new Response(page, {
+        status: rawVersion === undefined ? 401 : 404,
         headers: hostHeaders(nonce),
       });
     }
 
-    const { record, version, encrypted, versions } = resolved;
+    const { record, version, encrypted } = resolved;
     const authorizer = c.get("authorizer");
+    const versions: VersionMeta[] = [];
+    for (const candidate of resolved.versions) {
+      if (await authorizer.authorizeView(c, record, candidate.version)) {
+        versions.push(candidate);
+      }
+    }
     const canManage = await authorizer.canManage(c, record);
     const url = artifactUrl(c, record.id);
     const ogImage = ogImageUrl(c, record.id);
@@ -281,7 +295,11 @@ export function createApp(
       liveEnabled: c.env.LIVE_DO !== undefined,
       liveWsUrl: liveWsUrl(c, record.id),
       handoffEnabled: handoffEnabled(c),
-      handoffs: handoffEnabled(c) ? await store.listHandoffs(record.id) : [],
+      handoffs: handoffEnabled(c)
+        ? (await store.listHandoffs(record.id)).filter((handoff) =>
+            versions.some((candidate) => candidate.version === handoff.version),
+          )
+        : [],
     });
     return new Response(page, { headers: hostHeaders(nonce) });
   });
@@ -296,13 +314,12 @@ export function createApp(
     if (record === null) {
       return new Response("not found", { status: 404 });
     }
-    if (!(await c.get("authorizer").authorizeView(c, record))) {
-      return new Response("not found", { status: 404 });
-    }
-
     const version = parseVersionParam(c.req.query("v"), record.currentVersion);
     if (typeof version !== "number") {
       return new Response("not found", { status: version.status });
+    }
+    if (!(await c.get("authorizer").authorizeView(c, record, version))) {
+      return new Response("not found", { status: 404 });
     }
 
     const content = await store.getContent(record.id, version);

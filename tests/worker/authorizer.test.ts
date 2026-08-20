@@ -162,6 +162,72 @@ describe("Authorizer hook", () => {
 });
 
 describe("Visibility gate", () => {
+  it("hides historical versions from a public non-owner across viewer routes", async () => {
+    const authorizer = stubAuthorizer({
+      grant: { ownerId: "owner-1", orgId: null, visibility: "public" },
+      authorizeView: async (c, record, version) => {
+        const isOwner = c.req.header("x-owner") === record.ownerId;
+        return (
+          isOwner || version === undefined || version === record.currentVersion
+        );
+      },
+      authorizeWrite: async () => true,
+      canManage: async (c, record) =>
+        c.req.header("x-owner") === record.ownerId,
+    });
+    const app = createApp(authorizer);
+    const created = await createWith(authorizer, {
+      content: "<p>v1</p>",
+      title: "Public history",
+      favicon: "📚",
+    });
+    const update = await fetchWith(
+      app,
+      jsonRequest(
+        "PUT",
+        `/api/artifacts/${created.id}`,
+        { content: "<p>v2</p>" },
+        { authorization: `Bearer ${created.writeToken}` },
+      ),
+    );
+    expect(update.status).toBe(200);
+
+    const latest = await fetchWith(app, new Request(`${BASE}/a/${created.id}`));
+    expect(latest.status).toBe(200);
+    const latestHtml = await latest.text();
+    expect(latestHtml.includes('id="oa-version-select"')).toBe(false);
+
+    const metadata = await fetchWith(
+      app,
+      new Request(`${BASE}/api/artifacts/${created.id}`),
+    );
+    expect(metadata.status).toBe(200);
+    const publicMetadata = (await metadata.json()) as {
+      version: number;
+      versions: Array<{ version: number }>;
+    };
+    expect(publicMetadata.version).toBe(2);
+    expect(publicMetadata.versions.map(({ version }) => version)).toEqual([2]);
+
+    for (const path of [
+      `/a/${created.id}?v=1`,
+      `/a/${created.id}/frame?v=1`,
+      `/api/artifacts/${created.id}/raw?v=1`,
+    ]) {
+      const denied = await fetchWith(app, new Request(`${BASE}${path}`));
+      expect(denied.status, path).toBe(404);
+    }
+
+    const ownerView = await fetchWith(
+      app,
+      new Request(`${BASE}/a/${created.id}?v=1`, {
+        headers: { "x-owner": "owner-1" },
+      }),
+    );
+    expect(ownerView.status).toBe(200);
+    expect(await ownerView.text()).toContain('id="oa-version-select"');
+  });
+
   it("returns sign-in page on /a/:id for private artifacts when view is denied", async () => {
     const authorizer = stubAuthorizer({
       grant: { ownerId: "u1", orgId: null, visibility: "private" },

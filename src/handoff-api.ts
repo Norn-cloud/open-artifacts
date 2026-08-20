@@ -86,7 +86,13 @@ handoffApi.get("/artifacts/:id/handoffs", async (c) => {
   if (!record) return c.text("not found", 404);
   const store = storeFrom(c);
   const handoffs = await store.listHandoffs(record.id);
-  return c.json({ handoffs });
+  const visible = [];
+  for (const handoff of handoffs) {
+    if (await c.get("authorizer").authorizeView(c, record, handoff.version)) {
+      visible.push(handoff);
+    }
+  }
+  return c.json({ handoffs: visible });
 });
 
 handoffApi.post("/artifacts/:id/handoffs", async (c) => {
@@ -180,6 +186,13 @@ handoffApi.get("/artifacts/:id/handoffs/:hid/media", async (c) => {
   const record = await viewAuthRecord(c, id);
   if (!record) return c.text("not found", 404);
   const store = storeFrom(c);
+  const handoff = await store.getHandoff(record.id, c.req.param("hid"));
+  if (
+    handoff === null ||
+    !(await c.get("authorizer").authorizeView(c, record, handoff.version))
+  ) {
+    return c.text("not found", 404);
+  }
   const media = await store.getHandoffMedia(record.id, c.req.param("hid"));
   if (media === null) return c.text("not found", 404);
   return new Response(media.body, {
@@ -196,6 +209,13 @@ handoffApi.get("/artifacts/:id/handoffs/:hid/events", async (c) => {
   const record = await viewAuthRecord(c, id);
   if (!record) return c.text("not found", 404);
   const store = storeFrom(c);
+  const handoff = await store.getHandoff(record.id, c.req.param("hid"));
+  if (
+    handoff === null ||
+    !(await c.get("authorizer").authorizeView(c, record, handoff.version))
+  ) {
+    return c.text("not found", 404);
+  }
   const events = await store.getHandoffEvents(record.id, c.req.param("hid"));
   if (events === null) return c.text("not found", 404);
   return new Response(events, {

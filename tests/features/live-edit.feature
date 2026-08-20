@@ -116,6 +116,12 @@ Feature: Live editing
     But Live refuses to open while a handoff is recording or playing
     So both docks are never expanded at once
 
+  Scenario: A pinned historical live view uses version-aware authorization
+    Given an artifact has versions 1 and 2
+    When coordination is requested for version 1 with `?v=1`
+    Then authorizeView receives version 1
+    But an unpinned coordination request calls authorizeView without a version
+
   Scenario: The live status endpoint reports pending events
     When the deploy binds a LIVE_DO Durable Object (SQLite, class LiveObject)
     And the browser sends a generate event over the WebSocket with items [{element, prompt, rect}]
