@@ -43,15 +43,23 @@ const BASE = "http://artifacts.test";
 const ON: Bindings = { ...env };
 const OFF: Bindings = { ...env, LIVE_DO: undefined };
 
+async function fetchApp(
+  testApp: ReturnType<typeof createApp>,
+  request: Request,
+  environment: Bindings,
+): Promise<Response> {
+  const ctx = createExecutionContext();
+  const res = testApp.fetch(request, environment, ctx);
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
 async function fetchWith(
   request: Request,
   environment: Bindings,
   useOwner = false,
 ): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = (useOwner ? ownerApp : app).fetch(request, environment, ctx);
-  await waitOnExecutionContext(ctx);
-  return res;
+  return fetchApp(useOwner ? ownerApp : app, request, environment);
 }
 
 async function create(
@@ -593,6 +601,69 @@ describe("live routes with LIVE_DO bound", () => {
       false,
     );
     expect(res2.status).toBe(200);
+  });
+
+  it("passes a pinned historical version to the live view gate", async () => {
+    const viewVersions: Array<number | undefined> = [];
+    const authorizer: Authorizer = {
+      authorizeCreate: async () => ({
+        ownerId: "u1",
+        orgId: null,
+        visibility: "public",
+      }),
+      authorizeView: async (_c, _record, version) => {
+        viewVersions.push(version);
+        return true;
+      },
+      authorizeWrite: async () => true,
+      canManage: async () => true,
+    };
+    const testApp = createApp(authorizer);
+    const created = await fetchApp(
+      testApp,
+      new Request(`${BASE}/api/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Pinned live auth",
+          favicon: "🎯",
+          content: "<p>v1</p>",
+          format: "html",
+        }),
+      }),
+      ON,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+
+    const update = await fetchApp(
+      testApp,
+      jsonRequest("PUT", `/api/artifacts/${id}`, { content: "<p>v2</p>" }),
+      ON,
+    );
+    expect(update.status).toBe(200);
+    viewVersions.length = 0;
+
+    const pinned = await fetchApp(
+      testApp,
+      new Request(`${BASE}/api/artifacts/${id}/live/status?v=1`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+    );
+    expect(pinned.status).toBe(200);
+    expect(viewVersions).toEqual([1]);
+
+    viewVersions.length = 0;
+    const unpinned = await fetchApp(
+      testApp,
+      new Request(`${BASE}/api/artifacts/${id}/live/status`, {
+        headers: SK_BEARER,
+      }),
+      ON,
+    );
+    expect(unpinned.status).toBe(200);
+    expect(viewVersions).toEqual([undefined]);
   });
 
   it("agentActive goes false once lastAgentSeen falls outside the window", async () => {

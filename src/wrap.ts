@@ -1712,7 +1712,7 @@ const LIVE_SCRIPT = `
     if(changed)renderStatus();
   }
   function pollAgent(){
-    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/status',{credentials:'same-origin'})
+    fetch('/api/artifacts/'+encodeURIComponent(cfg.artifactId)+'/live/status'+(window.__oaViewedVersion?'?v='+window.__oaViewedVersion:''),{credentials:'same-origin'})
       .then(function(r){ if(!r.ok) throw 0; return r.json(); })
       .then(function(s){
         // busy = a pending event is leased to the agent (leased_until in the

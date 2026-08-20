@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import type { Authorizer } from "./authorizer";
 import { validateVisibility } from "./authorizer";
-import type { CreateInput } from "./domain";
+import type { CreateInput, VersionMeta } from "./domain";
 import {
   MAX_COMMENT_BODY_BYTES,
   validateComment,
@@ -382,6 +382,12 @@ api.get("/artifacts/:id", async (c) => {
     return c.json({ error: "artifact not found" }, 404);
   }
   const versions = await store.listVersions(record.id);
+  const visibleVersions: VersionMeta[] = [];
+  for (const version of versions) {
+    if (await c.get("authorizer").authorizeView(c, record, version.version)) {
+      visibleVersions.push(version);
+    }
+  }
   return c.json({
     id: record.id,
     url: artifactUrl(c, record.id),
@@ -391,7 +397,7 @@ api.get("/artifacts/:id", async (c) => {
     format: record.format,
     encrypted: record.encrypted,
     version: record.currentVersion,
-    versions,
+    versions: visibleVersions,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   });
@@ -401,13 +407,13 @@ api.get("/artifacts/:id/raw", async (c) => {
   const store = storeFrom(c);
   const record = await store.get(c.req.param("id"));
   if (record === null) return c.json({ error: "artifact not found" }, 404);
-  if (!(await c.get("authorizer").authorizeView(c, record))) {
-    return c.json({ error: "artifact not found" }, 404);
-  }
 
   const version = parseVersionParam(c.req.query("v"), record.currentVersion);
   if (typeof version !== "number") {
     return c.json({ error: version.error }, version.status);
+  }
+  if (!(await c.get("authorizer").authorizeView(c, record, version))) {
+    return c.json({ error: "artifact not found" }, 404);
   }
 
   const content = await store.getContent(record.id, version);

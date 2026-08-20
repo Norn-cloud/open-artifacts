@@ -12,7 +12,11 @@ export type OwnershipGrant = {
 
 export interface Authorizer {
   authorizeCreate(c: Context): Promise<OwnershipGrant | null>;
-  authorizeView(c: Context, record: ArtifactRecord): Promise<boolean>;
+  authorizeView(
+    c: Context,
+    record: ArtifactRecord,
+    version?: number,
+  ): Promise<boolean>;
   authorizeWrite(c: Context, record: ArtifactRecord): Promise<boolean>;
   canManage(c: Context, record: ArtifactRecord): Promise<boolean>;
 }
