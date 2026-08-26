@@ -10,7 +10,7 @@ import type {
 import { MARKED_SOURCE } from "./generated/marked-source";
 import { CLOSE_SVG, HANDOFF_SVG, HANDOFF_SVGS, handoffScript } from "./handoff";
 import { HANDOFF_CSS } from "./handoff/styles";
-import type { Brand } from "./home";
+import type { Brand, StatusTheme } from "./home";
 
 export function escapeHtml(value: string): string {
   return value
@@ -3929,6 +3929,18 @@ const STATUS_CSS = `
 .oa-status code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:4px;padding:.05em .3em}
 .oa-status a{margin-top:1rem;color:var(--oa-accent);font-size:.875rem;text-decoration:none}
 .oa-status a:hover{text-decoration:underline;text-underline-offset:2px}
+.oa-status a:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+`;
+
+const DARK_CONSOLE_STATUS_CSS = `
+:root[data-status-theme="dark-console"]{color-scheme:dark;--oa-bg:#050505;--oa-fg:#e5e5e5;--oa-muted:#949494;--oa-border:#1f1f1f;--oa-surface:#0d0d0d;--oa-accent:#3c7bff;--oa-accent-on:#050505;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
+.oa-status-branded{position:relative;isolation:isolate;background-color:var(--oa-bg);background-image:radial-gradient(circle,#303030 0.7px,transparent 0.8px);background-size:18px 18px}
+.oa-status-branded::before{position:absolute;inset:0;z-index:-1;background:linear-gradient(to bottom,transparent,rgba(5,5,5,.86) 74%);content:"";pointer-events:none}
+.oa-status-branded .oa-mark{width:32px;height:32px;margin-bottom:1rem}
+.oa-status-branded .oa-status-brand{margin-bottom:.35rem;color:var(--oa-accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.625rem;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase}
+.oa-status-branded h1{font-family:var(--oa-font);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
+.oa-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:3px;background:var(--oa-surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;color:var(--oa-fg)}
+.oa-status-branded a:hover{border-color:var(--oa-accent);color:var(--oa-accent);text-decoration:none}
 `;
 
 // Minimal, on-brand page for the states that don't render an artifact
@@ -3940,56 +3952,68 @@ function statusPage(options: {
   heading: string;
   body: string;
   brand: Brand;
+  statusTheme?: StatusTheme;
   linkHref?: string;
   linkText?: string;
 }): string {
   const brand = options.brand;
   const linkHref = options.linkHref ?? "/";
   const linkText = options.linkText ?? `Go to ${brand.name}`;
+  const branded = options.statusTheme === "dark-console";
   return `<!doctype html>
-<html lang="en">
+<html lang="en"${branded ? ' data-status-theme="dark-console"' : ""}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(options.title)}</title>
-<style>${RESET_CSS}${STATUS_CSS}</style>
+<style>${RESET_CSS}${STATUS_CSS}${branded ? DARK_CONSOLE_STATUS_CSS : ""}</style>
 </head>
 <body>
-<div class="oa-status">
+<main class="oa-status${branded ? " oa-status-branded" : ""}">
 <span class="oa-mark">${BRAND_SVG}</span>
+${branded ? `<p class="oa-status-brand">${escapeHtml(brand.wordmark)} / artifact status</p>` : ""}
 <h1>${options.heading}</h1>
 <p>${options.body}</p>
 <a href="${escapeHtml(linkHref)}">${escapeHtml(linkText)}</a>
-</div>
+</main>
 </body>
 </html>
 `;
 }
 
-export function notFoundPage(brand: Brand): string {
+export function notFoundPage(brand: Brand, statusTheme?: StatusTheme): string {
   return statusPage({
     title: "Artifact not found",
     heading: "Artifact not found",
     body: "This link does not exist, or the artifact it pointed to was deleted.",
     brand,
+    statusTheme,
   });
 }
 
-export function badVersionPage(brand: Brand): string {
+export function badVersionPage(
+  brand: Brand,
+  statusTheme?: StatusTheme,
+): string {
   return statusPage({
     title: "Invalid version",
     heading: "Invalid version",
     body: "The <code>?v=</code> parameter must be a positive integer version number.",
     brand,
+    statusTheme,
   });
 }
 
-export function signInToViewPage(brand: Brand): string {
+export function signInToViewPage(
+  brand: Brand,
+  statusTheme?: StatusTheme,
+): string {
   return statusPage({
     title: "Sign in to view",
     heading: "Sign in to view",
     body: "This artifact is private. Sign in to check whether you have access.",
     brand,
+    statusTheme,
     linkHref: "/login",
     linkText: "Sign in",
   });

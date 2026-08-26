@@ -15,6 +15,7 @@ const BRANDED_ENV = {
   BRAND_NAME: "coda0",
   BRAND_WORDMARK: "CODA0",
   BRAND_TAGLINE: "share self-contained pages",
+  BRAND_STATUS_THEME: "dark-console",
 } as const;
 
 interface CreateResult {
@@ -118,7 +119,7 @@ describe("viewer header brand chip", () => {
 });
 
 describe("status pages", () => {
-  it("links 'Go to' the configured brand on a 404", async () => {
+  it("uses the branded console status surface on a 404", async () => {
     const branded = { ...env, ...BRANDED_ENV };
     const res = await fetchWith(
       new Request(`${BASE}/a/nonexistent00`),
@@ -127,6 +128,9 @@ describe("status pages", () => {
     expect(res.status).toBe(404);
     const html = await res.text();
     expect(html).toContain(">Go to coda0<");
+    expect(html).toContain('<main class="oa-status oa-status-branded">');
+    expect(html).toContain("--oa-bg:#050505");
+    expect(html).toContain("--oa-accent:#3c7bff");
   });
 
   it("links 'Go to Open Artifacts' on a 404 without brand env", async () => {

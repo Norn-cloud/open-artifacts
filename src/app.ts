@@ -14,7 +14,12 @@ import { defaultAuthorizer } from "./authorizer";
 import type { VersionMeta } from "./domain";
 import { fontFaceCss, materializeFont, parseSlug } from "./fonts";
 import { handoffApi } from "./handoff-api";
-import { brandFor, brandHomepage, hasBrandConfig } from "./home";
+import {
+  brandFor,
+  brandHomepage,
+  hasBrandConfig,
+  statusThemeFor,
+} from "./home";
 import { liveApi } from "./live-api";
 import { renderOgCardPng } from "./og";
 import type { ArtifactRecord, ArtifactStore } from "./store";
@@ -201,14 +206,15 @@ export function createApp(
     const store = storeFrom(c);
     const brand = brandFor(c.env);
     const branded = hasBrandConfig(c.env);
+    const statusTheme = statusThemeFor(c.env);
     const rawVersion = c.req.query("v");
     const nonce = generateNonce();
     const resolved = await resolveRecord(store, c.req.param("id"), rawVersion);
 
     if (!resolved.ok) {
       const page = resolved.badVersion
-        ? badVersionPage(brand)
-        : notFoundPage(brand);
+        ? badVersionPage(brand, statusTheme)
+        : notFoundPage(brand, statusTheme);
       return new Response(page, {
         status: resolved.status,
         headers: hostHeaders(nonce),
@@ -222,8 +228,8 @@ export function createApp(
     ) {
       const page =
         rawVersion === undefined
-          ? signInToViewPage(brand)
-          : notFoundPage(brand);
+          ? signInToViewPage(brand, statusTheme)
+          : notFoundPage(brand, statusTheme);
       return new Response(page, {
         status: rawVersion === undefined ? 401 : 404,
         headers: hostHeaders(nonce),
@@ -248,7 +254,7 @@ export function createApp(
     if (encrypted) {
       const content = await store.getContent(record.id, version);
       if (content === null || content.encrypted === null) {
-        return new Response(notFoundPage(brand), {
+        return new Response(notFoundPage(brand, statusTheme), {
           status: 404,
           headers: hostHeaders(nonce),
         });

@@ -4,6 +4,8 @@
 // markup; a SaaS deploy sets BRAND_* and gets a rewritten home
 // page plus matching header / status / OG chrome.
 
+export type StatusTheme = "default" | "dark-console";
+
 export interface BrandEnv {
   BRAND_NAME?: string;
   BRAND_WORDMARK?: string;
@@ -12,6 +14,7 @@ export interface BrandEnv {
   BRAND_LEAD?: string;
   BRAND_CHIP?: string;
   BRAND_URL?: string;
+  BRAND_STATUS_THEME?: StatusTheme;
 }
 
 export interface Brand {
@@ -36,6 +39,10 @@ export function hasBrandConfig(env: BrandEnv): boolean {
 // The identity presented to a visitor. Every touchpoint that names the service
 // — viewer header chip, not-found/invalid-version pages, OG wordmark — reads
 // from this one place so brand stays consistent.
+export function statusThemeFor(env: BrandEnv): StatusTheme {
+  return env.BRAND_STATUS_THEME === "dark-console" ? "dark-console" : "default";
+}
+
 export function brandFor(env: BrandEnv): Brand {
   if (!hasBrandConfig(env)) return DEFAULT_BRAND;
   const name = (env.BRAND_NAME ?? "").trim();

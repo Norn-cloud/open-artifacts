@@ -30,6 +30,7 @@ export type Bindings = Env & {
   BRAND_DESCRIPTION?: string;
   BRAND_LEAD?: string;
   BRAND_CHIP?: string;
+  BRAND_STATUS_THEME?: "default" | "dark-console";
   PUBLIC_URL?: string;
   // "1" enables the opt-in web-font surface: the /fonts proxy plus a widened
   // font-src/style-src to the CDN allowlist. The sandbox stays opaque either

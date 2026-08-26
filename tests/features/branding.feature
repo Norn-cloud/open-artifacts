@@ -37,10 +37,12 @@ Feature: Instance identity beyond the landing page
     And the handoff control appears immediately before the comments and theme controls
     And the comments and theme controls appear before the account slot
 
-  Scenario: Not-found reads "Go to" the configured brand
+  Scenario: Branded status pages preserve the configured visual world and landmarks
     When I GET /a/nonexistent with BRAND_NAME set to "coda0"
     Then the response status is 404
     And the page links "Go to coda0"
+    And the status content is contained in a main landmark
+    And the branded status page uses the configured dark console theme
 
   Scenario: Not-found reads "Go to Open Artifacts" without brand env
     When I GET /a/nonexistent without brand env
