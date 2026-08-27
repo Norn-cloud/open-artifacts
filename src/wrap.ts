@@ -200,6 +200,23 @@ export function hostHeaders(nonce: string): Headers {
 const OA_FONT =
   'system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif';
 
+// Minimal reset for the artifact iframe: box-sizing, body defaults, theme
+// tokens, and scroll-margin — everything the artifact document needs to read
+// --oa-* variables. Excludes the 6 KB of .oa-header/.oa-version/.oa-brand
+// styles that only exist in the host shell, never inside the frame.
+const FRAME_RESET_CSS = `
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:var(--oa-font);line-height:1.5;background:var(--oa-bg);color:var(--oa-fg)}
+img,video,canvas{max-width:100%}
+:root{color-scheme:light dark;--oa-font:${OA_FONT};--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318;--oa-focus-ring:0 0 0 2px var(--oa-bg),0 0 0 4px var(--oa-accent)}
+@media (prefers-color-scheme: dark){:root{--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}}
+:root[data-theme="light"]{color-scheme:light;--oa-bg:#ffffff;--oa-fg:#18181b;--oa-muted:#71717a;--oa-border:#e4e4e7;--oa-surface:#f8f8f8;--oa-accent:#6457f0;--oa-accent-on:#ffffff;--oa-danger:#b42318}
+:root[data-theme="dark"]{color-scheme:dark;--oa-bg:#131316;--oa-fg:#e7e7ea;--oa-muted:#9a9aa2;--oa-border:#2e2e33;--oa-surface:#1c1c21;--oa-accent:#8d82f5;--oa-accent-on:#16151b;--oa-danger:#ff8f85}
+:root{--oa-header-h:calc(2.5rem + 1px)}
+[id]{scroll-margin-top:calc(var(--oa-header-h) + .5rem)}
+`;
+
 const RESET_CSS = `
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -329,7 +346,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle svg{display:block;width:16px;height:16px}
 .oa-cm-toggle .oa-cm-count{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--oa-accent);color:var(--oa-accent-on);font-size:9px;font-weight:600;line-height:15px;text-align:center;display:none}
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
-.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
+.oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font);contain:layout style paint}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
 @media (prefers-reduced-motion:reduce){.oa-cm-drawer{transition:none}}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
@@ -354,7 +371,7 @@ const COMMENTS_CSS = `
 .oa-cm-filter-menu{top:calc(100% + 4px)}
 .oa-cm-filter-menu button[aria-checked="true"]{background:var(--oa-surface);color:var(--oa-fg);font-weight:600}
 /* Card list — each comment is a rounded surface card (reference UI). */
-.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem}
+.oa-cm-list{flex:1;min-height:0;overflow-y:auto;margin:.55rem .75rem .75rem;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:.5rem;content-visibility:auto;contain-intrinsic-size:auto 500px}
 .oa-cm-empty{color:var(--oa-muted);font-size:.85rem;text-align:center;margin:2rem 1rem}
 .oa-cm-item{position:relative;display:flex;gap:.65rem;align-items:flex-start;padding:.7rem .75rem;border-radius:8px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:var(--oa-surface);transition:border-color .12s,background .12s}
 @media (hover:hover) and (pointer:fine){.oa-cm-item:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}}
@@ -984,7 +1001,7 @@ const LIVE_CSS = `
 .oa-live-guide-copy:active{transform:translateY(1px)}
 #oa-live-root[hidden]{display:none}
 #oa-live-root{position:fixed;inset:0;z-index:2147483645;pointer-events:none;font-family:var(--oa-font);font-size:.8rem}
-#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + env(safe-area-inset-bottom));width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645}
+#oa-live-dock{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(1rem + env(safe-area-inset-bottom));width:min(28rem,92vw);max-height:calc(100dvh - 6rem);display:flex;flex-direction:column;gap:.5rem;padding:.6rem .6rem .55rem;border-radius:14px;border:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 4%);background:color-mix(in oklab,var(--oa-bg),transparent 4%);backdrop-filter:blur(14px) saturate(120%);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 86%),0 1px 0 0 color-mix(in oklab,var(--oa-fg),transparent 92%) inset;overflow-y:auto;pointer-events:auto;z-index:2147483645;contain:layout style paint}
 #oa-live-chips{display:flex;flex-direction:column;gap:.35rem;min-height:0;overflow-y:auto;padding:.1rem}
 #oa-live-chips:empty{display:none}
 #oa-live-chips .oa-live-chip{position:relative;display:block;padding:.5rem .6rem .5rem .65rem;border-radius:8px;background:color-mix(in oklab,var(--oa-surface),transparent 4%);border:0;font-size:.8rem;line-height:1.4}
@@ -1124,9 +1141,17 @@ const ACCOUNT_SCRIPT = `
     slot.innerHTML='';slot.appendChild(btn);slot.appendChild(menu);syncOverflow();
   }
   showLoading();
-  fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else clear();return null;}return r.json();}).then(function(me){
-    if(!me){clear();return;}var user=me.user||{};var name=user.name||user.email||null;var picture=typeof user.picture==='string'?user.picture:null;if(name)renderUser(name,picture);else renderSignin();
-  }).catch(clear);
+  // Defer the /api/me fetch so it doesn't compete with the iframe load for
+  // network bandwidth. The account chip is above-the-fold but non-critical;
+  // requestIdleCallback (or a 0ms timeout fallback) lets the browser finish
+  // first-paint and iframe negotiation before spending a round-trip on auth.
+  var fire=function(){
+    fetch('/api/me',{credentials:'same-origin'}).then(function(r){if(!r.ok){if(r.status===401)renderSignin();else clear();return null;}return r.json();}).then(function(me){
+      if(!me){clear();return;}var user=me.user||{};var name=user.name||user.email||null;var picture=typeof user.picture==='string'?user.picture:null;if(name)renderUser(name,picture);else renderSignin();
+    }).catch(clear);
+  };
+  if(window.requestIdleCallback){window.requestIdleCallback(fire,{timeout:2000});}
+  else{setTimeout(fire,0);}
 })();
 `;
 
@@ -1195,7 +1220,7 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_SHELL_CSS}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
+<style>${FRAME_RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_SHELL_CSS}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
 </head>
 <body>
 ${body}
@@ -2481,7 +2506,7 @@ export function hostShell(options: HostShellOptions): string {
 <div class="oa-toast-container" id="oa-toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
 <div class="oa-loading" id="oa-loading" aria-label="Loading artifact" role="status"><div class="oa-loading-spin"></div></div>
-<iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
+<iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}" fetchpriority="high"></iframe>
 ${drawer}
 ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId, canManage) : ""}
 ${handoffEnabled ? handoffChromeHtml(artifactId, handoffList, Number(currentVersion ?? 1)) : ""}
