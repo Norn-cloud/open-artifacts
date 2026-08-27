@@ -146,6 +146,8 @@ h1{
 .copy.copied .i-copy{display:none}
 .copy.copied .i-check{display:inline-flex}
 .caption{color:var(--muted);font-size:.8rem;margin:0}
+.trust-note{color:var(--muted);font-size:.75rem;margin:0;line-height:1.5}
+.trust-note a{font-weight:500}
 @media (hover:hover) and (pointer:fine){.copy:hover{color:var(--fg);border-color:var(--border-strong)}}
 
 /* ── Sections ────────────────────────────────────────────────── */
@@ -170,6 +172,18 @@ h2{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.08e
 .f-body span{color:var(--muted)}
 
 /* ── API table ───────────────────────────────────────────────── */
+.api-toggle{margin:0}
+.api-toggle summary{
+  cursor:pointer;list-style:none;font-size:.75rem;font-weight:600;
+  text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  padding:var(--space-2) 0;transition:color .15s var(--ease);
+}
+.api-toggle summary::-webkit-details-marker{display:none}
+.api-toggle[open] summary{color:var(--fg);margin-bottom:var(--space-3)}
+.api-toggle summary::after{content:" →"}
+.api-toggle[open] summary::after{content:" ↑"}
+@media (hover:hover) and (pointer:fine){.api-toggle summary:hover{color:var(--fg)}}
+.sr-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 figure.table-wrap{margin:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg)}
 .table-scroll{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:.8rem}
@@ -236,6 +250,7 @@ footer .sep{color:var(--border-strong);margin:0 var(--space-2)}
           <span class="i-check"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z\"/></svg></span>
         </button>
       </div>
+      <p class="trust-note">The prompt installs one skill file — no global changes. <a href="/install.md">Read install.md</a> before you run it.</p>
     </div>
 
     <div class="setup-block">
@@ -263,7 +278,7 @@ footer .sep{color:var(--border-strong);margin:0 var(--space-2)}
     <h2>What it does</h2>
     <ul class="features">
       <li>
-        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 14H11C7.54202 14 4.53953 15.9502 3.03239 18.8107C3.01093 18.5433 3 18.2729 3 18C3 12.4772 7.47715 8 13 8V2.5L23.5 11L13 19.5V14ZM11 12H15V15.3078L20.3214 11L15 6.69224V10H13C10.5795 10 8.41011 11.0749 6.94312 12.7735C8.20873 12.2714 9.58041 12 11 12Z\"/></svg></span>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.9 12C3.9 10.29 5.29 8.9 7 8.9H10V7H7C4.24 7 2 9.24 2 12S4.24 17 7 17H10V15.1H7C5.29 15.1 3.9 13.71 3.9 12M8 13H16V11H8V13M17 7H14V8.9H17C18.71 8.9 20.1 10.29 20.1 12S18.71 15.1 17 15.1H14V17H17C19.76 17 22 14.76 22 12S19.76 7 17 7Z"/></svg></span>
         <span class="f-body"><strong>Stable URLs, full history</strong><span>Agents publish via a small JSON API; every artifact gets a stable, unguessable link and a versioned history. Same URL forever, even across sessions.</span></span>
       </li>
       <li>
@@ -275,14 +290,15 @@ footer .sep{color:var(--border-strong);margin:0 var(--space-2)}
         <span class="f-body"><strong>Stays in sync with your files</strong><span>Artifacts remember the files they were generated from. When those files change, the skill flags the artifact stale and the agent republishes.</span></span>
       </li>
       <li>
-        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.8827 19.2968C16.1814 20.3755 14.1638 21.0002 12.0003 21.0002C6.60812 21.0002 2.12215 17.1204 1.18164 12.0002C1.61832 9.62282 2.81932 7.5129 4.52047 5.93457L1.39366 2.80777L2.80788 1.39355L22.6069 21.1925L21.1927 22.6068L17.8827 19.2968ZM5.9356 7.3497C4.60673 8.56015 3.6378 10.1672 3.22278 12.0002C4.14022 16.0521 7.7646 19.0002 12.0003 19.0002C13.5997 19.0002 15.112 18.5798 16.4243 17.8384L14.396 15.8101C13.7023 16.2472 12.8808 16.5002 12.0003 16.5002C9.51498 16.5002 7.50026 14.4854 7.50026 12.0002C7.50026 11.1196 7.75317 10.2981 8.19031 9.60442L5.9356 7.3497ZM12.9139 14.328L9.67246 11.0866C9.5613 11.3696 9.50026 11.6777 9.50026 12.0002C9.50026 13.3809 10.6196 14.5002 12.0003 14.5002C12.3227 14.5002 12.6309 14.4391 12.9139 14.328ZM20.8068 16.5925L19.376 15.1617C20.0319 14.2268 20.5154 13.1586 20.7777 12.0002C19.8603 7.94818 16.2359 5.00016 12.0003 5.00016C11.1544 5.00016 10.3329 5.11773 9.55249 5.33818L7.97446 3.76015C9.22127 3.26959 10.5793 3.00016 12.0003 3.00016C17.3924 3.00016 21.8784 6.87992 22.8189 12.0002C22.5067 13.6998 21.8038 15.2628 20.8068 16.5925ZM11.7229 7.50857C11.8146 7.50299 11.9071 7.50016 12.0003 7.50016C14.4855 7.50016 16.5003 9.51488 16.5003 12.0002C16.5003 12.0933 16.4974 12.1858 16.4919 12.2775L11.7229 7.50857Z\"/></svg></span>
+        <span class="f-icon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z"/></svg></span>
         <span class="f-body"><strong>Sandboxed by default</strong><span>Every page is served with a strict content security policy that blocks all external requests, so an artifact's scripts can never phone home or read your origin.</span></span>
       </li>
     </ul>
   </section>
 
   <section class="content-section">
-    <h2>API</h2>
+    <details class="api-toggle">
+    <summary>API</summary>
     <figure class="table-wrap">
       <div class="table-scroll">
         <table>
@@ -298,12 +314,15 @@ footer .sep{color:var(--border-strong);margin:0 var(--space-2)}
         </table>
       </div>
     </figure>
+    </details>
   </section>
 
   <footer>
     <a href="https://github.com/coda0HQ/open-artifacts" target="_blank" rel="noopener noreferrer">Source on GitHub</a><span class="sep">·</span>MIT licensed<span class="sep">·</span>Deploy your own with <code>wrangler deploy</code>
   </footer>
 </main>
+
+<div class="sr-live" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 (function(){
@@ -334,13 +353,30 @@ footer .sep{color:var(--border-strong);margin:0 var(--space-2)}
   var agentCopy=document.getElementById("agent-copy");
   if(agentCopy)agentCopy.setAttribute("data-copy","Set up Open Artifacts — follow "+origin+"/install.md");
 
-  // Copy buttons.
+  // Copy buttons — announce success via aria-live, fail honestly when
+  // clipboard is unavailable (select text instead of faking the check).
+  var live=document.querySelector(".sr-live");
   document.querySelectorAll(".copy").forEach(function(b){
     b.addEventListener("click",function() {
       var text=b.getAttribute("data-copy");
-      var done=function(){b.classList.add("copied");setTimeout(function(){b.classList.remove("copied")},1400);};
-      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(done);}
-      else{done();}
+      var done=function(){b.classList.add("copied");setTimeout(function(){b.classList.remove("copied")},1400);if(live)live.textContent="Copied";};
+      var fail=function(){if(live)live.textContent="Clipboard unavailable — select and copy manually";};
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done).catch(function(){
+          // Fallback: try a temporary textarea + execCommand, then give up honestly.
+          try{
+            var ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+            document.body.appendChild(ta);ta.select();var ok=document.execCommand("copy");document.body.removeChild(ta);
+            if(ok)done();else fail();
+          }catch(e){fail();}
+        });
+      }else{
+        try{
+          var ta2=document.createElement("textarea");ta2.value=text;ta2.style.position="fixed";ta2.style.opacity="0";
+          document.body.appendChild(ta2);ta2.select();var ok2=document.execCommand("copy");document.body.removeChild(ta2);
+          if(ok2)done();else fail();
+        }catch(e){fail();}
+      }
     });
   });
 })();
