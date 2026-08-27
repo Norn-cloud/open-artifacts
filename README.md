@@ -1,4 +1,6 @@
-# Open Artifacts ![](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D22-green)](https://nodejs.org)
+# Open Artifacts ![](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D22-green)](https://nodejs.org)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -53,7 +55,9 @@ brand is specified. `references/tokens.css` is the shared token contract the
 Recipe builder injects into every HTML artifact before its theme fragment. The
 skill also provides a quality profile for responsive HTML builds and an optional
 Reference DNA workflow that records approved design facts as a static Recipe
-input without bringing source assets or network requests into the Artifact.
+input without bringing source assets or network requests into the Artifact. The
+quality profile rejects recurring HTML defects such as fake browser chrome,
+unsafe sticky stacks, overflowing display text, and unconstrained media grids.
 Adapted from
 [open-design](https://github.com/nexu-io/open-design),
 Claude's `artifact-design` skill,
@@ -108,6 +112,8 @@ Local development: `pnpm dev` (state persists in `.wrangler/state`).
 | --- | --- |
 | Identity | No accounts. Artifact ids are 12-char crypto-random (unguessable, unlisted). Creation returns a one-time `writeToken`; only its SHA-256 is stored. |
 | Deterministic sources | A strict Recipe plus ordered fragments generates every Artifact. The builder injects tokens and, for Canvas, the vendored runtime and controls. Manifest v2 records Recipe/input/output hashes; direct HTML/Markdown CLI publishing is rejected. |
+| Quality checks | HTML builds reject selected structural defects: non-token visual values, fake device/browser chrome, unsafe sticky stacks, display-text overflow risks, wrapping primary actions, and unconstrained media grids. `smoke` renders scrolling HTML at 320, 375, 414, and 768px to catch horizontal scroll and heading overflow. Canvas, Markdown, and React keep their dedicated rendering contracts. |
+| Reference DNA | An approved `document.referenceDna` sidecar stores inert design facts and provenance after explicit user attestation. It contributes to Recipe input hashes and stale detection but is never injected into the published page. Shared sidecars live in `.artifacts/reference-dna/`; local or encrypted sidecars live in `.artifacts/reference-dna.local/`. |
 | Channels | `artifact.channel` binds an artifact to a stable URL. The CLI keeps a per-channel token (`ch_`) in `.artifacts/credentials.json`; presenting it on a later `create` updates the bound artifact (new version, same link) instead of minting a new one. Only the channel hash is stored server-side. |
 | Local mode | `artifact.local: true` places private sources under gitignored `.artifacts/recipes.local/` and `.artifacts/fragments.local/`, with state in `manifest.local.json`. Shared Recipes/fragments live under `.artifacts/recipes/` and `.artifacts/fragments/` and may be committed. Encrypted Recipes are always private. |
 | Storage | D1 for metadata/tokens/version index, R2 for content bodies (`content/<id>/<version>`). Both strongly consistent — updates are visible immediately. |
@@ -158,6 +164,10 @@ pnpm test:cli      # skill CLI tests
 pnpm typecheck
 pnpm check         # biome lint + format
 ```
+
+Install [`agent-browser`](https://github.com/vercel-labs/agent-browser) to run
+`artifact.mjs smoke`; unit tests use a stub and do not require its browser
+binary.
 
 BDD scenarios live in `tests/features/`; the architecture decision record in
 `docs/architecture.md`.

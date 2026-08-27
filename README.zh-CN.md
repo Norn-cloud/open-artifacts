@@ -1,4 +1,6 @@
-# Open Artifacts ![](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D22-green)](https://nodejs.org)
+# Open Artifacts ![](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white)
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![Node](https://img.shields.io/badge/node-%3E%3D22-green)](https://nodejs.org)
 
 [English](README.md) | **简体中文**
 
@@ -43,7 +45,7 @@ export OPEN_ARTIFACTS_URL=https://coda0.com   # 托管实例，或你自托管�
 （理解、探索、规划、构建、验证），一份明确的反 AI 套路清单，现代 CSS 实用技巧，
 以及一个 5 方向设计库（Editorial / Modern minimal / Human / Tech utility / Brutalist），
 内附可直接粘贴的 OKLch 调色板和字体栈，用于未指定品牌时的情况。
-`references/tokens.css` 是共享的 token 契约，Recipe 构建器会先注入它，再追加主题片段中的身份 token 覆盖。技能还提供响应式 HTML 构建的质量档案，以及可选的 Reference DNA 工作流：它把经过批准的设计事实作为静态 Recipe 输入记录，不会把来源资产或网络请求带进 Artifact。
+`references/tokens.css` 是共享的 token 契约，Recipe 构建器会先注入它，再追加主题片段中的身份 token 覆盖。技能还提供响应式 HTML 构建的质量档案，以及可选的 Reference DNA 工作流：它把经过批准的设计事实作为静态 Recipe 输入记录，不会把来源资产或网络请求带进 Artifact。质量档案会拒绝常见的 HTML 缺陷，例如伪造浏览器 chrome、不安全的 sticky 堆叠、display 文本溢出和未受约束的媒体 grid。
 改编自 [open-design](https://github.com/nexu-io/open-design)、Claude 的
 `artifact-design` 技能、Paul Bakaus 的
 [impeccable](https://github.com/pbakaus/impeccable)（Apache-2.0，交互状态与
@@ -91,6 +93,8 @@ npx wrangler secret put CREATE_TOKEN         # 然后客户端设置 OPEN_ARTIFA
 | --- | --- |
 | 身份 | 无账号。Artifact id 是 12 位加密随机串（不可猜、不列出）。创建时返回一次性的 `writeToken`，只存其 SHA-256。 |
 | 确定性来源 | 每个 Artifact 都由严格 Recipe 和有序片段生成。构建器注入 tokens；Canvas 还会注入 vendored runtime 与控制器。Manifest v2 记录 Recipe/input/output 哈希，CLI 拒绝直接发布 HTML/Markdown。 |
+| 质量检查 | HTML 构建会拒绝部分结构性缺陷：未通过 token 声明的视觉值、伪造设备/浏览器 chrome、不安全的 sticky 堆叠、display 文本溢出风险、会换行的主要操作，以及未受约束的媒体 grid。`smoke` 会在 320、375、414 和 768px 渲染滚动 HTML，用于检查水平滚动和标题溢出。Canvas、Markdown 和 React 保持各自的渲染契约。 |
+| Reference DNA | 经用户明确认证后，`document.referenceDna` sidecar 会保存惰性的设计事实和来源信息。它参与 Recipe input hash 和 stale 检测，但绝不注入已发布页面。共享 sidecar 位于 `.artifacts/reference-dna/`；本地或加密 sidecar 位于 `.artifacts/reference-dna.local/`。 |
 | 频道 | `artifact.channel` 把 artifact 绑定到稳定 URL。CLI 把每个频道的 token（`ch_`）保存在 `.artifacts/credentials.json`；之后用它在 `create` 上更新绑定的 artifact（新版本、同一链接），而不是新建一个。服务端只存频道哈希。 |
 | 本地模式 | `artifact.local: true` 把私有来源放在 gitignore 的 `.artifacts/recipes.local/` 与 `.artifacts/fragments.local/`，状态放在 `manifest.local.json`。共享 Recipe/片段放在 `.artifacts/recipes/` 与 `.artifacts/fragments/`，可以提交；加密 Recipe 必须保持私有。 |
 | 存储 | D1 存元数据/token/版本索引，R2 存内容体（`content/<id>/<version>`）。两者都是强一致的，更新立即可见。 |
@@ -136,6 +140,9 @@ pnpm test:cli      # 技能 CLI 测试
 pnpm typecheck
 pnpm check         # biome lint + format
 ```
+
+运行 `artifact.mjs smoke` 前请安装
+[`agent-browser`](https://github.com/vercel-labs/agent-browser)；单元测试使用 stub，不需要其浏览器二进制文件。
 
 BDD 场景在 `tests/features/`；架构决策记录在 `docs/architecture.md`。
 
