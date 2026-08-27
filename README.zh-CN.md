@@ -43,7 +43,7 @@ export OPEN_ARTIFACTS_URL=https://coda0.com   # 托管实例，或你自托管�
 （理解、探索、规划、构建、验证），一份明确的反 AI 套路清单，现代 CSS 实用技巧，
 以及一个 5 方向设计库（Editorial / Modern minimal / Human / Tech utility / Brutalist），
 内附可直接粘贴的 OKLch 调色板和字体栈，用于未指定品牌时的情况。
-`references/tokens.css` 是共享的 token 契约，Recipe 构建器会先注入它，再追加主题片段中的身份 token 覆盖。
+`references/tokens.css` 是共享的 token 契约，Recipe 构建器会先注入它，再追加主题片段中的身份 token 覆盖。技能还提供响应式 HTML 构建的质量档案，以及可选的 Reference DNA 工作流：它把经过批准的设计事实作为静态 Recipe 输入记录，不会把来源资产或网络请求带进 Artifact。
 改编自 [open-design](https://github.com/nexu-io/open-design)、Claude 的
 `artifact-design` 技能、Paul Bakaus 的
 [impeccable](https://github.com/pbakaus/impeccable)（Apache-2.0，交互状态与
@@ -56,13 +56,15 @@ CSP。
 ```sh
 node skills/using-open-artifacts/scripts/artifact.mjs validate \
   .artifacts/recipes/app-interactions.recipe.json
+node skills/using-open-artifacts/scripts/artifact.mjs smoke \
+  .artifacts/recipes/app-interactions.recipe.json
 node skills/using-open-artifacts/scripts/artifact.mjs create \
   .artifacts/recipes/app-interactions.recipe.json
 ```
 
 每个 Artifact 都由版本化 JSON Recipe 和有序片段生成。Recipe 记录标题、favicon、
 格式、scope、watch glob、channel、等级、Canvas 模式、本地性和加密策略。
-`create` 与 `update` 在内存中组合并验证，最后只发送一次发布请求。
+`create` 与 `update` 在内存中组合并验证，最后只发送一次发布请求。对于需要响应式布局的滚动 HTML Artifact，`smoke` 会通过 `agent-browser` 在 320、375、414 和 768px 渲染组合结果；它检查水平滚动和标题溢出，不写入项目状态。
 
 ## 部署你自己的实例
 

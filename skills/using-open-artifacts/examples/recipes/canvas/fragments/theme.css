@@ -2,7 +2,7 @@
   --bg: oklch(0.96 0.015 250);
   --fg: oklch(0.2 0.025 255);
   --muted: oklch(0.48 0.035 250);
-  --accent: oklch(0.56 0.19 255);
+  --accent: oklch(0.5 0.19 255);
   --accent-on: white;
 }
 

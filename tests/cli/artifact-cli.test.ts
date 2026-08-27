@@ -66,6 +66,7 @@ interface TestRecipe {
   document: {
     language: string;
     theme: string | null;
+    referenceDna?: string | null;
     fragments: {
       theme: string[];
       styles: string[];
@@ -93,6 +94,13 @@ interface ManifestEntry {
   migrationPending?: boolean;
   visibility?: string;
   orgId?: string;
+  referenceDna?: {
+    path: string;
+    sha256: string;
+    sourceMode: string;
+    attestation: string;
+  };
+  snapshot?: Record<string, string>;
 }
 
 interface ManifestState {
@@ -327,6 +335,79 @@ async function encryptLegacyRaw(
     iv: toB64(iv),
     ciphertext: toB64(ciphertext),
   };
+}
+
+function writeSmokeBrowser(): string {
+  const path = join(projectDir, "agent-browser-smoke-stub.mjs");
+  writeFileSync(
+    path,
+    `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes("eval")) {
+  const probe = {
+    overflow: process.env.OA_SMOKE_OVERFLOW === "true",
+    headingOverflows: process.env.OA_SMOKE_HEADING === "true" ? ["h1"] : [],
+  };
+  process.stdout.write(JSON.stringify(JSON.stringify(probe)));
+}
+`,
+  );
+  chmodSync(path, 0o755);
+  return path;
+}
+
+function writeReferenceDna(
+  name: string,
+  options: {
+    local?: boolean;
+    sourceMode?: "url" | "user-supplied-image";
+    attestation?:
+      | "user-owned"
+      | "public-reference-for-own-brand"
+      | "third-party";
+    mutate?: (dna: Record<string, unknown>) => void;
+  } = {},
+): string {
+  const local = options.local === true;
+  const directory = join(
+    projectDir,
+    local ? ".artifacts/reference-dna.local" : ".artifacts/reference-dna",
+  );
+  mkdirSync(directory, { recursive: true });
+  const sourceMode = options.sourceMode ?? "url";
+  const dna: Record<string, unknown> = {
+    version: 1,
+    provenance: {
+      sourceMode,
+      ...(sourceMode === "url"
+        ? { sourceUrl: "https://reference.example/design" }
+        : {}),
+      attestation: options.attestation ?? "public-reference-for-own-brand",
+      attestedAt: "2026-08-27",
+      confidence:
+        sourceMode === "url"
+          ? "CSS facts; rhythm estimated"
+          : "Visual estimate",
+      limits: ["No source copy or assets were retained."],
+    },
+    dna: {
+      structure: "Evidence-led document",
+      typeRoles: "Editorial display with neutral body",
+      palettePosture: "Light paper with restrained accent",
+      rhythm: "Generous reading rhythm",
+      responsiveNotes: ["Collapse the evidence split on narrow screens."],
+    },
+    adaptation: {
+      level: 1,
+      canvas: false,
+      register: "product",
+      mustNotCopy: ["Source copy", "Source images", "Browser chrome"],
+    },
+  };
+  options.mutate?.(dna);
+  const path = join(directory, `${name}.dna.json`);
+  writeJson(path, dna);
+  return path;
 }
 
 function validCanvasBody(): string {
@@ -746,6 +827,50 @@ describe("Recipe builder", () => {
     );
     const result = await run(["validate", clipped.recipePath]);
     expect(result.code).toBe(0);
+  });
+
+  it("smokes a scrolling HTML artifact at every required viewport", async () => {
+    const recipe = writeRecipe("quality-smoke-pass", {
+      body: '<main class="oa-prose"><h1 class="display">A narrow artifact</h1><p>Readable content.</p></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.display{font-size:var(--text-display);overflow-wrap:anywhere;min-width:0}\n',
+    );
+    const result = await run(["smoke", recipe.recipePath], {
+      env: { OPEN_ARTIFACTS_AGENT_BROWSER: writeSmokeBrowser() },
+    });
+    const summary = JSON.parse(result.stdout) as {
+      qualitySmoke: { widths: number[] };
+    };
+    expect(summary.qualitySmoke.widths).toEqual([320, 375, 414, 768]);
+  }, 60_000);
+
+  it("reports the viewport when quality smoke detects horizontal scroll", async () => {
+    const recipe = writeRecipe("quality-smoke-overflow", {
+      body: '<main class="oa-prose"><div class="overflow">Too wide</div></main>\n',
+    });
+    writeFileSync(
+      recipe.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.overflow{width:900px}\n',
+    );
+    const result = await run(["smoke", recipe.recipePath], {
+      expectFailure: true,
+      env: {
+        OPEN_ARTIFACTS_AGENT_BROWSER: writeSmokeBrowser(),
+        OA_SMOKE_OVERFLOW: "true",
+      },
+    });
+    expect(result.stderr).toContain("320px");
+    expect(result.stderr).toContain("scrolls horizontally");
+  }, 60_000);
+
+  it("keeps Canvas outside the document quality smoke test", async () => {
+    const recipe = writeRecipe("canvas-quality-smoke", { canvas: true });
+    const result = await run(["smoke", recipe.recipePath], {
+      expectFailure: true,
+    });
+    expect(result.stderr).toContain("Canvas has its own runtime and ship gate");
   });
 
   it("rejects a start tag carrying style= twice and tells the author to merge", async () => {
@@ -1432,6 +1557,339 @@ describe("Recipe builder", () => {
     });
     expect(result.stderr).toContain("not laid out as a centered row");
     expect(requests).toHaveLength(0);
+  });
+
+  it("rejects italic display headings but permits italic running prose", async () => {
+    const display = writeRecipe("italic-display", {
+      body: '<main class="oa-prose"><h1>Display heading</h1></main>\n',
+    });
+    writeFileSync(
+      display.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nh1{font-size:var(--text-display);font-style:italic}\n',
+    );
+    const displayResult = await run(["validate", display.recipePath], {
+      expectFailure: true,
+    });
+    expect(displayResult.stderr).toContain("display headings use roman type");
+    expect(requests).toHaveLength(0);
+
+    const prose = writeRecipe("italic-prose", {
+      body: '<main class="oa-prose"><p><em>Running emphasis</em>.</p></main>\n',
+    });
+    writeFileSync(
+      prose.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\np em{font-style:italic}\n',
+    );
+    const proseResult = await run(["validate", prose.recipePath]);
+    expect(proseResult.code).toBe(0);
+  });
+
+  it("requires primary affordances to declare single-line text", async () => {
+    const wrapped = writeRecipe("wrapped-cta", {
+      body: '<main class="oa-prose"><a class="cta" href="#start">Start the artifact</a></main>\n',
+    });
+    writeFileSync(
+      wrapped.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.cta{display:inline-flex}\n',
+    );
+    const wrappedResult = await run(["validate", wrapped.recipePath], {
+      expectFailure: true,
+    });
+    expect(wrappedResult.stderr).toContain(
+      "primary affordances must remain single-line",
+    );
+    expect(requests).toHaveLength(0);
+
+    const nowrap = writeRecipe("nowrap-cta", {
+      body: '<main class="oa-prose"><a class="cta" href="#start">Start the artifact</a></main>\n',
+    });
+    writeFileSync(
+      nowrap.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.cta{display:inline-flex;white-space:nowrap}\n',
+    );
+    const nowrapResult = await run(["validate", nowrap.recipePath]);
+    expect(nowrapResult.code).toBe(0);
+  });
+
+  it("requires image-bearing grid tracks to use minmax(0, 1fr)", async () => {
+    const unconstrained = writeRecipe("unconstrained-image-grid", {
+      body: '<main class="oa-prose"><section class="gallery"><img alt="Chart" src="data:image/svg+xml,%3Csvg/%3E"></section></main>\n',
+    });
+    writeFileSync(
+      unconstrained.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.gallery{display:grid;grid-template-columns:1fr 1fr}\n',
+    );
+    const unconstrainedResult = await run(
+      ["validate", unconstrained.recipePath],
+      { expectFailure: true },
+    );
+    expect(unconstrainedResult.stderr).toContain(
+      "image-bearing fraction tracks use minmax(0, 1fr)",
+    );
+    expect(requests).toHaveLength(0);
+
+    const constrained = writeRecipe("constrained-image-grid", {
+      body: '<main class="oa-prose"><section class="gallery"><img alt="Chart" src="data:image/svg+xml,%3Csvg/%3E"></section></main>\n',
+    });
+    writeFileSync(
+      constrained.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.gallery{display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr)}\n',
+    );
+    const constrainedResult = await run(["validate", constrained.recipePath]);
+    expect(constrainedResult.code).toBe(0);
+  });
+
+  it("requires display headings to support emergency long-word wrapping", async () => {
+    const unwrapped = writeRecipe("unwrapped-display", {
+      body: '<main class="oa-prose"><h1>Extraordinarilylongartifactheading</h1></main>\n',
+    });
+    writeFileSync(
+      unwrapped.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nh1{font-size:var(--text-display)}\n',
+    );
+    const unwrappedResult = await run(["validate", unwrapped.recipePath], {
+      expectFailure: true,
+    });
+    expect(unwrappedResult.stderr).toContain(
+      "display headings need overflow-wrap:anywhere and min-width:0",
+    );
+
+    const wrapped = writeRecipe("wrapped-display", {
+      body: '<main class="oa-prose"><h1>Extraordinarilylongartifactheading</h1></main>\n',
+    });
+    writeFileSync(
+      wrapped.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\nh1{font-size:var(--text-display);overflow-wrap:anywhere;min-width:0}\n',
+    );
+    const wrappedResult = await run(["validate", wrapped.recipePath]);
+    expect(wrappedResult.code).toBe(0);
+  });
+
+  it("requires an eyebrow section head to collapse to one column on narrow viewports", async () => {
+    const uncollapsed = writeRecipe("uncollapsed-section-head", {
+      body: '<main class="oa-prose"><header class="oa-section-head"><p class="eyebrow">Context</p><h2>Heading</h2></header></main>\n',
+    });
+    writeFileSync(
+      uncollapsed.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.oa-section-head{display:grid;grid-template-columns:12ch 1fr}\n',
+    );
+    const uncollapsedResult = await run(["validate", uncollapsed.recipePath], {
+      expectFailure: true,
+    });
+    expect(uncollapsedResult.stderr).toContain(
+      "section head needs a mobile single-column layout",
+    );
+    expect(requests).toHaveLength(0);
+
+    const collapsed = writeRecipe("collapsed-section-head", {
+      body: '<main class="oa-prose"><header class="oa-section-head"><p class="eyebrow">Context</p><h2>Heading</h2></header></main>\n',
+    });
+    writeFileSync(
+      collapsed.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.oa-section-head{display:grid;grid-template-columns:12ch 1fr}\n@media (max-width:48rem){.oa-section-head{grid-template-columns:1fr}}\n',
+    );
+    const collapsedResult = await run(["validate", collapsed.recipePath]);
+    expect(collapsedResult.code).toBe(0);
+  });
+
+  it("requires secondary sticky elements to offset below a top sticky nav", async () => {
+    const overlap = writeRecipe("sticky-overlap", {
+      body: '<main class="oa-prose"><nav class="site-nav">Nav</nav><aside class="rail">Rail</aside></main>\n',
+    });
+    writeFileSync(
+      overlap.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.site-nav{position:sticky;top:0}.rail{position:sticky;top:0}\n',
+    );
+    const overlapResult = await run(["validate", overlap.recipePath], {
+      expectFailure: true,
+    });
+    expect(overlapResult.stderr).toContain(
+      "secondary sticky element needs an offset",
+    );
+    expect(requests).toHaveLength(0);
+
+    const offset = writeRecipe("sticky-offset", {
+      body: '<main class="oa-prose"><nav class="site-nav">Nav</nav><aside class="rail">Rail</aside></main>\n',
+    });
+    writeFileSync(
+      offset.themePath,
+      ':root{--accent:blue;--artifact-nav-h:3rem}\n:root[data-theme="dark"]{--accent:cyan}\n.site-nav{position:sticky;top:0}.rail{position:sticky;top:calc(var(--oa-header-h) + var(--artifact-nav-h))}\n',
+    );
+    const offsetResult = await run(["validate", offset.recipePath]);
+    expect(offsetResult.code).toBe(0);
+  });
+
+  it("rejects decorative fake browser chrome while allowing real artifact controls", async () => {
+    const fake = writeRecipe("fake-browser", {
+      body: '<main class="oa-prose"><div class="browser-chrome"><span class="traffic-light"></span><div class="url-bar">artifact.example</div></div></main>\n',
+    });
+    const fakeResult = await run(["validate", fake.recipePath], {
+      expectFailure: true,
+    });
+    expect(fakeResult.stderr).toContain("viewer owns browser chrome");
+    expect(requests).toHaveLength(0);
+
+    const real = writeRecipe("real-controls", {
+      body: '<main class="oa-prose"><button class="cta" type="button">Create artifact</button></main>\n',
+    });
+    writeFileSync(
+      real.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.cta{white-space:nowrap}\n',
+    );
+    const realResult = await run(["validate", real.recipePath]);
+    expect(realResult.code).toBe(0);
+  });
+
+  it("requires components to consume colors through theme tokens", async () => {
+    const rawColor = writeRecipe("raw-component-color", {
+      body: '<main class="oa-prose"><p class="notice">Notice</p></main>\n',
+    });
+    writeFileSync(
+      rawColor.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.notice{color:#c0392b}\n',
+    );
+    const rawColorResult = await run(["validate", rawColor.recipePath], {
+      expectFailure: true,
+    });
+    expect(rawColorResult.stderr).toContain(
+      "authored visual values belong in the theme token blocks",
+    );
+    expect(requests).toHaveLength(0);
+
+    const tokenColor = writeRecipe("token-component-color", {
+      body: '<main class="oa-prose"><p class="notice">Notice</p></main>\n',
+    });
+    writeFileSync(
+      tokenColor.themePath,
+      ':root{--accent:blue;--notice-color:oklch(45% .16 30)}\n:root[data-theme="dark"]{--accent:cyan;--notice-color:oklch(75% .14 30)}\n.notice{color:var(--notice-color)}\n',
+    );
+    const tokenColorResult = await run(["validate", tokenColor.recipePath]);
+    expect(tokenColorResult.code).toBe(0);
+  });
+
+  it("includes attested reference DNA in Recipe inputs without publishing it", async () => {
+    const dnaPath = writeReferenceDna("shared-reference");
+    const recipe = writeRecipe("with-reference-dna", {
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna/shared-reference.dna.json";
+      },
+    });
+    const result = await run(["validate", recipe.recipePath]);
+    const summary = JSON.parse(result.stdout) as {
+      inputHash: string;
+      fragments: number;
+    };
+    expect(summary.inputHash).toMatch(/^sha256:/);
+    expect(summary.fragments).toBe(3);
+
+    const output = join(projectDir, "reference-dna-preview.html");
+    await run(["build", recipe.recipePath, "--output", output]);
+    const content = readFileSync(output, "utf8");
+    expect(content).not.toContain("https://reference.example/design");
+    expect(content).not.toContain("Evidence-led document");
+    expect(dnaPath).toContain(".artifacts/reference-dna/");
+  });
+
+  it("rejects unapproved or unsafe reference DNA", async () => {
+    writeReferenceDna("unapproved-reference", { attestation: "third-party" });
+    const unapproved = writeRecipe("unapproved-dna", {
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna/unapproved-reference.dna.json";
+      },
+    });
+    const unapprovedResult = await run(["validate", unapproved.recipePath], {
+      expectFailure: true,
+    });
+    expect(unapprovedResult.stderr).toContain("reference DNA attestation");
+
+    writeReferenceDna("unsafe-reference", {
+      mutate: (dna) => {
+        (dna.dna as Record<string, unknown>).html = "<main>copied</main>";
+      },
+    });
+    const unsafe = writeRecipe("unsafe-dna", {
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna/unsafe-reference.dna.json";
+      },
+    });
+    const unsafeResult = await run(["validate", unsafe.recipePath], {
+      expectFailure: true,
+    });
+    expect(unsafeResult.stderr).toContain(
+      "reference DNA.dna.html is not supported",
+    );
+    expect(requests).toHaveLength(0);
+  });
+
+  it("requires reference DNA locality to match its Recipe", async () => {
+    writeReferenceDna("local-reference", { local: true });
+    const shared = writeRecipe("shared-local-dna", {
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna.local/local-reference.dna.json";
+      },
+    });
+    const sharedResult = await run(["validate", shared.recipePath], {
+      expectFailure: true,
+    });
+    expect(sharedResult.stderr).toContain("matching .artifacts/reference-dna/");
+
+    writeReferenceDna("shared-reference-for-local");
+    const local = writeRecipe("local-shared-dna", {
+      local: true,
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna/shared-reference-for-local.dna.json";
+      },
+    });
+    const localResult = await run(["validate", local.recipePath], {
+      expectFailure: true,
+    });
+    expect(localResult.stderr).toContain(
+      "matching .artifacts/reference-dna.local/",
+    );
+  });
+
+  it("tracks reference DNA changes as watched Recipe inputs", async () => {
+    const dnaPath = writeReferenceDna("watched-reference");
+    const recipe = writeRecipe("watched-dna", {
+      mutate: (value) => {
+        value.document.referenceDna =
+          "../reference-dna/watched-reference.dna.json";
+        value.artifact.watch = [];
+      },
+    });
+    await run(["create", recipe.recipePath]);
+    const entry = manifest().artifacts[0];
+    const before = entry?.snapshot ?? {};
+    expect(Object.keys(before)).toContain(
+      ".artifacts/reference-dna/watched-reference.dna.json",
+    );
+    expect(entry?.referenceDna).toMatchObject({
+      path: ".artifacts/reference-dna/watched-reference.dna.json",
+      sourceMode: "url",
+      attestation: "public-reference-for-own-brand",
+    });
+
+    const dna = readJson<Record<string, unknown>>(dnaPath);
+    (dna.dna as Record<string, unknown>).rhythm = "Compact reference rhythm";
+    writeJson(dnaPath, dna);
+    const stale = await run(["status"], { expectFailure: true });
+    expect(stale.stdout).toContain("Recipe report");
+    expect(stale.stdout).toContain("reference-dna/watched-reference.dna.json");
+  });
+
+  it("keeps Canvas layout ownership outside document quality gates", async () => {
+    const canvas = writeRecipe("canvas-quality", { canvas: true });
+    writeFileSync(
+      canvas.themePath,
+      ':root{--accent:blue}\n:root[data-theme="dark"]{--accent:cyan}\n.oa-canvas{overflow:hidden}\n',
+    );
+    const result = await run(["validate", canvas.recipePath]);
+    expect(result.code).toBe(0);
   });
 
   it("validates a Markdown recipe that omits document.theme", async () => {

@@ -9,6 +9,7 @@ dist/
 .artifacts/previews/
 .artifacts/recipes.local/
 .artifacts/fragments.local/
+.artifacts/reference-dna.local/
 
 .claude/
 # Local git worktrees. Not ignoring these lets `git add -A` stage each one as a

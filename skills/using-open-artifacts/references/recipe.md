@@ -41,6 +41,7 @@ the favicon stable across versions.
   "document": {
     "language": "en",
     "theme": "editorial-control-room",
+    "referenceDna": null,
     "fragments": {
       "theme": ["fragments/theme.css"],
       "styles": ["fragments/components.css"],
@@ -72,6 +73,13 @@ recipe comment, no runtime effect). HTML theme comes from theme fragments and
 Markdown from the viewer's default `.oa-md` shell, so a Markdown Recipe may omit
 `document.theme` entirely (or set it to `null`) — it carries no styling.
 
+`document.referenceDna` is an optional project-relative path to an approved,
+static design-reference sidecar. The builder validates it, includes it in the
+input hash and watch snapshot, but never injects it into the published content.
+A shared Recipe points into `.artifacts/reference-dna/`; a local or encrypted
+Recipe points into `.artifacts/reference-dna.local/`. See
+[reference-dna.md](reference-dna.md) and
+[reference-dna.schema.json](reference-dna.schema.json).
 ## Composition
 
 The builder runs two local passes:
@@ -133,12 +141,14 @@ tours, and builder-owned controls.
 
 Shared Recipes and fragments may be committed. A shared Recipe must live under
 `.artifacts/recipes/`, and its fragments must resolve under `.artifacts/`
-(conventionally `.artifacts/fragments/<slug>/`). Skill-shipped reference
+(conventionally `.artifacts/fragments/<slug>/`). Its optional Reference DNA
+sidecar lives under `.artifacts/reference-dna/`. Skill-shipped reference
 Recipes under `examples/recipes/` are exempt — they stay with the skill
 package. A local or encrypted Recipe must
 live under `.artifacts/recipes.local/`, and all of its fragments must live under
-`.artifacts/fragments.local/`. Credentials and `.artifacts/previews/` are
-gitignored; the `.local/` source directories are too.
+`.artifacts/fragments.local/`; its optional Reference DNA sidecar belongs in
+`.artifacts/reference-dna.local/`. Credentials, `.artifacts/previews/`, and the
+`.local/` source directories are gitignored.
 
 Because fragment paths resolve against the **Recipe file's own directory**, a
 shared Recipe at `.artifacts/recipes/report.recipe.json` reaches its fragments
@@ -222,13 +232,17 @@ Manifest.
 node "$ARTIFACT_CLI" validate path/to/report.recipe.json
 node "$ARTIFACT_CLI" build path/to/report.recipe.json \
   --output .artifacts/previews/report.html --standalone
+node "$ARTIFACT_CLI" smoke path/to/report.recipe.json
 node "$ARTIFACT_CLI" create path/to/report.recipe.json
 node "$ARTIFACT_CLI" update <artifact-id>
 ```
 
 `validate` writes nothing. `build` writes only the explicitly requested
-preview/export. `create` and `update` build in memory and persist Manifest state
-only after the service accepts the publish.
+preview/export. `smoke` starts a temporary local preview and uses `agent-browser`
+to verify a scrolling HTML artifact at 320 / 375 / 414 / 768px; it writes no
+project state and rejects Markdown, React, and Canvas because they have their
+own rendering contracts. `create` and `update` build in memory and persist
+Manifest state only after the service accepts the publish.
 
 Use `migrate <artifact-id>` to create Recipe sources for a legacy Manifest v1
 entry without publishing. Calling `update` on a legacy entry performs this

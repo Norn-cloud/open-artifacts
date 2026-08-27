@@ -50,7 +50,10 @@ verify), an explicit anti-AI-slop list, modern CSS power moves, and a
 5-direction library (Editorial / Modern minimal / Human / Tech utility /
 Brutalist) with ready-to-paste OKLch palettes and font stacks for when no
 brand is specified. `references/tokens.css` is the shared token contract the
-Recipe builder injects into every HTML artifact before its theme fragment.
+Recipe builder injects into every HTML artifact before its theme fragment. The
+skill also provides a quality profile for responsive HTML builds and an optional
+Reference DNA workflow that records approved design facts as a static Recipe
+input without bringing source assets or network requests into the Artifact.
 Adapted from
 [open-design](https://github.com/nexu-io/open-design),
 Claude's `artifact-design` skill,
@@ -65,6 +68,8 @@ Ask your agent to "publish this as an artifact" — it runs the bundled CLI:
 ```sh
 node skills/using-open-artifacts/scripts/artifact.mjs validate \
   .artifacts/recipes/app-interactions.recipe.json
+node skills/using-open-artifacts/scripts/artifact.mjs smoke \
+  .artifacts/recipes/app-interactions.recipe.json
 node skills/using-open-artifacts/scripts/artifact.mjs create \
   .artifacts/recipes/app-interactions.recipe.json
 ```
@@ -73,6 +78,9 @@ Every artifact is generated from a versioned JSON Recipe plus ordered
 fragments. The Recipe owns title, favicon, format, scope, watch globs, channel,
 level, Canvas mode, locality, and encryption policy. `create` and `update`
 compose and validate in memory, then send exactly one final publish request.
+For a responsive scrolling HTML artifact, `smoke` renders the composed output
+at 320, 375, 414, and 768px with `agent-browser` before publishing; it detects
+horizontal scrolling and heading overflow without writing project state.
 
 ## Deploy your own instance
 

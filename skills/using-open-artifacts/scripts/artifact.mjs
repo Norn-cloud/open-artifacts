@@ -229,6 +229,9 @@ function ensureGitignored() {
   if (existsSync(join(ARTIFACTS_DIR, "fragments.local"))) {
     lines.push(".artifacts/fragments.local/");
   }
+  if (existsSync(join(ARTIFACTS_DIR, "reference-dna.local"))) {
+    lines.push(".artifacts/reference-dna.local/");
+  }
   if (existsSync(join(ARTIFACTS_DIR, "previews"))) {
     lines.push(".artifacts/previews/");
   }
@@ -458,13 +461,18 @@ async function prepareRecipePayload(recipePath, flags, artifactId = null) {
 function recipeMetadataForEntry(entry) {
   if (!entry.recipe) return entry;
   try {
-    const { artifact, security } = loadRecipe(
-      resolve(PROJECT_ROOT, entry.recipe),
-      {
-        projectRoot: PROJECT_ROOT,
-      },
-    ).recipe;
-    return { ...artifact, encrypted: security.encrypted };
+    const loaded = loadRecipe(resolve(PROJECT_ROOT, entry.recipe), {
+      projectRoot: PROJECT_ROOT,
+    });
+    const { artifact, security } = loaded.recipe;
+    return {
+      ...artifact,
+      encrypted: security.encrypted,
+      watch: [
+        ...artifact.watch,
+        ...(loaded.referenceDna ? [loaded.referenceDna.projectPath] : []),
+      ],
+    };
   } catch {
     return entry;
   }
@@ -563,6 +571,14 @@ async function commandCreate(recipePath, flags) {
     outputHash: `sha256:${build.outputHash}`,
     strategy: build.plan.strategy,
     autoUpdate: artifact.autoUpdate,
+    referenceDna: build.loaded.referenceDna
+      ? {
+          path: build.loaded.referenceDna.projectPath,
+          sha256: `sha256:${build.loaded.referenceDna.hash}`,
+          sourceMode: build.loaded.referenceDna.value.provenance.sourceMode,
+          attestation: build.loaded.referenceDna.value.provenance.attestation,
+        }
+      : undefined,
     snapshot: recipeSnapshot(build),
     updatedAt: new Date().toISOString(),
   };
@@ -688,6 +704,14 @@ async function commandUpdate(
     outputHash: `sha256:${build.outputHash}`,
     strategy: build.plan.strategy,
     autoUpdate: artifact.autoUpdate,
+    referenceDna: build.loaded.referenceDna
+      ? {
+          path: build.loaded.referenceDna.projectPath,
+          sha256: `sha256:${build.loaded.referenceDna.hash}`,
+          sourceMode: build.loaded.referenceDna.value.provenance.sourceMode,
+          attestation: build.loaded.referenceDna.value.provenance.attestation,
+        }
+      : undefined,
     snapshot: recipeSnapshot(build),
     updatedAt: new Date().toISOString(),
   };

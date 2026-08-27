@@ -32,7 +32,12 @@ const ARTIFACT_KEYS = new Set([
   "visibility",
   "org",
 ]);
-const DOCUMENT_KEYS = new Set(["language", "theme", "fragments"]);
+const DOCUMENT_KEYS = new Set([
+  "language",
+  "theme",
+  "fragments",
+  "referenceDna",
+]);
 const FRAGMENT_KEYS = new Set(["theme", "styles", "body", "scripts"]);
 const SECURITY_KEYS = new Set(["encrypted", "passwordCredential"]);
 const BUILD_KEYS = new Set(["strategy"]);
@@ -207,6 +212,171 @@ function parseArtifact(raw) {
   };
 }
 
+function validateReferenceUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    fail("reference DNA URL sources require a valid public https sourceUrl");
+  }
+  const host = url.hostname.toLowerCase();
+  const blockedHost =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    /(?:\.local|\.internal|\.test|\.lan)$/.test(host) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) ||
+    host.includes(":");
+  const blockedPath = /(?:^|\/)(?:templates?|ui-kits?|starters?)(?:\/|$)/i.test(
+    url.pathname,
+  );
+  const blockedMarketplace =
+    /(?:themeforest|templatemonster|gumroad|webflow|framer)/i.test(host);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    blockedHost ||
+    blockedPath ||
+    blockedMarketplace
+  ) {
+    fail(
+      "reference DNA URL sources require a public https non-template sourceUrl",
+    );
+  }
+}
+
+function parseReferenceDna(raw) {
+  if (!isObject(raw)) fail("reference DNA must be an object");
+  rejectUnknown(
+    raw,
+    new Set(["version", "provenance", "dna", "adaptation"]),
+    "reference DNA",
+  );
+  requireKeys(
+    raw,
+    ["version", "provenance", "dna", "adaptation"],
+    "reference DNA",
+  );
+  if (raw.version !== 1) fail("reference DNA version must be 1");
+  if (!isObject(raw.provenance))
+    fail("reference DNA.provenance must be an object");
+  rejectUnknown(
+    raw.provenance,
+    new Set([
+      "sourceMode",
+      "sourceUrl",
+      "attestation",
+      "attestedAt",
+      "confidence",
+      "limits",
+    ]),
+    "reference DNA.provenance",
+  );
+  requireKeys(
+    raw.provenance,
+    ["sourceMode", "attestation", "attestedAt", "confidence", "limits"],
+    "reference DNA.provenance",
+  );
+  const sourceMode = requireString(
+    raw.provenance.sourceMode,
+    "reference DNA.provenance.sourceMode",
+  );
+  if (sourceMode !== "url" && sourceMode !== "user-supplied-image") {
+    fail(
+      'reference DNA.provenance.sourceMode must be "url" or "user-supplied-image"',
+    );
+  }
+  const attestation = requireString(
+    raw.provenance.attestation,
+    "reference DNA.provenance.attestation",
+  );
+  const allowedAttestation =
+    attestation === "user-owned" ||
+    attestation === "public-reference-for-own-brand";
+  if (!allowedAttestation) {
+    fail(
+      'reference DNA attestation must be "user-owned" or "public-reference-for-own-brand"',
+    );
+  }
+  const sourceUrl = optionalString(
+    raw.provenance.sourceUrl,
+    "reference DNA.provenance.sourceUrl",
+  );
+  if (sourceMode === "url") {
+    if (sourceUrl === null) {
+      fail("reference DNA URL sources require a public https sourceUrl");
+    }
+    validateReferenceUrl(sourceUrl);
+  } else if (sourceUrl !== null) {
+    fail("user-supplied-image reference DNA must not store a sourceUrl");
+  }
+  requireString(
+    raw.provenance.attestedAt,
+    "reference DNA.provenance.attestedAt",
+  );
+  requireString(
+    raw.provenance.confidence,
+    "reference DNA.provenance.confidence",
+  );
+  requireStringArray(raw.provenance.limits, "reference DNA.provenance.limits");
+
+  if (!isObject(raw.dna)) fail("reference DNA.dna must be an object");
+  rejectUnknown(
+    raw.dna,
+    new Set([
+      "structure",
+      "typeRoles",
+      "palettePosture",
+      "rhythm",
+      "responsiveNotes",
+    ]),
+    "reference DNA.dna",
+  );
+  requireKeys(
+    raw.dna,
+    ["structure", "typeRoles", "palettePosture", "rhythm"],
+    "reference DNA.dna",
+  );
+  requireString(raw.dna.structure, "reference DNA.dna.structure");
+  requireString(raw.dna.typeRoles, "reference DNA.dna.typeRoles");
+  requireString(raw.dna.palettePosture, "reference DNA.dna.palettePosture");
+  requireString(raw.dna.rhythm, "reference DNA.dna.rhythm");
+  if (raw.dna.responsiveNotes !== undefined) {
+    requireStringArray(
+      raw.dna.responsiveNotes,
+      "reference DNA.dna.responsiveNotes",
+    );
+  }
+
+  if (!isObject(raw.adaptation))
+    fail("reference DNA.adaptation must be an object");
+  rejectUnknown(
+    raw.adaptation,
+    new Set(["level", "canvas", "register", "mustNotCopy"]),
+    "reference DNA.adaptation",
+  );
+  requireKeys(
+    raw.adaptation,
+    ["level", "canvas", "register", "mustNotCopy"],
+    "reference DNA.adaptation",
+  );
+  if (![1, 2, 3].includes(raw.adaptation.level)) {
+    fail("reference DNA.adaptation.level must be 1, 2, or 3");
+  }
+  requireBoolean(raw.adaptation.canvas, "reference DNA.adaptation.canvas");
+  if (
+    raw.adaptation.register !== "product" &&
+    raw.adaptation.register !== "brand"
+  ) {
+    fail('reference DNA.adaptation.register must be "product" or "brand"');
+  }
+  requireStringArray(
+    raw.adaptation.mustNotCopy,
+    "reference DNA.adaptation.mustNotCopy",
+  );
+  return raw;
+}
+
 function parseDocument(raw) {
   if (!isObject(raw)) fail("document must be an object");
   rejectUnknown(raw, DOCUMENT_KEYS, "document");
@@ -231,9 +401,14 @@ function parseDocument(raw) {
     raw.theme === null || raw.theme === undefined
       ? null
       : requireString(raw.theme, "document.theme");
+  const referenceDna =
+    raw.referenceDna === null || raw.referenceDna === undefined
+      ? null
+      : requireString(raw.referenceDna, "document.referenceDna");
   return {
     language: requireString(raw.language ?? "en", "document.language"),
     theme,
+    referenceDna,
     fragments,
   };
 }
@@ -418,15 +593,63 @@ export function loadRecipe(recipePath, options = {}) {
     ".artifacts/recipes.local/",
   );
   const isPrivate = recipe.artifact.local || recipe.security.encrypted;
+  const recipeDir = dirname(recipeReal);
   // Shared/private path rules are enforced after fragment resolution below, so
   // a local Recipe whose fragments are also misplaced surfaces BOTH rules in a
   // single error instead of forcing the author through two separate attempts
   // (move the Recipe, re-run, then learn the fragments must also move).
   const watchFiles = resolveWatchFiles(recipe.artifact.watch, projectRoot);
 
+  let referenceDna = null;
+  if (recipe.document.referenceDna !== null) {
+    const resolved = resolveProjectFile(
+      projectRoot,
+      recipeDir,
+      recipe.document.referenceDna,
+    );
+    const size = statSync(resolved.real).size;
+    if (size > BUILD_LIMITS.maxFragmentBytes) {
+      fail(
+        `reference DNA exceeds ${BUILD_LIMITS.maxFragmentBytes / (1024 * 1024)} MiB: ${recipe.document.referenceDna}`,
+      );
+    }
+    let rawDna;
+    try {
+      rawDna = JSON.parse(readFileSync(resolved.real, "utf8"));
+    } catch (error) {
+      fail(`reference DNA JSON parse failed: ${error.message}`);
+    }
+    const value = parseReferenceDna(rawDna);
+    if (value.adaptation.level !== recipe.artifact.level) {
+      fail("reference DNA.adaptation.level must match artifact.level");
+    }
+    if (value.adaptation.canvas !== recipe.artifact.canvas) {
+      fail("reference DNA.adaptation.canvas must match artifact.canvas");
+    }
+    const path = relative(projectRoot, resolved.real).split(sep).join("/");
+    const expectedPrefix = isPrivate
+      ? ".artifacts/reference-dna.local/"
+      : ".artifacts/reference-dna/";
+    if (!path.startsWith(expectedPrefix)) {
+      fail(
+        `${isPrivate ? "local or encrypted" : "shared"} Recipes require a matching ${expectedPrefix} reference DNA sidecar`,
+      );
+    }
+    referenceDna = {
+      ...resolved,
+      size,
+      value,
+      source: recipe.document.referenceDna,
+      projectPath: path,
+      hash: sha256(canonicalJson(value)),
+    };
+    if (!watchFiles.some((file) => file.real === resolved.real)) {
+      watchFiles.push({ real: resolved.real, projectPath: path });
+    }
+  }
+
   const descriptors = [];
   const seen = new Set();
-  const recipeDir = dirname(recipeReal);
   for (const slot of FRAGMENT_KEYS) {
     for (const fragmentPath of recipe.document.fragments[slot]) {
       const resolved = resolveProjectFile(projectRoot, recipeDir, fragmentPath);
@@ -527,7 +750,7 @@ export function loadRecipe(recipePath, options = {}) {
   }
   const aggregateBytes = descriptors.reduce(
     (total, descriptor) => total + descriptor.size,
-    0,
+    referenceDna?.size ?? 0,
   );
   if (aggregateBytes > BUILD_LIMITS.maxAggregateBytes) {
     fail(
@@ -544,6 +767,7 @@ export function loadRecipe(recipePath, options = {}) {
     recipe,
     watchFiles,
     descriptors,
+    referenceDna,
     aggregateBytes,
     recipeHash: sha256(canonicalJson(recipe)),
   };

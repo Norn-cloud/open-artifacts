@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-artifacts.dev/reference-dna/v1",
+  "title": "Open Artifacts Reference DNA v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "provenance", "dna", "adaptation"],
+  "properties": {
+    "version": { "const": 1 },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceMode",
+        "attestation",
+        "attestedAt",
+        "confidence",
+        "limits"
+      ],
+      "properties": {
+        "sourceMode": { "enum": ["url", "user-supplied-image"] },
+        "sourceUrl": { "type": ["string", "null"] },
+        "attestation": {
+          "enum": ["user-owned", "public-reference-for-own-brand"]
+        },
+        "attestedAt": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "string", "minLength": 1 },
+        "limits": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "dna": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["structure", "typeRoles", "palettePosture", "rhythm"],
+      "properties": {
+        "structure": { "type": "string", "minLength": 1 },
+        "typeRoles": { "type": "string", "minLength": 1 },
+        "palettePosture": { "type": "string", "minLength": 1 },
+        "rhythm": { "type": "string", "minLength": 1 },
+        "responsiveNotes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "adaptation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "canvas", "register", "mustNotCopy"],
+      "properties": {
+        "level": { "enum": [1, 2, 3] },
+        "canvas": { "type": "boolean" },
+        "register": { "enum": ["product", "brand"] },
+        "mustNotCopy": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

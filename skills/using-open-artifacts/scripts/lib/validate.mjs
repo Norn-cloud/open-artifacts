@@ -677,7 +677,7 @@ function validateTropes(authoredStyles) {
 function collectStyleRules(css) {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const rules = [];
-  const walk = (text) => {
+  const walk = (text, contexts = []) => {
     let i = 0;
     while (i < text.length) {
       const brace = text.indexOf("{", i);
@@ -690,13 +690,375 @@ function collectStyleRules(css) {
         else if (text[j] === "}") depth -= 1;
       }
       const body = text.slice(brace + 1, j - 1);
-      if (prelude.startsWith("@")) walk(body);
-      else rules.push({ selector: prelude, decls: body });
+      if (prelude.startsWith("@")) walk(body, [...contexts, prelude]);
+      else rules.push({ selector: prelude, decls: body, contexts });
       i = j;
     }
   };
   walk(stripped);
   return rules;
+}
+
+function bodyElements(authoredBody) {
+  const body = authoredBody.replace(/<!--[\s\S]*?-->/g, "");
+  const elements = [];
+  const openTag = /<([a-z][\w-]*)\b([^>]*)>/gi;
+  for (let match = openTag.exec(body); match; match = openTag.exec(body)) {
+    const classes = new Set(
+      (match[2].match(/\bclass=["']([^"']*)["']/i)?.[1] ?? "")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    elements.push({
+      tag: match[1].toLowerCase(),
+      attributes: match[2],
+      classes,
+      index: match.index,
+      openEnd: openTag.lastIndex,
+    });
+  }
+  return { body, elements };
+}
+
+function elementContent(body, element) {
+  const tags = new RegExp(`</?${element.tag}\\b[^>]*>`, "gi");
+  tags.lastIndex = element.index;
+  let depth = 0;
+  for (let match = tags.exec(body); match; match = tags.exec(body)) {
+    if (match[0].startsWith("</")) depth -= 1;
+    else if (!match[0].endsWith("/>")) depth += 1;
+    if (depth === 0) return body.slice(element.openEnd, tags.lastIndex);
+  }
+  return body.slice(element.openEnd);
+}
+
+function selectorTargetsElement(selector, element) {
+  return selector.split(",").some((part) => {
+    const simple = part.trim();
+    if (!simple || /[>\s+~:[\]]/.test(simple)) return false;
+    const tag = simple.match(/^[a-z][\w-]*/i)?.[0]?.toLowerCase();
+    if (tag && tag !== element.tag) return false;
+    const classes = [...simple.matchAll(/\.([A-Za-z_][\w-]*)/g)].map(
+      (match) => match[1],
+    );
+    return classes.every((className) => element.classes.has(className));
+  });
+}
+
+function declarationsFor(element, rules, includeContexts = false) {
+  const inline =
+    element.attributes.match(/\bstyle=["']([^"']*)["']/i)?.[1] ?? "";
+  return [
+    ...rules
+      .filter(
+        (rule) =>
+          selectorTargetsElement(rule.selector, element) &&
+          (includeContexts || rule.contexts.length === 0),
+      )
+      .map((rule) => rule.decls),
+    inline,
+  ].join(";\n");
+}
+
+function declaredValue(declarations, property) {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [
+    ...declarations.matchAll(
+      new RegExp(`(?:^|[;{])\\s*${escaped}\\s*:\\s*([^;}]+)`, "gi"),
+    ),
+  ];
+  return matches.at(-1)?.[1].trim().toLowerCase() ?? null;
+}
+
+function hasValue(declarations, property, value) {
+  return declaredValue(declarations, property) === value.toLowerCase();
+}
+
+function isPrimaryAffordance(element) {
+  if (element.tag !== "a" && element.tag !== "button") return false;
+  if (
+    /\bdata-oa-primary(?:\s|>|=\s*["'](?:true|yes|1)["'])/i.test(
+      element.attributes,
+    )
+  ) {
+    return true;
+  }
+  const primaryClasses = new Set([
+    "cta",
+    "btn-primary",
+    "button-primary",
+    "primary-action",
+    "oa-primary-action",
+  ]);
+  return [...element.classes].some((className) =>
+    primaryClasses.has(className),
+  );
+}
+
+function hasUnconstrainedFractionTrack(declarations) {
+  const value = declaredValue(declarations, "grid-template-columns");
+  if (!value) return false;
+  const protectedTracks = value.replace(
+    /minmax\(\s*0\s*,\s*(?:\d+(?:\.\d+)?)?fr\s*\)/gi,
+    "",
+  );
+  return /(?:^|[\s,(])(?:\d+(?:\.\d+)?)?fr\b/i.test(protectedTracks);
+}
+
+function hasDisplaySize(declarations) {
+  const value = declaredValue(declarations, "font-size");
+  return value === "var(--text-display)" || value === "var(--text-4xl)";
+}
+
+function hasTopZero(declarations) {
+  const value = declaredValue(declarations, "top");
+  return value === "0" || value === "0px" || value === "0rem";
+}
+
+function isNarrowViewport(contexts) {
+  return contexts.some((context) => {
+    const maxWidth = /\bmax-width\s*:\s*(\d+(?:\.\d+)?)(px|rem|em)\b/i.exec(
+      context,
+    );
+    if (maxWidth) {
+      const value = Number(maxWidth[1]);
+      return maxWidth[2].toLowerCase() === "px" ? value <= 768 : value <= 48;
+    }
+    const range = /\bwidth\s*<=\s*(\d+(?:\.\d+)?)(px|rem|em)\b/i.exec(context);
+    if (!range) return false;
+    const value = Number(range[1]);
+    return range[2].toLowerCase() === "px" ? value <= 768 : value <= 48;
+  });
+}
+
+function isSingleColumnGrid(declarations) {
+  if (declaredValue(declarations, "display") === "block") return true;
+  const value = declaredValue(declarations, "grid-template-columns")?.replace(
+    /\s+/g,
+    "",
+  );
+  return [
+    "1fr",
+    "100%",
+    "minmax(0,1fr)",
+    "repeat(1,1fr)",
+    "repeat(1,minmax(0,1fr))",
+  ].includes(value);
+}
+
+function subtreeContent(body, element) {
+  return `${element.attributes}${elementContent(body, element)}`;
+}
+
+function hasFakeChrome(body, elements) {
+  const hasClass = (content, pattern) =>
+    [...content.matchAll(/\bclass=["']([^"']*)["']/gi)]
+      .flatMap((match) => match[1].split(/\s+/).filter(Boolean))
+      .some((token) => pattern.test(token));
+  return elements.some((element) => {
+    const content = subtreeContent(body, element);
+    return (
+      (hasClass(content, /(?:^|-)browser-(?:chrome|frame)$/i) &&
+        hasClass(content, /traffic-?lights?/i) &&
+        hasClass(content, /(?:url|address)-bar/i)) ||
+      (hasClass(content, /(?:^|-)(?:fake-)?(?:ide|editor)-chrome$/i) &&
+        hasClass(content, /activity-bar/i) &&
+        hasClass(content, /tab-bar/i)) ||
+      (hasClass(content, /(?:^|-)(?:fake-)?phone-frame$/i) &&
+        hasClass(content, /notch|speaker/i)) ||
+      (hasClass(content, /(?:^|-)terminal-chrome$/i) &&
+        hasClass(content, /traffic-?lights?/i))
+    );
+  });
+}
+
+function isAllowedColorValue(value) {
+  return (
+    value === "transparent" ||
+    value === "currentcolor" ||
+    /^var\(\s*--[\w-]+\s*\)$/i.test(value)
+  );
+}
+
+function hasRawVisualValue(declarations) {
+  const colorDeclarations = [
+    ...declarations.matchAll(
+      /(?:^|[;{])\s*(?:color|background(?:-color)?|border(?:-[\w-]+)?-color|outline-color|fill|stroke)\s*:\s*([^;}]+)/gi,
+    ),
+  ];
+  return colorDeclarations.some(
+    (match) => !isAllowedColorValue(match[1].trim().toLowerCase()),
+  );
+}
+
+function componentSelectors(selector) {
+  return selector
+    .split(",")
+    .map((part) => part.trim())
+    .filter(
+      (part) => part && !part.startsWith(":root") && !/[>\s+~:[\]]/.test(part),
+    );
+}
+
+function isTopNavigation(element) {
+  return (
+    element.tag === "nav" ||
+    /\brole=["']navigation["']/i.test(element.attributes) ||
+    [...element.classes].some((className) =>
+      /(?:^|[-_])nav(?:$|[-_])/i.test(className),
+    )
+  );
+}
+
+function isValidSecondaryStickyOffset(value) {
+  return (
+    value !== null &&
+    /calc\(/i.test(value) &&
+    /var\(\s*--oa-header-h\s*\)/i.test(value) &&
+    /var\(\s*--artifact-nav-h\s*\)/i.test(value)
+  );
+}
+
+function validateArtifactQuality(loaded, composed) {
+  const { artifact } = loaded.recipe;
+  if (artifact.format !== "html" || artifact.canvas) return;
+
+  const { body, elements } = bodyElements(composed.authoredBody);
+  const rules = collectStyleRules(composed.authoredStyles);
+  const headings = elements.filter((element) => /^h[1-6]$/.test(element.tag));
+
+  for (const heading of headings) {
+    const declarations = declarationsFor(heading, rules);
+    if (
+      hasDisplaySize(declarations) &&
+      hasValue(declarations, "font-style", "italic")
+    ) {
+      fail(
+        `quality profile: display headings use roman type — remove font-style:italic from ${heading.tag} or its heading class and express emphasis with weight, color, or an underline`,
+      );
+    }
+    if (
+      hasDisplaySize(declarations) &&
+      (!hasValue(declarations, "overflow-wrap", "anywhere") ||
+        !hasValue(declarations, "min-width", "0"))
+    ) {
+      fail(
+        `quality profile: display headings need overflow-wrap:anywhere and min-width:0 — ${heading.tag} can otherwise overflow on a narrow viewport`,
+      );
+    }
+  }
+
+  for (const affordance of elements.filter(isPrimaryAffordance)) {
+    if (
+      !hasValue(declarationsFor(affordance, rules), "white-space", "nowrap")
+    ) {
+      fail(
+        "quality profile: primary affordances must remain single-line — add white-space:nowrap and let the surrounding layout reflow or collapse",
+      );
+    }
+  }
+
+  for (const element of elements) {
+    const content = elementContent(body, element);
+    if (!/<(?:img|picture|video)\b/i.test(content)) continue;
+    const declarations = declarationsFor(element, rules);
+    if (
+      declaredValue(declarations, "display") === "grid" &&
+      hasUnconstrainedFractionTrack(declarations)
+    ) {
+      fail(
+        "quality profile: image-bearing fraction tracks use minmax(0, 1fr) — bare 1fr tracks retain intrinsic media widths and can overflow narrow viewports",
+      );
+    }
+  }
+
+  for (const sectionHead of elements.filter((element) =>
+    element.classes.has("oa-section-head"),
+  )) {
+    const content = elementContent(body, sectionHead);
+    if (
+      !/<h[1-6]\b/i.test(content) ||
+      !/\b(?:eyebrow|kicker|section-label)\b/i.test(content)
+    ) {
+      continue;
+    }
+    const desktopRules = rules.filter(
+      (rule) =>
+        selectorTargetsElement(rule.selector, sectionHead) &&
+        rule.contexts.length === 0,
+    );
+    const hasMultiColumnDesktop = desktopRules.some(
+      (rule) =>
+        declaredValue(rule.decls, "display") === "grid" &&
+        !isSingleColumnGrid(rule.decls),
+    );
+    if (!hasMultiColumnDesktop) continue;
+    const hasNarrowCollapse = rules.some(
+      (rule) =>
+        selectorTargetsElement(rule.selector, sectionHead) &&
+        isNarrowViewport(rule.contexts) &&
+        isSingleColumnGrid(rule.decls),
+    );
+    if (!hasNarrowCollapse) {
+      fail(
+        "quality profile: section head needs a mobile single-column layout — collapse .oa-section-head to grid-template-columns:1fr at or before 48rem",
+      );
+    }
+  }
+
+  const stickyElements = elements
+    .map((element) => ({
+      element,
+      declarations: declarationsFor(element, rules),
+    }))
+    .filter(
+      ({ declarations }) =>
+        declaredValue(declarations, "position") === "sticky",
+    );
+  const topNav = stickyElements.find(
+    ({ element, declarations }) =>
+      isTopNavigation(element) && hasTopZero(declarations),
+  );
+  if (topNav) {
+    for (const sticky of stickyElements) {
+      if (sticky.element === topNav.element) continue;
+      const top = declaredValue(sticky.declarations, "top");
+      if (
+        hasTopZero(sticky.declarations) ||
+        !isValidSecondaryStickyOffset(top)
+      ) {
+        fail(
+          "quality profile: secondary sticky element needs an offset below the top sticky nav — define --artifact-nav-h and set top:calc(var(--oa-header-h) + var(--artifact-nav-h))",
+        );
+      }
+    }
+  }
+
+  if (hasFakeChrome(body, elements)) {
+    fail(
+      "quality profile: the viewer owns browser chrome — omit fake browser, IDE, phone, and terminal frames; show real artifact content or a real user-supplied capture instead",
+    );
+  }
+
+  for (const rule of rules) {
+    for (const selector of componentSelectors(rule.selector)) {
+      if (hasRawVisualValue(rule.decls)) {
+        fail(
+          `quality profile: authored visual values belong in the theme token blocks — move the raw color in "${selector}" into :root or :root[data-theme="dark"] and reference it with var(...)`,
+        );
+      }
+      const font = declaredValue(rule.decls, "font-family");
+      if (
+        font &&
+        font !== "inherit" &&
+        !/^var\(\s*--font-(?:display|body|mono)\s*\)$/i.test(font)
+      ) {
+        fail(
+          `quality profile: authored font families belong in the theme token blocks — move the font declaration in "${selector}" into --font-display, --font-body, or --font-mono`,
+        );
+      }
+    }
+  }
 }
 
 // Rightmost tag/class of every authored rule that lays out a CENTERED flex row
@@ -1326,6 +1688,7 @@ export function validateBuild(loaded, composed) {
     validateOverflowAndSticky(composed.authoredStyles, composed.authoredBody);
     validateTropes(composed.authoredStyles);
     validateIconAlignment(composed.authoredBody, composed.authoredStyles);
+    validateArtifactQuality(loaded, composed);
     validateMeasureCap(loaded, composed);
     validateMermaidSyntax(composed.authoredBody);
     validateNoLangAttributes(composed.authoredBody);

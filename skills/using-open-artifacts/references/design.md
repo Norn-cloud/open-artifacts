@@ -180,7 +180,10 @@ Orthogonal to level, decide the register — it changes what "good" means:
    hardcoded values.
 5. **Run the ship gate — once, at the end.** The structural check, the P0
    checklist, and the five-dimension critique below. Fix what fails, re-score
-   once, publish. Do not loop on renders.
+   once, publish. Do not loop on renders. For a directed HTML Artifact, also
+   apply [quality.md](quality.md): its Design Brief precedes authoring, and its
+   Level 3 critique and viewport smoke check complement this gate without
+   changing the Recipe schema.
 
 ## The token contract
 
@@ -919,7 +922,10 @@ user JS (the per-request nonce is stamped on every user `<script>`).
   to supply unlayered `:root` and `:root[data-theme="dark"]` overrides
   in the theme fragment.
 - **Responsive, no horizontal body scroll** — wide content gets its own
-  `overflow-x: auto` container.
+  `overflow-x: auto` container. For a scrolling HTML Artifact with responsive
+  scope, run `node "$ARTIFACT_CLI" smoke <recipe>` before publishing; it renders
+  320 / 375 / 414 / 768px and detects horizontal scroll and heading overflow.
+  Canvas uses the distinct viewport and mobile-stacking checks in `canvas.md`.
 - **`artifact.title` names the artifact.** For Markdown, a leading
   `# Heading` is also accepted.
 - **Write fragments, not a document wrapper.** Body fragments cannot contain

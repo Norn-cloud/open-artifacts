@@ -47,6 +47,7 @@
       "properties": {
         "language": { "type": "string", "minLength": 1 },
         "theme": { "type": ["string", "null"], "minLength": 1 },
+        "referenceDna": { "type": ["string", "null"], "minLength": 1 },
         "fragments": {
           "type": "object",
           "additionalProperties": false,

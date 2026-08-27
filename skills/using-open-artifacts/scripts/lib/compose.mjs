@@ -145,6 +145,14 @@ export function composeRecipe(loaded, options = {}) {
       hash: sha256(content),
     });
   }
+  if (loaded.referenceDna) {
+    inputs.push({
+      path: loaded.referenceDna.projectPath,
+      slot: "reference-dna",
+      size: loaded.referenceDna.size,
+      hash: loaded.referenceDna.hash,
+    });
+  }
 
   const bodySource = joinParts(slots.body);
   const authoredStyles = joinParts([...slots.theme, ...slots.styles]);
@@ -215,6 +223,7 @@ export function composeRecipe(loaded, options = {}) {
     plan: {
       strategy: staged ? "staged" : "direct",
       fragments: inputs,
+      inputCount: inputs.length,
       aggregateBytes: loaded.aggregateBytes,
       frameCount,
       sectionCount,

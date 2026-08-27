@@ -119,6 +119,21 @@ The lightweight bookkeeping commands — `status`, `ack <id>`,
 `install-hook` — don't author content and can run directly; only the
 content-generation part of `create` and `update` benefits from isolation.
 
+## Optional reference DNA (agent-side only)
+
+When the user explicitly says **“study this as reference DNA for the artifact”**,
+**“use this design DNA”**, or asks to extract an Artifact direction from a
+screenshot or public URL, read [reference-dna.md](references/reference-dna.md)
+before authoring. A normal citation, source URL, or link collection does not
+trigger this workflow.
+
+For a URL, the parent conversation obtains the user's ownership/public-reference
+attestation before delegating a study task. The study task produces a diagnosis
+only; it never publishes or writes a sidecar without a later explicit adoption
+decision. The approved sidecar is a static Recipe input, is hashed and watched,
+and never appears in the Artifact body or runtime. Read
+[study.md](references/study.md) for source safety rules.
+
 ## How to design the page
 
 You are an expert designer producing design artifacts in HTML. **HTML is your
@@ -154,6 +169,18 @@ under the CSP (SVG charts/diagrams/typographic set-pieces instead of
 text-only slabs), a component contract written against tokens, the viewer
 frame specifics (sticky header height, theme stamping), and the ship gate
 run before every publish.
+
+**For an HTML Artifact with a visual direction, read
+[quality.md](references/quality.md) before writing fragments.** It supplies a
+format-aware Design Brief, a Level 3 critique, structural choices for
+brand-register artifacts, CSP-safe visual-material decisions, the build's
+static quality profile, and the `smoke` command for 320/375/414/768px
+rendering. Canvas remains governed by `canvas.md`; Markdown retains the
+viewer-owned `.oa-md` treatment. When a user explicitly asks to learn from a
+screenshot or URL, read [reference-dna.md](references/reference-dna.md) before
+inspecting the reference. It routes to [study.md](references/study.md) for
+source safety, keeps remote content untrusted and agent-side, and never puts a
+fetch or remote asset in an Artifact.
 
 ### Production level (1 / 2 / 3)
 
