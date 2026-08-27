@@ -249,7 +249,7 @@ function parseReferenceDna(raw) {
   if (!isObject(raw)) fail("reference DNA must be an object");
   rejectUnknown(
     raw,
-    new Set(["version", "provenance", "dna", "adaptation"]),
+    new Set(["$schema", "version", "provenance", "dna", "adaptation"]),
     "reference DNA",
   );
   requireKeys(
@@ -257,6 +257,9 @@ function parseReferenceDna(raw) {
     ["version", "provenance", "dna", "adaptation"],
     "reference DNA",
   );
+  if (raw.$schema !== undefined) {
+    requireString(raw.$schema, "reference DNA.$schema");
+  }
   if (raw.version !== 1) fail("reference DNA version must be 1");
   if (!isObject(raw.provenance))
     fail("reference DNA.provenance must be an object");

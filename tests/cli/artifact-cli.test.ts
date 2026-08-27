@@ -376,6 +376,8 @@ function writeReferenceDna(
   mkdirSync(directory, { recursive: true });
   const sourceMode = options.sourceMode ?? "url";
   const dna: Record<string, unknown> = {
+    $schema:
+      "../../../skills/using-open-artifacts/references/reference-dna.schema.json",
     version: 1,
     provenance: {
       sourceMode,
