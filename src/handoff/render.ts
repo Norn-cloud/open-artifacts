@@ -71,7 +71,22 @@ export function render(svgs: HandoffSvgs): string {
     var stop=dockBtn('oa-dock-btn--record', ${JSON.stringify(svgs.stop)}, 'Stop'); stop.onclick=stopRecord;
     // "Discard" (not "Cancel") + trash glyph: discards the recording, can't be
     // mistaken for "cancel blur" since Blur is its own accent-filled toggle.
-    var discard=dockBtn('oa-dock-btn--discard', ${JSON.stringify(svgs.discard)}, 'Discard', {title:'Discard this recording'}); discard.onclick=cancelRecord;
+    var discard=dockBtn('oa-dock-btn--discard', ${JSON.stringify(svgs.discard)}, 'Discard', {title:'Discard this recording'}); 
+    var discardArmed=false,discardTimer=null;
+    function armDiscard(){
+      if(discardArmed){cancelRecord();return}
+      discardArmed=true;discard.classList.add('oa-dock-btn--discard-armed');
+      discard.querySelector('.oa-dock-label').textContent='Confirm discard';
+      discard.title='Click again to discard this recording';
+      discardTimer=setTimeout(function(){disarmDiscard()},3000);
+    }
+    function disarmDiscard(){
+      discardArmed=false;discard.classList.remove('oa-dock-btn--discard-armed');
+      discard.querySelector('.oa-dock-label').textContent='Discard';
+      discard.title='Discard this recording';
+      if(discardTimer){clearTimeout(discardTimer);discardTimer=null}
+    }
+    discard.onclick=armDiscard;
     var micWrap=el('label','oa-handoff-mic'); micWrap.title='Microphone level';
     micWrap.setAttribute('aria-label','Microphone level');
     var meter=el('span','oa-handoff-mic-bar'); meter.id='oa-handoff-mic-bar';

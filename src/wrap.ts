@@ -246,6 +246,12 @@ img,video,canvas{max-width:100%}
 @media (max-width:30rem){.oa-version .oa-version-select,.oa-visibility .oa-visibility-select{max-width:5rem;padding-right:1.4rem}}
 .oa-version .oa-version-select:focus-visible,.oa-visibility .oa-visibility-select:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
 @media (hover:hover) and (pointer:fine){.oa-version .oa-version-select:hover,.oa-visibility .oa-visibility-select:hover{background-color:color-mix(in oklab,var(--oa-fg),transparent 92%)}}
+.oa-visibility-confirm{padding:.5rem;min-width:14rem;box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg),transparent 78%)}
+.oa-visibility-confirm-text{font-size:.75rem;line-height:1.4;color:var(--oa-fg);margin-bottom:.5rem; padding:0 .25rem}
+.oa-visibility-confirm button{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg);font:inherit;font-size:.8rem;cursor:pointer}
+.oa-visibility-confirm button:hover{background:color-mix(in oklab,var(--oa-fg),transparent 94%)}
+.oa-visibility-confirm button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-visibility-confirm .oa-cm-del{color:var(--oa-danger)}
 @media (max-width:52rem){
 .oa-header{gap:.75rem;padding-inline:.75rem}
 .oa-header .oa-header-title .oa-header-title-text{display:block;min-width:0}
@@ -274,6 +280,17 @@ const TOAST_CSS = `
 @keyframes oa-toast-in{from{opacity:0;transform:translateX(100%)}}
 @keyframes oa-toast-out{to{opacity:0;transform:translateX(100%)}}
 @media (prefers-reduced-motion:reduce){.oa-toast{animation:none}.oa-toast[data-removing]{opacity:.5}}
+.oa-toast-undo{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer}
+.oa-toast-undo-btn{flex-shrink:0;border:0;background:none;color:var(--oa-accent);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;padding:0;border-radius:4px}
+.oa-toast-undo-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-shortcut-sheet{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:color-mix(in oklab,var(--oa-fg),transparent 70%);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);font-family:var(--oa-font);outline:none}
+.oa-shortcut-sheet[hidden]{display:none}
+.oa-shortcut-sheet-inner{max-width:20rem;width:calc(100vw - 2rem);padding:1.25rem 1.5rem;border-radius:8px;background:var(--oa-bg);border:1px solid var(--oa-border);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 78%)}
+.oa-shortcut-sheet-title{margin:0 0 .75rem;font-size:.8rem;font-weight:600;color:var(--oa-fg)}
+.oa-shortcut-list{display:grid;grid-template-columns:auto 1fr;gap:.5rem .75rem;margin:0}
+.oa-shortcut-list dt{margin:0}
+.oa-shortcut-list dd{margin:0;font-size:.8rem;color:var(--oa-fg);display:flex;align-items:center}
+.oa-shortcut-list kbd{display:inline-flex;align-items:center;justify-content:center;min-width:1.5rem;height:1.5rem;padding:0 .35rem;border:1px solid var(--oa-border);border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.72rem;font-weight:600;line-height:1}
 `;
 
 const MARKDOWN_CSS = `
@@ -531,9 +548,9 @@ function headerHtml(
   // artifact id is available (the public 404/version pages have none). The
   // count badge reflects the serve-time-inlined thread.
   const comments = artifactId
-    ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span><span class="oa-header-action-label">Comments</span></button>`
+    ? `<button class="oa-cm-toggle" type="button" aria-label="Open comments" aria-expanded="false" aria-controls="oa-cm-drawer" aria-keyshortcuts="c" title="Comments (C)"${commentsCount > 0 ? ` data-count="${commentsCount}"` : ""}><span aria-hidden="true">${COMMENT_SVG}</span><span class="oa-cm-count" aria-hidden="true">${commentsCount}</span><span class="oa-header-action-label">Comments</span></button>`
     : "";
-  const theme = `<button id="oa-theme-toggle" type="button" aria-label="Toggle theme"><span class="oa-header-action-label">Theme</span></button>`;
+  const theme = `<button id="oa-theme-toggle" type="button" aria-label="Toggle theme" aria-keyshortcuts="t" title="Toggle theme (T)"><span class="oa-header-action-label">Theme</span></button>`;
   const picker =
     versions && currentVersion && url
       ? versionPickerHtml(versions, currentVersion, url)
@@ -545,7 +562,7 @@ function headerHtml(
   // write-gated server-side too; the button is just hidden for non-owners.
   const live =
     liveEnabled && canManage
-      ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span><span class="oa-live-connection" data-live-connection hidden>Connected</span></button>`
+      ? `<button class="oa-live-toggle" type="button" data-oa-header-secondary aria-label="Open live editor" aria-expanded="false" aria-controls="oa-live-root" aria-keyshortcuts="l" title="Live editor (L)"><span aria-hidden="true">${LIVE_SVG}</span><span class="oa-header-action-label">Live</span><span class="oa-live-connection" data-live-connection hidden>Connected</span></button>`
       : "";
   // The Handoff toggle opens the record/play dock. Record is owner-only
   // (write-gated server-side); Play is open to any viewer. The button is shown
@@ -556,7 +573,7 @@ function headerHtml(
   // Play-only affordance for non-owners when a handoff is inlined.
   const handoff =
     handoffEnabled && canManage
-      ? `<button class="oa-handoff-toggle" type="button" data-oa-header-secondary aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root"><span aria-hidden="true">${HANDOFF_SVG}</span><span class="oa-header-action-label">Handoff</span></button>`
+      ? `<button class="oa-handoff-toggle" type="button" data-oa-header-secondary aria-label="Open handoff recording" aria-expanded="false" aria-controls="oa-handoff-root" aria-keyshortcuts="h" title="Handoff recording (H)"><span aria-hidden="true">${HANDOFF_SVG}</span><span class="oa-header-action-label">Handoff</span></button>`
       : "";
   // Keep the service controls together, then place the account slot before
   // branding so the brand stays at the panel's far right edge.
@@ -672,8 +689,41 @@ const VISIBILITY_SCRIPT = `
   var id=window.__oaBridgeId;
   if(!id)return;
   var prev=sel.value;
-  sel.addEventListener('change',function(){
-    var next=sel.value;
+  var pendingNext=null;
+  // Confirm popover for public-exposure — reuses the dropdown-menu chrome.
+  var confirmPop=null;
+  function clearConfirm(){
+    if(confirmPop){confirmPop.remove();confirmPop=null}
+    document.removeEventListener('mousedown',outsideClick,true);
+  }
+  function outsideClick(e){
+    if(confirmPop&&confirmPop.contains(e.target))return;
+    if(sel.contains(e.target))return;
+    clearConfirm();sel.value=prev;
+  }
+  function showConfirm(next){
+    clearConfirm();
+    confirmPop=document.createElement('div');
+    confirmPop.className='oa-cm-menu oa-visibility-confirm';
+    confirmPop.setAttribute('role','dialog');
+    confirmPop.setAttribute('aria-label','Confirm public visibility');
+    confirmPop.innerHTML='<div class="oa-visibility-confirm-text">Make this artifact public? Anyone with the link can view it.</div>';
+    var yes=document.createElement('button');yes.type='button';yes.textContent='Make public';yes.className='oa-cm-del';
+    var no=document.createElement('button');no.type='button';no.textContent='Cancel';
+    yes.addEventListener('click',function(e){e.stopPropagation();clearConfirm();applyChange(next)});
+    no.addEventListener('click',function(e){e.stopPropagation();clearConfirm();sel.value=prev;sel.focus()});
+    confirmPop.appendChild(yes);confirmPop.appendChild(no);
+    // Position below the select.
+    var rect=sel.getBoundingClientRect();
+    confirmPop.style.position='fixed';
+    confirmPop.style.top=(rect.bottom+4)+'px';
+    confirmPop.style.left=rect.left+'px';
+    confirmPop.style.zIndex='2147483646';
+    document.body.appendChild(confirmPop);
+    document.addEventListener('mousedown',outsideClick,true);
+    yes.focus();
+  }
+  function applyChange(next){
     sel.disabled=true;
     sel.setAttribute('aria-busy','true');
     fetch('/api/artifacts/'+id,{method:'PATCH',headers:{'content-type':'application/json','X-OA-CSRF':'1'},body:JSON.stringify({visibility:next})})
@@ -689,6 +739,16 @@ const VISIBILITY_SCRIPT = `
         sel.disabled=false;
         sel.removeAttribute('aria-busy');
       });
+  }
+  sel.addEventListener('change',function(){
+    var next=sel.value;
+    // Gate public exposure: confirm when transitioning to public from a non-public state.
+    if(next==='public'&&prev!=='public'){
+      sel.value=prev;
+      showConfirm(next);
+      return;
+    }
+    applyChange(next);
   });
 })();
 `;
@@ -708,7 +768,7 @@ const THEME_SCRIPT = `
   function paint(){
     var t=root.getAttribute("data-theme");
     btn.innerHTML=(t==="dark"?${JSON.stringify(MOON_SVG)}:${JSON.stringify(SUN_SVG)})+'<span class="oa-header-action-label">Theme</span>';
-    btn.title="Theme: "+(t||"auto");
+    btn.title="Theme: "+(t||"auto")+" (T)";
     btn.setAttribute("aria-label",t==="dark"?"Switch to light theme":"Switch to dark theme");
   }
   btn.addEventListener("click",function(){
@@ -3474,7 +3534,7 @@ const HOST_UI_SCRIPT = `
   var nameEl=document.createElement("input");nameEl.type="text";nameEl.className="oa-cm-name";nameEl.placeholder="Your name (optional)";nameEl.setAttribute("aria-label","Your name");nameEl.setAttribute("hidden","");
   var row=document.createElement("div");row.className="oa-cm-row";
   var bodyEl=document.createElement("textarea");bodyEl.className="oa-cm-body";bodyEl.rows=1;bodyEl.placeholder="Add a comment";bodyEl.setAttribute("aria-label","Comment");
-  var sendBtn=document.createElement("button");sendBtn.type="button";sendBtn.className="oa-cm-send";sendBtn.setAttribute("aria-label","Post comment");sendBtn.innerHTML=${jsonForInlineScript(SEND_ARROW_SVG)};
+  var sendBtn=document.createElement("button");sendBtn.type="button";sendBtn.className="oa-cm-send";sendBtn.setAttribute("aria-label","Post comment");sendBtn.setAttribute("aria-disabled","true");sendBtn.innerHTML=${jsonForInlineScript(SEND_ARROW_SVG)};
   row.appendChild(bodyEl);row.appendChild(sendBtn);
   var errEl=document.createElement("div");errEl.className="oa-cm-err";errEl.setAttribute("role","alert");errEl.setAttribute("hidden","");
   pop.appendChild(nameEl);pop.appendChild(row);pop.appendChild(errEl);
@@ -3482,7 +3542,7 @@ const HOST_UI_SCRIPT = `
 
   var pending=null,posting=false;
   function autosize(){bodyEl.style.height="auto";bodyEl.style.height=Math.min(bodyEl.scrollHeight,128)+"px"}
-  function refreshSend(){if(bodyEl.value.trim())sendBtn.setAttribute("data-ready","");else sendBtn.removeAttribute("data-ready")}
+  function refreshSend(){var ready=!!bodyEl.value.trim();if(ready){sendBtn.setAttribute("data-ready","");sendBtn.setAttribute("aria-disabled","false")}else{sendBtn.removeAttribute("data-ready");sendBtn.setAttribute("aria-disabled","true")}}
   function clearErr(){errEl.textContent="";errEl.setAttribute("hidden","")}
   function closePop(){pop.setAttribute("hidden","");pending=null;bodyEl.value="";clearErr();autosize();refreshSend()}
   function openCompose(anchor,point){
@@ -3676,13 +3736,40 @@ const HOST_UI_SCRIPT = `
       });
   }
   function remove(id){var tok=deleteTokenFor(id);if(!tok)return;
-    fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
-      .then(function(r){
-        if(!r.ok){drawerErr(r.status===401||r.status===403
-          ?"Only the comment's author or the artifact owner can delete this."
-          :"Could not delete that comment.");return}
-        state=state.filter(function(c){return c.id!==id});dropToken(id);sync();
+    // Optimistic remove + undo toast: hide immediately, give 5s to undo.
+    var removed=state.filter(function(c){return c.id===id});
+    state=state.filter(function(c){return c.id!==id});sync();
+    var undone=false,timer=null;
+    // Build an undo toast using the existing toast container.
+    var tc=document.getElementById('oa-toast-container');
+    var toast=null;
+    if(tc){
+      toast=document.createElement('div');toast.className='oa-toast oa-toast-undo';
+      var msg=document.createElement('span');msg.textContent='Comment deleted';
+      var undoBtn=document.createElement('button');undoBtn.type='button';undoBtn.className='oa-toast-undo-btn';undoBtn.textContent='Undo';
+      undoBtn.addEventListener('click',function(e){
+        e.stopPropagation();undone=true;if(timer)clearTimeout(timer);
+        state=removed.concat(state);sync();
+        if(toast){toast.setAttribute('data-removing','');setTimeout(function(){toast.remove()},200)}
       });
+      toast.appendChild(msg);toast.appendChild(undoBtn);
+      tc.appendChild(toast);
+      toast.addEventListener('click',function(e){if(e.target===toast){undoBtn.click()}});
+    }
+    timer=setTimeout(function(){
+      if(undone)return;
+      if(toast){toast.setAttribute('data-removing','');setTimeout(function(){toast.remove()},200)}
+      fetch("/api/artifacts/"+ID+"/comments/"+id,{method:"DELETE",headers:{authorization:"Bearer "+tok}})
+        .then(function(r){
+          if(!r.ok){
+            // Restore on failure.
+            state=removed.concat(state);sync();dropToken(id);
+            drawerErr(r.status===401||r.status===403
+              ?"Only the comment's author or the artifact owner can delete this."
+              :"Could not delete that comment.");
+          }else{dropToken(id)}
+        });
+    },5000);
   }
   // Click-away closes any open menu. Triggers and menu interiors are exempt so
   // mousedown does not race the click handler that opens/acts on them.
@@ -3725,8 +3812,38 @@ const HOST_UI_SCRIPT = `
     }else if(e.key==="t"||e.key==="T"){
       var themeBtn=document.getElementById("oa-theme-toggle");
       if(themeBtn){e.preventDefault();themeBtn.click()}
+    }else if(e.key==="l"||e.key==="L"){
+      var liveBtn=document.querySelector('[aria-keyshortcuts="l"]');
+      if(liveBtn){e.preventDefault();(liveBtn).click()}
+    }else if(e.key==="h"||e.key==="H"){
+      var handoffBtn=document.querySelector('[aria-keyshortcuts="h"]');
+      if(handoffBtn){e.preventDefault();(handoffBtn).click()}
+    }else if(e.key==="?"||e.key==="/"){
+      e.preventDefault();toggleShortcutSheet();
     }
   });
+
+  // Shortcut sheet overlay — ? to toggle, Escape to close.
+  var sheet=document.createElement("div");
+  sheet.className="oa-shortcut-sheet";sheet.setAttribute("hidden","");
+  sheet.setAttribute("role","dialog");sheet.setAttribute("aria-label","Keyboard shortcuts");
+  sheet.innerHTML='<div class="oa-shortcut-sheet-inner">'+
+    '<h2 class="oa-shortcut-sheet-title">Keyboard shortcuts</h2>'+
+    '<dl class="oa-shortcut-list">'+
+    '<dt><kbd>C</kbd></dt><dd>Toggle comments</dd>'+
+    '<dt><kbd>T</kbd></dt><dd>Toggle theme</dd>'+
+    '<dt><kbd>L</kbd></dt><dd>Toggle live editor</dd>'+
+    '<dt><kbd>H</kbd></dt><dd>Toggle handoff recording</dd>'+
+    '<dt><kbd>?</kbd></dt><dd>Show this sheet</dd>'+
+    '<dt><kbd>Esc</kbd></dt><dd>Close sheet / drawer / dock</dd>'+
+    '</dl></div>';
+  document.body.appendChild(sheet);
+  function toggleShortcutSheet(){
+    if(sheet.hasAttribute("hidden")){sheet.removeAttribute("hidden");sheet.focus()}
+    else{sheet.setAttribute("hidden","")}
+  }
+  sheet.addEventListener("keydown",function(e){if(e.key==="Escape"||e.key==="?"||e.key==="/"){e.preventDefault();sheet.setAttribute("hidden","")}});
+  sheet.addEventListener("mousedown",function(e){if(e.target===sheet){sheet.setAttribute("hidden","")}});
 })();
 `;
 

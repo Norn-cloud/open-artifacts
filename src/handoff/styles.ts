@@ -121,7 +121,8 @@ export const HANDOFF_CSS = `
 /* Discard: danger on hover so it reads as "discard the recording". */
 .oa-dock-btn--discard{color:var(--oa-muted)}
 @media (hover:hover) and (pointer:fine){.oa-dock-btn--discard:hover{color:var(--oa-danger);background:color-mix(in oklab,var(--oa-danger),transparent 90%);border-color:color-mix(in oklab,var(--oa-danger),transparent 60%)}}
-/* Narrow viewport: collapse secondary control labels to icons-only so the
+/* Armed (two-click confirm): solid danger fill so the second click is deliberate. */
+.oa-dock-btn--discard-armed{color:#fff;background:var(--oa-danger);border-color:var(--oa-danger);opacity:1}/* Narrow viewport: collapse secondary control labels to icons-only so the
    row fits without clipping. The primary action keeps its label (it's the
    one that matters); secondary groups (Blur, Discard, speed, Exit) drop to
    icon + aria-label. */
