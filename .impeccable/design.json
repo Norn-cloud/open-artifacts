@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-27T00:00:00Z",
+  "generatedAt": "2026-08-27T10:00:00Z",
   "title": "Design System: Open Artifacts (service chrome)",
   "extensions": {
     "colorMeta": {
@@ -233,7 +233,9 @@
       { "name": "drawer", "value": "180ms ease", "purpose": "Comments drawer slide (translateX)." },
       { "name": "toast-in", "value": "200ms ease-out", "purpose": "Toast entrance animation." },
       { "name": "ease-standard", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Default easing for state transitions." },
-      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entrances and settle, from token contract." }
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entrances and settle, from token contract." },
+      { "name": "undo-bar", "value": "5s linear", "purpose": "Undo toast countdown bar depletes from 100% to 0% width; frozen at full width under prefers-reduced-motion." },
+      { "name": "loading-spin", "value": "0.8s linear infinite", "purpose": "Artifact load spinner rotation; frozen under prefers-reduced-motion." }
     ],
     "breakpoints": [
       { "name": "dock-label-collapse", "value": "380px", "purpose": "Dock secondary labels hide to icon-only so controls row fits." },
@@ -337,6 +339,38 @@
       "description": "Opt-in branded status page: near-black palette, dot-grid background with scrim, mono brand mark, bordered surface action link with accent hover.",
       "html": "<div class=\"ds-status-branded\"><div class=\"ds-status-brand\">CODA0</div><h1>Artifact not found</h1><p>The page you're looking for doesn't exist or has been removed.</p><a href=\"/\">Go to coda0</a></div>",
       "css": ".ds-status-branded{position:relative;isolation:isolate;background-color:#050505;background-image:radial-gradient(circle,#303030 0.7px,transparent 0.8px);background-size:18px 18px;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:2rem;text-align:center;color:#e5e5e5;font-family:system-ui,sans-serif}.ds-status-branded::before{position:absolute;inset:0;z-index:-1;background:linear-gradient(to bottom,transparent,rgba(5,5,5,.86) 74%);content:\"\";pointer-events:none}.ds-status-brand{margin-bottom:.35rem;color:#3c7bff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:9px;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase}.ds-status-branded h1{font-size:1.25rem;font-weight:600;letter-spacing:-.02em;margin:0}.ds-status-branded p{margin:0;max-width:28rem;color:#949494;font-size:.8rem;line-height:1.6}.ds-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid #1f1f1f;border-radius:6px;background:#0d0d0d;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.75rem;color:#e5e5e5;text-decoration:none}.ds-status-branded a:hover{border-color:#3c7bff;color:#3c7bff;text-decoration:none}"
+    },
+    {
+      "name": "Undo toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Toast variant with role=status, 5s depleting accent countdown bar, and Undo button. Click on toast body also triggers undo. DELETE fires only after the 5s window expires.",
+      "html": "<div class=\"ds-undo-toast\" role=\"status\"><span>Comment deleted</span><button class=\"ds-undo-btn\" type=\"button\">Undo</button><div class=\"ds-undo-bar\"></div></div>",
+      "css": ".ds-undo-toast{position:relative;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.75rem 1rem;border-radius:8px;background:var(--oa-bg,#fff);border:1px solid var(--oa-border,#e4e4e7);box-shadow:0 4px 16px -4px color-mix(in oklab,var(--oa-fg,#18181b),transparent 85%);font-size:.85rem;color:var(--oa-fg,#18181b);cursor:pointer;overflow:hidden}.ds-undo-btn{border:0;background:none;color:var(--oa-accent,#6457f0);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;padding:0;border-radius:4px}.ds-undo-btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-undo-bar{position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--oa-accent,#6457f0);border-radius:0 0 8px 8px;animation:ds-undo-bar 5s linear forwards}@keyframes ds-undo-bar{to{width:0%}}@media (prefers-reduced-motion:reduce){.ds-undo-bar{animation:none;width:100%}}"
+    },
+    {
+      "name": "Confirm popover",
+      "kind": "custom",
+      "refersTo": "dropdown-menu",
+      "description": "Viewport-clamped popover gating the visibility-to-public transition. Esc cancels and re-focuses the select; resize closes with revert; outside-click dismisses.",
+      "html": "<div class=\"ds-confirm\" role=\"dialog\" aria-label=\"Confirm visibility change\"><p class=\"ds-confirm-text\">Make this artifact public? Anyone with the link can view it.</p><div class=\"ds-confirm-actions\"><button class=\"ds-confirm-yes\" type=\"button\">Yes, make public</button><button class=\"ds-confirm-no\" type=\"button\">Cancel</button></div></div>",
+      "css": ".ds-confirm{min-width:14rem;padding:.75rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:8px;background:var(--oa-bg,#fff);box-shadow:0 4px 12px -2px color-mix(in oklab,var(--oa-fg,#18181b),transparent 78%);font-size:.8rem;color:var(--oa-fg,#18181b)}.ds-confirm-text{margin:0 0 .6rem;line-height:1.5}.ds-confirm-actions{display:flex;gap:.5rem;justify-content:flex-end}.ds-confirm-yes{border:0;border-radius:6px;padding:.3rem .6rem;background:var(--oa-accent,#6457f0);color:var(--oa-accent-on,#fff);font:inherit;font-size:.75rem;font-weight:600;cursor:pointer}.ds-confirm-yes:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-confirm-no{border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;padding:.3rem .6rem;background:var(--oa-bg,#fff);color:var(--oa-fg,#18181b);font:inherit;font-size:.75rem;cursor:pointer}.ds-confirm-no:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}"
+    },
+    {
+      "name": "Shortcut sheet",
+      "kind": "custom",
+      "refersTo": "sheet-container",
+      "description": "Modal overlay (role=dialog) listing all six keyboard shortcuts in a dl with focusable kbd elements. Tab/Shift+Tab focus trap; focus stored and restored on close. Escape, ?, or / closes.",
+      "html": "<div class=\"ds-shortcut-sheet\" role=\"dialog\" aria-label=\"Keyboard shortcuts\"><div class=\"ds-shortcut-inner\"><h2>Keyboard shortcuts</h2><dl class=\"ds-shortcut-list\"><dt><kbd tabindex=\"0\">C</kbd></dt><dd>Toggle comments</dd><dt><kbd tabindex=\"0\">T</kbd></dt><dd>Toggle theme</dd><dt><kbd tabindex=\"0\">?</kbd></dt><dd>Show this sheet</dd></dl></div></div>",
+      "css": ".ds-shortcut-sheet{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 70%);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);font-family:var(--oa-font,system-ui,sans-serif);outline:none}.ds-shortcut-inner{max-width:20rem;width:calc(100vw - 2rem);padding:1.25rem 1.5rem;border-radius:8px;background:var(--oa-bg,#fff);border:1px solid var(--oa-border,#e4e4e7);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg,#18181b),transparent 78%)}.ds-shortcut-inner h2{margin:0 0 .75rem;font-size:.8rem;font-weight:600;color:var(--oa-fg,#18181b)}.ds-shortcut-list{display:grid;grid-template-columns:auto 1fr;gap:.5rem .75rem;margin:0}.ds-shortcut-list dt{margin:0}.ds-shortcut-list dd{margin:0;font-size:.8rem;color:var(--oa-fg,#18181b);display:flex;align-items:center}.ds-shortcut-list kbd{display:inline-flex;align-items:center;justify-content:center;min-width:1.5rem;height:1.5rem;padding:0 .35rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:4px;background:var(--oa-surface,#f8f8f8);color:var(--oa-fg,#18181b);font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.72rem;font-weight:600;line-height:1}.ds-shortcut-list kbd:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}"
+    },
+    {
+      "name": "Loading spinner",
+      "kind": "custom",
+      "refersTo": "sheet-container",
+      "description": "20px accent-ringed spinner (role=status) centered on the sheet backdrop during artifact load. Cleared on data-ready. Reduced-motion freezes spin and uses muted ring.",
+      "html": "<div class=\"ds-loading\" role=\"status\" aria-label=\"Loading artifact\"><div class=\"ds-loading-spin\"></div></div>",
+      "css": ".ds-loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0}.ds-loading-spin{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg,#18181b),transparent 85%);border-top-color:var(--oa-accent,#6457f0);border-radius:50%;animation:ds-loading-spin .8s linear infinite}@keyframes ds-loading-spin{to{transform:rotate(360deg)}}@media (prefers-reduced-motion:reduce){.ds-loading-spin{animation:none;border-top-color:var(--oa-muted,#71717a)}}"
     }
   ],
   "narrative": {
@@ -348,7 +382,8 @@
       "28px hit targets, shadcn radii (6px controls, 4px menu items, 8px cards, 999px badges/avatar). Dock 14px is the sole earned exception.",
       "Ghost icon buttons (transparent, no border, muted-to-fg on hover).",
       "Chrome at rest is flat; floating elements use one soft drop shadow as a functional depth cue.",
-      "Keyboard-first: :focus-visible rings on every control, no animation on high-frequency actions."
+      "Keyboard-first: :focus-visible rings on every control, no animation on high-frequency actions.",
+      "44px touch targets on coarse pointers for all header ghost icon buttons; panel layout preserved on phones via combined media query."
     ],
     "rules": [
       { "name": "The One Accent Rule", "body": "Signal Indigo is the only interactive color. Danger is for destruction only. No second accent, no semantic red/yellow/green in chrome.", "section": "colors" },
@@ -356,7 +391,9 @@
       { "name": "The Flat-at-Rest Rule", "body": "Header bars, inline controls, sidebars, and panels remain flat at rest. Shadows appear only on floating/transient elements (docks, toasts, dropdowns, compose pill, camera bubble) that overlay the artifact. Even then, the shadow is a single soft offset, never a decorative halo or hard cast.", "section": "elevation" },
       { "name": "The Compact Radius Rule", "body": "Radii stay at 4-8px for controls and cards (plus 999px pill for badges/avatar/compose). The dock 14px and live-guide 10px are the sole exceptions, earned by the floating-pill posture. No 16px+ corners in chrome.", "section": "shapes" },
       { "name": "The One Family Rule", "body": "One font family in the chrome; no display face, no mono costume. Hierarchy is weight + size, not family contrast. Mono is a tool for measurement, not a voice.", "section": "typography" },
-      { "name": "The Dense Scale Rule", "body": "Chrome type stays at 0.72-0.8rem (9px for badges, 0.875rem for comment titles). The chrome never sets a heading above 0.875rem. The lone exception is the handoff countdown (7rem), a transient full-viewport overlay that is not chrome text.", "section": "typography" }
+      { "name": "The Dense Scale Rule", "body": "Chrome type stays at 0.72-0.8rem (9px for badges, 0.875rem for comment titles). The chrome never sets a heading above 0.875rem. The lone exception is the handoff countdown (7rem), a transient full-viewport overlay that is not chrome text.", "section": "typography" },
+      { "name": "The Honest Feedback Rule", "body": "Announce async state changes (copy success, agent presence, loading) via aria-live regions. Never fake success on clipboard failure; provide an execCommand fallback and announce the failure honestly.", "section": "components" },
+      { "name": "The Token-Only Color Rule", "body": "Use var(--oa-accent) for all colors in frame scripts, never hardcoded hex. Annotations and overlays must follow the artifact's theme in both light and dark.", "section": "colors" }
     ],
     "dos": [
       "Do use one accent (Signal Indigo) for every interactive/active state; danger only for destructive actions.",
@@ -365,14 +402,18 @@
       "Do let the chrome follow the artifact's palette via the --oa-* bridge; the service defaults are a fallback, not a fixed identity.",
       "Do support both themes on every chrome element.",
       "Do keep chrome at rest flat; use borders, surface lightness, and backdrop contrast for inline layering.",
-      "Do use a single soft drop shadow on floating/transient elements (docks, toasts, dropdowns, compose pill) that overlay the artifact; the shadow is a functional depth cue, one offset + one blur."
+      "Do use a single soft drop shadow on floating/transient elements (docks, toasts, dropdowns, compose pill) that overlay the artifact; the shadow is a functional depth cue, one offset + one blur.",
+      "Do provide 44px touch targets on coarse pointers; the header height is runtime-measured, so taller toggles grow the header automatically.",
+      "Do announce async state changes (copy success, agent presence, loading) via aria-live regions so AT users get the same feedback as sighted users."
     ],
     "donts": [
       "Don't add elevation shadows to inline chrome (header, drawer, panels, controls); shadows are for floating elements only.",
       "Don't introduce a second accent or decorative semantic colors in chrome.",
       "Don't hand-override --oa-* tokens in artifact theme fragments - the bridge already mirrors the artifact identity.",
       "Don't animate high-frequency actions (toggles, presses); motion is .15s for feedback, .18s for drawer slide, and .2s for toast entrance, nothing more.",
-      "Don't invent new chrome control patterns - reuse the ghost icon-button for header controls and the dock-button for dock controls; the chrome's consistency is its identity."
+      "Don't invent new chrome control patterns - reuse the ghost icon-button for header controls and the dock-button for dock controls; the chrome's consistency is its identity.",
+      "Don't use hardcoded colors in frame scripts; use var(--oa-accent) so annotations and overlays follow the artifact's theme in both light and dark.",
+      "Don't fake success on clipboard failure; provide an execCommand fallback and announce the failure honestly via aria-live."
     ]
   }
 }

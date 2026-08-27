@@ -296,6 +296,12 @@ that is not chrome text.
   action disappears. The drawer goes full-width below its max-width. At
   `380px` dock secondary labels collapse to icon-only so the controls row fits
   without clipping.
+- Touch targets: `@media (pointer:coarse)` enlarges all header ghost icon
+  buttons to 44×44px (WCAG 2.5.5). A combined `@media (pointer:coarse) and
+  (max-width:52rem)` restores full-width More panel rows at 44px height on
+  phones, so the coarse-pointer square doesn't collapse the panel layout.
+  `LAYOUT_SCRIPT` measures the header's actual height into `--oa-header-h`,
+  so the taller toggles grow the header automatically on touch devices.
 
 ## Elevation & Depth
 
@@ -385,7 +391,9 @@ lifts to 100% with a fg tint), **primary** (`--oa-accent` fill,
 **record** (`--oa-danger` fill, white text). Active/pressed state tints toward
 accent (`accent-soft` fill, accent border at 60% opacity, accent text). The
 Blur toggle fills solid `--oa-accent` when pressed. The Discard button rests in
-`--oa-muted` and shifts to `--oa-danger` on hover. Icons are `14×14`; labels
+`--oa-muted` and shifts to `--oa-danger` on hover. A two-click confirm arms on
+the first click (label swaps to "Confirm discard", danger fill) with a 4s
+auto-disarm timeout; the second click commits. Icons are `14×14`; labels
 are `white-space: nowrap` and hide on secondary controls below `380px`.
 
 ### Header
@@ -448,10 +456,39 @@ soft drop shadow. `0.85rem` body text. Error toasts tint border + background
 toward `--oa-danger`; success toasts tint toward `--oa-accent`. Slides in with
 `.2s` ease-out. Stacked top-right below the header.
 
+**Undo toast variant:** `role="status"` for AT announcement. A 2px accent
+countdown bar (`@keyframes oa-toast-undo-bar`, 5s linear, width 100% → 0%)
+depletes along the bottom edge so the countdown is perceptible, not invisible.
+`prefers-reduced-motion` freezes the bar at full width. Clicking the toast body
+(not just the Undo button) triggers the undo. The actual DELETE fetch fires only
+after the 5s window expires without an undo.
+
 ### Dropdown menu
 Flat menu container: `6px` radius, 1px `--oa-border`, `--oa-bg` background, soft
 drop shadow. Items are `4px` radius, `0.8rem`, hover-tinted background. The
 destructive item (delete) is `--oa-danger` text.
+
+### Confirm popover
+A viewport-clamped popover that gates the visibility-to-public transition:
+`8px` radius, `--oa-bg` background, 1px `--oa-border`, soft drop shadow, `14rem`
+min-width. Position is clamped to `max(8, min(rect.left, innerWidth - popWidth - 8))`
+so it never clips off-screen. Escape cancels and re-focuses the select; a
+`resize` listener closes the popover and reverts the select value (position is
+captured at open time). Outside-click dismisses with revert.
+
+### Shortcut sheet
+A modal overlay (`role="dialog"`, `aria-label="Keyboard shortcuts"`) listing all
+six shortcuts (C, T, L, H, ?, Esc) in a `<dl>` with focusable `<kbd tabindex="0">`
+elements. Tab/Shift+Tab cycles between the first and last kbd (focus trap).
+Opening stores `document.activeElement` and restores focus on close. Escape, `?`,
+or `/` closes the sheet; backdrop mousedown also closes. `8px` inner card radius,
+`20rem` max-width, centered with a `blur(2px)` backdrop scrim.
+
+### Loading spinner
+A `20px` accent-ringed spinner (`role="status"`, `aria-label="Loading artifact"`)
+centered on the sheet backdrop during artifact load. Cleared when the frame
+reports `data-ready`. `prefers-reduced-motion` freezes the spin and uses
+`--oa-muted` for the ring instead of `--oa-accent`.
 
 ### Live / Handoff docks
 Bottom-center floating pills with `14px` radius, hairline border
@@ -516,6 +553,10 @@ invalid-version pages when the host configures it.
 - **Do** use a single soft drop shadow on floating/transient elements (docks,
   toasts, dropdowns, compose pill) that overlay the artifact; the shadow is a
   functional depth cue, one offset + one blur.
+- **Do** provide 44px touch targets on coarse pointers; the header height is
+  runtime-measured, so taller toggles grow the header automatically.
+- **Do** announce async state changes (copy success, agent presence, loading)
+  via `aria-live` regions so AT users get the same feedback as sighted users.
 
 ### Don't
 - **Don't** add elevation shadows to inline chrome (header, drawer, panels,
@@ -529,3 +570,7 @@ invalid-version pages when the host configures it.
 - **Don't** invent new chrome control patterns - reuse the ghost icon-button
   for header controls and the dock-button for dock controls; the chrome's
   consistency is its identity.
+- **Don't** use hardcoded colors in frame scripts; use `var(--oa-accent)` so
+  annotations and overlays follow the artifact's theme in both light and dark.
+- **Don't** fake success on clipboard failure; provide an `execCommand` fallback
+  and announce the failure honestly via `aria-live`.
