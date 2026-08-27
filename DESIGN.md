@@ -11,11 +11,21 @@ colors:
   accent-on: "#ffffff"
   danger: "#b42318"
 typography:
+  display:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: "2rem"
+    fontWeight: 600
+    lineHeight: 1.2
+  headline:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 600
+    lineHeight: 1.3
   title:
     fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
-    fontSize: "0.8rem"
+    fontSize: "0.875rem"
     fontWeight: 600
-    lineHeight: 1.5
+    lineHeight: 1.4
   body:
     fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"
     fontSize: "0.8rem"
@@ -71,6 +81,11 @@ components:
     textColor: "{colors.fg}"
     rounded: "{rounded.avatar}"
     size: "28px"
+  sheet-container:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.item}"
+    padding: "{spacing.md}"
 ---
 
 # Design System: Open Artifacts (service chrome)
@@ -184,7 +199,16 @@ artifact, not the frame.
 - Drawers (comments) are `position: fixed`, top at `var(--oa-header-h)`, right
   edge, `max-width: 23rem`, sliding via `transform: translateX(100%)` ->
   `translateX(0)` over `.18s`.
-- The artifact frame fills the viewport below the header.
+- The artifact frame is positioned below the sticky header. Inside the
+  sandboxed frame, the document presents as a sheet on a quiet backdrop: the
+  root paints a token-derived backdrop tone (`--oa-shell-backdrop`), and the
+  body carries the artifact as a rounded (8px), 1px-bordered surface inset by
+  `--oa-shell-gap` (0.75rem desktop, 0.5rem at ≤52rem). Authored `position:sticky`
+  bars are re-pinned to the sheet's inner top edge so they clear the backdrop gap.
+  The window remains the scroll container so handoff scroll playback is
+  preserved. Canvas-mode artifacts (`.oa-plane` with a transform) detect the
+  mode before first paint and stamp `data-shell="flat"`, restoring the
+  full-bleed plane the spatial runtime owns.
 - z-index scale: drawer `2147483645` < header `2147483646`. No arbitrary `999`.
 - Responsive: at `52rem` and below, favicon + truncated title, comment actions,
   and theme remain inline. Version, visibility, brand, Live, Handoff, and
@@ -288,6 +312,15 @@ position at `t=0`, so playback resets to the recorded viewport before its first
 animation frame. Re-recording keeps stable R2 keys, so playback appends the
 handoff `createdAt` as a media/events revision and bypasses the browser cache;
 event replay waits for media metadata before it advances the artifact.
+
+### Artifact Sheet Container
+The tactile container for artifact documents: `8px` radius (`{rounded.item}`),
+1px `--oa-border` boundary, inset from the iframe viewport by `--oa-shell-gap`
+(`0.75rem` desktop, `0.5rem` mobile) on a token-derived `--oa-shell-backdrop`
+(`color-mix(var(--oa-surface), var(--oa-fg) 3%)`). Synchronously detects
+spatial canvas modes (`.oa-plane` with transform) and applies `data-shell="flat"`
+to bypass the inset for infinite viewports. Authored sticky headers automatically
+re-pin to `var(--oa-shell-gap)` so the backdrop gap remains unobstructed.
 
 ## Do's and Don'ts
 

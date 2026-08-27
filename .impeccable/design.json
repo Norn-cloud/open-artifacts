@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-27T05:39:45Z",
+  "generatedAt": "2026-08-26T12:33:30Z",
   "title": "Design System: Open Artifacts (service chrome)",
   "extensions": {
     "colorMeta": {
@@ -9,6 +9,8 @@
         "displayName": "Signal Indigo",
         "canonical": "#6457f0",
         "tonalRamp": [
+          "#6457f0",
+          "#8d82f5",
           "oklch(20% 0.10 280)",
           "oklch(30% 0.15 280)",
           "oklch(40% 0.18 280)",
@@ -39,6 +41,10 @@
         "displayName": "Surface",
         "canonical": "#f8f8f8",
         "tonalRamp": [
+          "#f8f8f8",
+          "#f1f1f3",
+          "#1c1c21",
+          "#232329",
           "oklch(20% 0.004 280)",
           "oklch(35% 0.004 280)",
           "oklch(50% 0.004 280)",
@@ -99,6 +105,8 @@
         "displayName": "Danger",
         "canonical": "#b42318",
         "tonalRamp": [
+          "#b42318",
+          "#ff8f85",
           "oklch(20% 0.10 25)",
           "oklch(30% 0.14 25)",
           "oklch(40% 0.16 25)",
@@ -111,11 +119,13 @@
       }
     },
     "typographyMeta": {
-      "title": { "displayName": "Title", "purpose": "Header title, drawer headings." },
-      "body": { "displayName": "Body", "purpose": "Header running text." },
-      "label": { "displayName": "Label", "purpose": "Select options, secondary controls." },
-      "caption": { "displayName": "Caption", "purpose": "Comment bylines, tags, metadata." },
-      "micro": { "displayName": "Micro", "purpose": "Count badges only." }
+      "display": { "displayName": "Display", "purpose": "Unlock card emoji/hero display type (2rem)." },
+      "headline": { "displayName": "Headline", "purpose": "Standalone status and unlock headings (1.25rem)." },
+      "title": { "displayName": "Title", "purpose": "Header title, drawer headings, card titles (0.875rem)." },
+      "body": { "displayName": "Body", "purpose": "Header running text, card descriptions (0.8rem)." },
+      "label": { "displayName": "Label", "purpose": "Select options, form labels, secondary controls (0.75rem)." },
+      "caption": { "displayName": "Caption", "purpose": "Comment bylines, tags, metadata (0.72rem)." },
+      "micro": { "displayName": "Micro", "purpose": "Count badges and micro badges only (9px)." }
     },
     "shadows": [
       { "name": "focus-ring", "value": "0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)", "purpose": "Accessibility outline rendered outside :focus-visible controls; not elevation." }
@@ -127,7 +137,8 @@
       { "name": "ease-standard", "value": "cubic-bezier(0.2, 0, 0, 1)", "purpose": "Default easing for state transitions." }
     ],
     "breakpoints": [
-      { "name": "narrow", "value": "30rem", "purpose": "Hide brand text + account name; selects cap at 5rem; drawer goes full-width." }
+      { "name": "narrow", "value": "30rem", "purpose": "Hide brand text + account name; selects cap at 5rem; drawer goes full-width." },
+      { "name": "compact", "value": "52rem", "purpose": "Secondary controls collapse into More panel; sheet margin drops to 0.5rem." }
     ]
   },
   "components": [
@@ -178,6 +189,14 @@
       "description": "Flat dropdown menu: 6px radius, 1px boundary, and 4px (rounded-sm) items with hover tint. Destructive item in danger.",
       "html": "<div class=\"ds-menu\"><button class=\"ds-menu-item\">Edit</button><button class=\"ds-menu-item\">Resolve</button><button class=\"ds-menu-item ds-menu-danger\">Delete</button></div>",
       "css": ".ds-menu{min-width:7.5rem;padding:.25rem;border:1px solid var(--oa-border,#e4e4e7);border-radius:6px;background:var(--oa-bg,#fff)}.ds-menu-item{display:block;width:100%;text-align:left;padding:.375rem .5rem;border:0;border-radius:4px;background:none;color:var(--oa-fg,#18181b);font:inherit;font-size:.8rem;cursor:pointer;transition:background .12s}.ds-menu-item:hover{background:color-mix(in oklab,var(--oa-fg,#18181b),transparent 94%)}.ds-menu-item:focus-visible{outline:none;box-shadow:0 0 0 2px var(--oa-bg,#fff),0 0 0 4px var(--oa-accent,#6457f0)}.ds-menu-danger{color:var(--oa-danger,#b42318)}"
+    },
+    {
+      "name": "Artifact Sheet Container",
+      "kind": "custom",
+      "refersTo": "sheet-container",
+      "description": "The tactile container for artifact documents: 8px radius, 1px border, inset on a quiet backdrop with sticky re-pin and automatic canvas flat bypass.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-sheet-inner\"><h1>Document Title</h1><p>Artifact content presents as a clean sheet on a token-derived backdrop.</p></div></div>",
+      "css": ".ds-sheet{box-sizing:border-box;padding:12px;background:color-mix(in oklab,var(--oa-surface,#f8f8f8),var(--oa-fg,#18181b) 3%);min-height:180px;display:flex;align-items:stretch}.ds-sheet-inner{flex:1;background:var(--oa-bg,#fff);border:1px solid var(--oa-border,#e4e4e7);border-radius:8px;padding:24px;color:var(--oa-fg,#18181b)}.ds-sheet-inner h1{font-size:1.25rem;font-weight:600;margin:0 0 8px;line-height:1.3}.ds-sheet-inner p{font-size:.8rem;color:var(--oa-muted,#71717a);margin:0;line-height:1.5}"
     }
   ],
   "narrative": {
