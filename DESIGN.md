@@ -4,11 +4,17 @@ description: Quiet systems-grade viewer chrome - one accent, both themes, Figma/
 colors:
   bg: "#ffffff"
   surface: "#f8f8f8"
+  surface-2: "#f1f1f3"
   fg: "#18181b"
+  fg-2: "#3f3f46"
   muted: "#71717a"
   border: "#e4e4e7"
+  border-strong: "#d4d4d8"
   accent: "#6457f0"
   accent-on: "#ffffff"
+  accent-hover: "color-mix(in oklab, #6457f0, #18181b 8%)"
+  accent-active: "color-mix(in oklab, #6457f0, #18181b 14%)"
+  accent-soft: "color-mix(in oklab, #6457f0, transparent 88%)"
   danger: "#b42318"
 typography:
   display:
@@ -46,12 +52,19 @@ typography:
     fontSize: "9px"
     fontWeight: 600
     lineHeight: 1
+  mono:
+    fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace"
+    fontSize: "0.75rem"
+    fontWeight: 400
+    lineHeight: 1.45
 rounded:
   button: "6px"
   menu: "4px"
   item: "8px"
   badge: "999px"
   avatar: "50%"
+  dock: "14px"
+  guide: "10px"
 spacing:
   xs: "0.375rem"
   sm: "0.6rem"
@@ -81,6 +94,34 @@ components:
     textColor: "{colors.fg}"
     rounded: "{rounded.avatar}"
     size: "28px"
+  dock-btn:
+    backgroundColor: "transparent"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.button}"
+    height: "30px"
+  dock-btn-primary:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.accent-on}"
+    rounded: "{rounded.button}"
+    height: "30px"
+  dock-btn-active:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.accent}"
+    rounded: "{rounded.button}"
+    height: "30px"
+  toast:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.item}"
+    padding: "0.75rem 1rem"
+  compose-pill:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.badge}"
+  dropdown-menu:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.button}"
   sheet-container:
     backgroundColor: "{colors.bg}"
     textColor: "{colors.fg}"
@@ -116,9 +157,10 @@ structural - sizes, radii, spacing, states, focus - carried by a small set of
   reads in light and dark.
 - 28px hit targets, shadcn-aligned radii (6px controls, 4px menu items, 8px
   cards, 999px badges/avatar) - a console, not soft UI.
-- Ghost icon buttons (transparent, no border, muted-to-fg on hover); every
-  chrome surface stays flat and separates with borders, tint, or backdrop
-  contrast instead of elevation effects.
+- Ghost icon buttons (transparent, no border, muted-to-fg on hover); chrome at
+  rest stays flat and separates with borders, tint, or backdrop contrast.
+  Floating/transient elements (docks, toasts, dropdowns, compose pill) use
+  subtle drop shadows to separate from the artifact beneath.
 - Keyboard-first: `:focus-visible` rings on every control, no animation on
   high-frequency actions.
 
@@ -132,23 +174,39 @@ and a lightness staircase for depth.
 - **Signal Indigo** (`#6457f0` light, `#8d82f5` dark): the single interactive
   color. Active toggle states, count badges, focus-ring outer, links, the
   comment "done" check. Carries ≤10% of any chrome view.
+- **Accent Hover** (`color-mix(in oklab, var(--accent), var(--fg) 8%)`): the
+  hover state for primary dock buttons and accent-filled controls.
+- **Accent Active** (`color-mix(in oklab, var(--accent), var(--fg) 14%)`): the
+  pressed/active state for primary dock buttons.
+- **Accent Soft** (`color-mix(in oklab, var(--accent), transparent 88%)`): the
+  tinted fill for pressed dock buttons, chip highlights, and chart areas.
 
 ### Semantic
 - **Danger** (`#b42318` light, `#ff8f85` dark): destructive actions only - the
-  delete-handoff button, error callouts. Never an action color for non-destructive
-  controls.
+  delete-handoff button, record button, error callouts, error toasts. Never an
+  action color for non-destructive controls.
+- **Success** and **Warn** exist in the token contract for artifacts but are
+  deliberately excluded from chrome; semantic state lives in the artifact, not
+  the frame.
 
 ### Neutral (light)
 - **BG** (`#ffffff`): page and drawer floor.
-- **Surface** (`#f8f8f8`): toggle/select fills, comment-item cards.
+- **Surface** (`#f8f8f8`): toggle/select fills, comment-item cards, dock panels.
+- **Surface-2** (`#f1f1f3`): second elevation step, used on the landing page for
+  derived tiers and method badges. Derived from `--surface` toward `--fg` (4%).
 - **FG** (`#18181b`): primary text and icon color.
+- **FG-2** (`#3f3f46`): secondary text on the landing page (lead paragraphs, path
+  cells). A lighter step below `--fg` for de-emphasized content.
 - **Muted** (`#71717a`): bylines, labels, and the rest-state icon color on ghost buttons (hover lifts to `--oa-fg`).
 - **Border** (`#e4e4e7`): 1px hairlines on every control and divider.
+- **Border Strong** (`#d4d4d8`): a darker hairline for hover states on bordered
+  controls (the copy button on the landing page).
 
 ### Neutral (dark)
-- **BG** (`#131316`), **Surface** (`#1c1c21`), **FG** (`#e7e7ea`), **Muted**
-  (`#9a9aa2`), **Border** (`#2e2e33`). Depth comes from surface lightness
-  (`#131316` -> `#1c1c21`), not shadows.
+- **BG** (`#131316`), **Surface** (`#1c1c21`), **Surface-2** (`#232329`), **FG**
+  (`#e7e7ea`), **FG-2** (`#c4c4ca`), **Muted** (`#9a9aa2`), **Border**
+  (`#2e2e33`), **Border Strong** (`#3a3a41`). Depth comes from surface lightness
+  (`#131316` -> `#1c1c21` -> `#232329`), not shadows.
 
 ### Named Rules
 **The One Accent Rule.** Signal Indigo is the only interactive color. Danger is
@@ -161,6 +219,7 @@ is a fixed 6px amber dot (`oklch(77% 0.13 82)`, 1.4s pulse, static under
 live editor is built from. It is the ONLY semantic color in the chrome and
 means exactly one thing (agent watcher offline); it never carries interactive
 state — the toggle stays a normal button.
+
 **The Bridge Rule.** The chrome reads `--oa-*`, which the token contract mirrors
 from the artifact's identity tokens. Never hand-override `--oa-*` in an artifact
 theme fragment - the bridge already covers it, and overriding breaks the
@@ -172,24 +231,43 @@ theme fragment - the bridge already covers it, and overriding breaks the
 default; the `OA_FONT` env var can replace it on a branded deploy. One family
 across the entire chrome.
 
+**Mono Font:** `--oa-font-mono` - `ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+Consolas, monospace`. Used only for measurement: dock timers, timecodes, speed
+selectors, and the live-guide text area. Never a costume for "technical" -
+mono earns its place by displaying numbers and code.
+
 **Character:** A single neutral grotesk at small, dense sizes. The chrome is
 read at arm's length while the user works - hierarchy comes from weight and
 size steps within one family, never from a second face. Numerics in counts and
 timestamps use `tabular-nums`.
 
 ### Hierarchy
-- **Title** (600, 0.8rem, 1.5): header title, drawer headings.
-- **Body** (400, 0.8rem, 1.5): header running text.
-- **Label** (400, 0.75rem, 1.4): select options, secondary controls.
-- **Caption** (400, 0.72rem, 1.4): comment bylines, tags, metadata.
+- **Display** (600, 2rem, 1.2): landing-page hero title only. Never appears in
+  the viewer chrome.
+- **Headline** (600, 1.25rem, 1.3): standalone status and unlock-card headings.
+  The largest type inside the viewer; used for full-page messages, not in-chrome
+  controls.
+- **Title** (600, 0.875rem, 1.35): comment-item titles, feature-card titles,
+  drawer count badge. The header title uses 0.8rem/600/1.5 (a body-weight
+  variant) so it aligns with the header's 0.8rem running text.
+- **Body** (400, 0.8rem, 1.5): header running text, card descriptions, dock
+  labels, live-guide body.
+- **Label** (400, 0.75rem, 1.4): select options, form labels, secondary controls,
+  brand chip, account chip.
+- **Caption** (400, 0.72rem, 1.4): comment bylines, tags, metadata, status
+  cluster text, dock timer/timecode.
 - **Micro** (600, 9px, 1): count badges only.
 
 ### Named Rules
 **The One Family Rule.** One font family in the chrome; no display face, no
-mono costume. Hierarchy is weight + size, not family contrast.
-**The Dense Scale Rule.** Chrome type stays at 0.72-0.8rem (9px for badges).
-The chrome never sets a heading above 0.875rem - larger type belongs to the
-artifact, not the frame.
+mono costume. Hierarchy is weight + size, not family contrast. Mono is a
+tool for measurement, not a voice.
+
+**The Dense Scale Rule.** Chrome type stays at 0.72-0.8rem (9px for badges,
+0.875rem for comment titles). The chrome never sets a heading above 0.875rem -
+larger type belongs to the artifact, not the frame. The lone exception is the
+handoff countdown (7rem, mono, 300-weight), a transient full-viewport overlay
+that is not chrome text.
 
 ## Layout
 
@@ -209,21 +287,48 @@ artifact, not the frame.
   preserved. Canvas-mode artifacts (`.oa-plane` with a transform) detect the
   mode before first paint and stamp `data-shell="flat"`, restoring the
   full-bleed plane the spatial runtime owns.
-- z-index scale: drawer `2147483645` < header `2147483646`. No arbitrary `999`.
+- z-index scale: comment pin `2147483643` < handoff cursor `2147483644` < drawer
+  and docks `2147483645` < header and compose `2147483646` < toast `2147483647` <
+  countdown `2147483647`. No arbitrary `999`.
 - Responsive: at `52rem` and below, favicon + truncated title, comment actions,
   and theme remain inline. Version, visibility, brand, Live, Handoff, and
   account controls move into a fixed More panel below the measured header; no
-  action disappears. The drawer goes full-width below its max-width.
+  action disappears. The drawer goes full-width below its max-width. At
+  `380px` dock secondary labels collapse to icon-only so the controls row fits
+  without clipping.
 
 ## Elevation & Depth
 
-No elevation shadows. Every service-chrome surface, including sidebars,
-dropdowns, compose surfaces, toasts, and dock bars, separates with a 1px
-`--oa-border` edge, a `--oa-surface` lightness step, or backdrop contrast. The
-comments drawer uses its left border as the only boundary against the artifact.
-The header's `backdrop-filter: blur(10px)` communicates overlap while content
-scrolls beneath it; it does not imply raised geometry. Dark-theme depth remains
-a lightness staircase (`#131316` -> `#1c1c21`).
+Chrome at rest is flat. The header, comments drawer, More panel, and inline
+controls separate with a 1px `--oa-border` edge, a `--oa-surface` lightness
+step, or backdrop contrast - never shadows. The comments drawer uses its left
+border as the only boundary against the artifact. The header's
+`backdrop-filter: blur(10px)` communicates overlap while content scrolls beneath
+it; it does not imply raised geometry. Dark-theme depth remains a lightness
+staircase (`#131316` -> `#1c1c21` -> `#232329`).
+
+Floating and transient elements use subtle drop shadows to separate from the
+artifact beneath, because they have no border-only relationship to the content
+they overlay. The shadow vocabulary is restrained: one offset, one soft blur,
+fg-tinted at low opacity. These are functional depth cues, not decoration.
+
+### Shadow Vocabulary
+- **Dock** (`0 8px 32px -4px color-mix(in oklab, var(--oa-fg), transparent 86%),
+  0 1px 0 0 color-mix(in oklab, var(--oa-fg), transparent 92%) inset`): the
+  live and handoff dock bars. The inset top edge reads as a catch-light.
+- **Floating status** (`0 6px 24px -4px color-mix(in oklab, var(--oa-fg),
+  transparent 88%)`): the handoff status pill and live action-bar row.
+- **Toast** (`0 4px 16px -4px color-mix(in oklab, var(--oa-fg), transparent 85%)`):
+  transient notifications. Error toasts replace the shadow with a danger-tinted
+  border + danger-tinted background.
+- **Compose pill** (`0 4px 16px -4px color-mix(in oklab, var(--oa-fg),
+  transparent 75%)`): the floating comment compose surface. Stronger opacity
+  because it sits over varied artifact content.
+- **Dropdown / menu** (`0 4px 12px -2px color-mix(in oklab, var(--oa-fg),
+  transparent 78%)`): comment more-menu, account menu, filter menu.
+- **Camera bubble** (`0 8px 24px -6px color-mix(in oklab, var(--oa-fg),
+  transparent 78%), 0 0 0 1px color-mix(in oklab, var(--oa-bg), transparent 20%)`):
+  the handoff webcam preview. The ring is a bg-tinted edge, not elevation.
 
 ### Focus Treatment
 - **Focus ring** (`box-shadow: 0 0 0 2px var(--oa-bg), 0 0 0 4px var(--oa-accent)`):
@@ -231,21 +336,31 @@ a lightness staircase (`#131316` -> `#1c1c21`).
   on any surface. It is applied only on `:focus-visible` and is not elevation.
 
 ### Named Rules
-**The Flat Chrome Rule.** Header bars, controls, sidebars, menus, popovers,
-toasts, and dock bars remain flat. Use boundaries and tonal contrast to express
-layering; never add decorative elevation effects.
+**The Flat-at-Rest Rule.** Header bars, inline controls, sidebars, and panels
+remain flat at rest. Use boundaries and tonal contrast to express layering.
+Shadows appear only on floating/transient elements (docks, toasts, dropdowns,
+compose pill, camera bubble) that overlay the artifact and have no border-only
+relationship to the content beneath. Even then, the shadow is a single soft
+offset, never a decorative halo or hard cast.
 
 ## Shapes
 
-Compact, shadcn-aligned radii. `6px` (rounded-md) for icon buttons, selects, and
-menu containers; `4px` (rounded-sm) for menu items; `8px` (rounded-lg) for
-comment-item cards; `999px` (full) for the count badge, avatar, and the compose
-pill. No large radii; the chrome is a tool, not a soft consumer surface.
+Compact, shadcn-aligned radii. `6px` (rounded-md) for icon buttons, selects,
+dock buttons, and menu containers; `4px` (rounded-sm) for menu items; `8px`
+(rounded-lg) for comment-item cards, toasts, and the sheet container; `999px`
+(full) for the count badge, avatar, and the compose pill. The live and handoff
+docks use `14px` - a deliberate exception that gives the floating pills a
+softer silhouette against the artifact. The live-guide panel uses `10px`,
+between the dock and the card scale. A `2px` micro-radius appears on the
+scrubber track and mic-level bar (4px-tall functional elements where 6px would
+round the entire height).
 
 ### Named Rules
 **The Compact Radius Rule.** Radii stay at 4-8px for controls and cards (plus
-the `999px` pill for badges/avatar/compose). No `12px+` corners in chrome. The
-radius scale is `--oa-*`-aware but does not shift between themes.
+the `999px` pill for badges/avatar/compose). The dock `14px` and live-guide
+`10px` are the sole exceptions, earned by the floating-pill posture. No `16px+`
+corners in chrome. The radius scale is `--oa-*`-aware but does not shift between
+themes.
 
 ## Components
 
@@ -260,6 +375,18 @@ area (`inset: -6px`). `:focus-visible` shows the focus ring; `:active` shifts
 or `[aria-pressed="true"]` colors the icon `--oa-accent` and tints the background
 toward the accent (`color-mix(in oklab, var(--oa-accent), transparent 88%)`).
 SVG icons are `16×16`, `display: block`, centered.
+
+### Dock button
+The control vocabulary inside live and handoff docks. `30px` height, `6px`
+radius, transparent background, `--oa-fg` text at `opacity:.85`, `0 .6rem`
+padding. Three variants: **default** (ghost, `--oa-fg` at 85% opacity, hover
+lifts to 100% with a fg tint), **primary** (`--oa-accent` fill,
+`--oa-accent-on` text, 600 weight, hover darkens via `accent-hover`), and
+**record** (`--oa-danger` fill, white text). Active/pressed state tints toward
+accent (`accent-soft` fill, accent border at 60% opacity, accent text). The
+Blur toggle fills solid `--oa-accent` when pressed. The Discard button rests in
+`--oa-muted` and shifts to `--oa-danger` on hover. Icons are `14×14`; labels
+are `white-space: nowrap` and hide on secondary controls below `380px`.
 
 ### Header
 Sticky, backdrop-blurred, 2.5rem tall. The favicon + title leads from the left;
@@ -287,6 +414,26 @@ hover background tint, avatar + title (`0.875rem`/600) + byline (`0.72rem`
 muted). Done state strikes through and dims the avatar. Dropdown menus (more,
 filter) are shadcn-style: `6px` radius, 1px border, `4px` items with hover tint.
 
+### Compose pill
+The floating comment compose surface: `999px` radius (full pill),
+`--oa-bg` background, 1px `--oa-border`-with-fg-tint border, and a soft drop
+shadow (`0 4px 16px -4px ...`) because it overlays varied artifact content. The
+textarea inside is borderless and transparent; `:focus-within` shifts the pill
+border to `--oa-accent`. The send button is a `32px` circle, muted at rest,
+accent-filled when `[data-ready]`.
+
+### Comment selection toolbar
+A floating toolbar that appears when the user selects text inside a canvas
+artifact: `6px` radius, 1px border with fg tint, `--oa-bg` background, 600-weight
+`0.78rem` label, accent-tinted on hover. Positioned at the selection anchor with
+`transform: translate(-50%, .4rem)`.
+
+### Comment pin
+A teardrop-shaped location pin for canvas comments: `18px`, `border-radius:
+50% 50% 50% 2px` (round head, pointed tail), `--oa-accent` fill, 1.5px
+`--oa-bg` border. Sits at the pinned coordinates, inverse-scaled against the
+canvas transform.
+
 ### Avatar
 `28px` circle, `--oa-fg`-tinted fill (`color-mix(in oklab, var(--oa-fg), transparent 90%)`),
 initials uppercase `0.75rem`/600.
@@ -295,9 +442,25 @@ initials uppercase `0.75rem`/600.
 `--oa-accent` fill, `--oa-accent-on` text, `9px`/600, `999px` radius (rounded-full),
 pinned top-right of its toggle. Hidden unless `[data-count]` is set.
 
+### Toast
+Transient notification: `8px` radius, `--oa-bg` background, 1px `--oa-border`,
+soft drop shadow. `0.85rem` body text. Error toasts tint border + background
+toward `--oa-danger`; success toasts tint toward `--oa-accent`. Slides in with
+`.2s` ease-out. Stacked top-right below the header.
+
+### Dropdown menu
+Flat menu container: `6px` radius, 1px `--oa-border`, `--oa-bg` background, soft
+drop shadow. Items are `4px` radius, `0.8rem`, hover-tinted background. The
+destructive item (delete) is `--oa-danger` text.
+
 ### Live / Handoff docks
-Bottom-center pills that inherit the icon-button vocabulary for their controls
-and the drawer's surface/border tokens for their panels. They are mutually
+Bottom-center floating pills with `14px` radius, hairline border
+(`color-mix(in oklab, var(--oa-border), var(--oa-fg) 4%)`), near-opaque
+`--oa-bg` panel (`color-mix(in oklab, var(--oa-bg), transparent 4%)`), and
+`backdrop-filter: blur(14px) saturate(120%)`. The dock shadow
+(`0 8px 32px -4px ...` with an inset top catch-light) separates the bar from
+the artifact beneath. Controls use the dock-button vocabulary; mono is used
+only for the timer, timecode, and speed selector. The two docks are mutually
 exclusive (opening one closes the other) - a state rule, not a visual one.
 The circular camera preview captures one primary pointer for each drag and keeps
 that pointer bound to the overlay where the gesture began. Drag translation and
@@ -322,6 +485,18 @@ spatial canvas modes (`.oa-plane` with transform) and applies `data-shell="flat"
 to bypass the inset for infinite viewports. Authored sticky headers automatically
 re-pin to `var(--oa-shell-gap)` so the backdrop gap remains unobstructed.
 
+### Dark-console status page
+An opt-in branded status page theme (`BRAND_STATUS_THEME="dark-console"`):
+overrides the chrome tokens with a near-black palette (`--oa-bg: #050505`,
+`--oa-surface: #0d0d0d`, `--oa-fg: #e5e5e5`, `--oa-muted: #949494`,
+`--oa-border: #1f1f1f`, `--oa-accent: #3c7bff`, `--oa-accent-on: #050505`).
+A dot-grid background (`radial-gradient(circle, #303030 0.7px, transparent 0.8px)`,
+18px grid) with a bottom-fade scrim. The brand mark is 9px mono, uppercase,
+accent-colored, letter-spaced `0.12em`. The action link is a bordered surface
+pill with mono text, accent on hover. No header or theme toggle - the reset's
+`prefers-color-scheme` handles the base. Used only on missing-artifact and
+invalid-version pages when the host configures it.
+
 ## Do's and Don'ts
 
 ### Do
@@ -330,21 +505,27 @@ re-pin to `var(--oa-shell-gap)` so the backdrop gap remains unobstructed.
 - **Do** ship visible `:focus-visible` rings on every
   control; keyboard is first-class.
 - **Do** keep hit targets at 28px and radii aligned (6px controls, 4px menu
-  items, 8px cards, 999px badges/avatar/compose).
+  items, 8px cards, 999px badges/avatar/compose). The dock 14px is the sole
+  earned exception.
 - **Do** let the chrome follow the artifact's palette via the `--oa-*` bridge;
   the service defaults are a fallback, not a fixed identity.
 - **Do** support both themes on every chrome element; the viewer stamps
   `data-theme` and the toggle must win over `prefers-color-scheme`.
-- **Do** separate overlapping chrome with borders, surface lightness, and
-  backdrop contrast; keep sidebars visibly bounded without artificial lift.
+- **Do** keep chrome at rest flat; use borders, surface lightness, and backdrop
+  contrast for inline layering.
+- **Do** use a single soft drop shadow on floating/transient elements (docks,
+  toasts, dropdowns, compose pill) that overlay the artifact; the shadow is a
+  functional depth cue, one offset + one blur.
 
 ### Don't
-- **Don't** add elevation shadows to controls, sidebars, menus, popovers,
-  toasts, or docks; the service chrome stays flat.
+- **Don't** add elevation shadows to inline chrome (header, drawer, panels,
+  controls); shadows are for floating elements only.
 - **Don't** introduce a second accent or decorative semantic colors in chrome.
 - **Don't** hand-override `--oa-*` tokens in artifact theme fragments - the
   bridge already mirrors the artifact identity.
 - **Don't** animate high-frequency actions (toggles, presses); motion is
-  `.15s` for feedback and `.18s` for drawer slide, nothing more.
-- **Don't** invent new chrome control patterns - reuse the ghost icon-button;
-  the chrome's consistency is its identity.
+  `.15s` for feedback, `.18s` for drawer slide, and `.2s` for toast entrance,
+  nothing more.
+- **Don't** invent new chrome control patterns - reuse the ghost icon-button
+  for header controls and the dock-button for dock controls; the chrome's
+  consistency is its identity.
