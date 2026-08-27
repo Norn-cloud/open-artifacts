@@ -305,7 +305,7 @@ const COMMENTS_CSS = `
 .oa-cm-drawer .oa-cm-head h2{flex:1;display:flex;align-items:baseline;gap:.4rem;margin:0;font-size:.8rem;font-weight:600;letter-spacing:-.01em;color:var(--oa-fg)}
 .oa-cm-drawer .oa-cm-head-count{display:none;padding:.05rem .35rem;border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-size:.72rem;font-weight:600;font-variant-numeric:tabular-nums}
 .oa-cm-drawer .oa-cm-head-count[data-count]{display:inline-block}
-.oa-cm-drawer .oa-cm-close{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-muted);font-size:15px;line-height:1;cursor:pointer;transition:color .15s,background .15s}
+.oa-cm-drawer .oa-cm-close{position:relative;width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--oa-muted);font-size:.875rem;line-height:1;cursor:pointer;transition:color .15s,background .15s}
 .oa-cm-drawer .oa-cm-close:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-cm-drawer .oa-cm-close:active{transform:translateY(1px)}
 @media (hover:hover) and (pointer:fine){.oa-cm-drawer .oa-cm-close:hover{color:var(--oa-fg);background:color-mix(in oklab,var(--oa-fg),transparent 90%)}}
@@ -968,7 +968,8 @@ const LIVE_CSS = `
 // frame's top edge at the viewport top, sliding it under the header instead
 // of starting beneath it.
 const HOST_FRAME_CSS = `
-#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0}
+#oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0;opacity:0;transition:opacity .15s ease}
+#oa-frame[data-ready]{opacity:1}
 `;
 
 // Account chip in the coda0 service header: provider avatar (with a name-initial
@@ -1108,11 +1109,12 @@ document.getElementById("oa-content").innerHTML=marked.parse(${jsonForInlineScri
 <head>
 <meta charset="utf-8">
 ${cspMeta}<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
+<style>${RESET_CSS}${format === "markdown" ? MARKDOWN_CSS : ""}${FRAME_SHELL_CSS}${FRAME_ANCHOR_CSS}${FRAME_TEXT_CSS}</style>
 </head>
 <body>
 ${body}
 <script nonce="${nonce}">${THEME_SCRIPT}</script>
+<script nonce="${nonce}">${FRAME_SHELL_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_BRIDGE_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_ANCHOR_SCRIPT}</script>
 <script nonce="${nonce}">${FRAME_TEXT_SCRIPT}</script>
@@ -2432,7 +2434,13 @@ const COMMENTS_SCRIPT = `
     open();
   });
   if(closeBtn)closeBtn.addEventListener('click',shut);
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&drawer.hasAttribute('data-open'))shut()});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'&&drawer.hasAttribute('data-open')){
+      var textarea=drawer.querySelector('textarea');
+      if(textarea&&textarea.value&&textarea.value.trim().length>0)return;
+      shut();
+    }
+  });
 })();
 `;
 
@@ -2938,7 +2946,7 @@ export const FRAME_HANDOFF_PLAY_SCRIPT = `
   if(!window.__oaSend)return;
   var events=[], cursor=null, raf=0, offset=0, lastResume=0, playing=false, idx=0;
   var st=document.createElement('style');
-  st.textContent='#oa-handoff-cursor{position:fixed;top:0;left:0;width:16px;height:16px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--oa-accent,#6457f0);border:2px solid var(--oa-accent-on,#fff);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-accent,#6457f0),transparent 65%),0 2px 6px rgba(0,0,0,.3);pointer-events:none;z-index:2147483644;will-change:transform} .oa-handoff-ripple{position:fixed;border-radius:50%;border:2px solid var(--oa-accent,#6457f0);pointer-events:none;z-index:2147483643;animation:oa-handoff-ripple .6s ease-out forwards} @keyframes oa-handoff-ripple{0%{transform:scale(.5);opacity:.85}100%{transform:scale(2.4);opacity:0}} html.oa-handoff-recording{box-shadow:inset 0 3px 0 0 var(--oa-danger,#b42318)}';
+  st.textContent='#oa-handoff-cursor{position:fixed;top:0;left:0;width:16px;height:16px;margin:-2px 0 0 -2px;border-radius:50%;background:var(--oa-accent,#6457f0);border:2px solid var(--oa-accent-on,#fff);box-shadow:0 0 0 2px color-mix(in oklab,var(--oa-accent,#6457f0),transparent 65%),0 2px 6px color-mix(in oklab,var(--oa-fg,#18181b),transparent 70%);pointer-events:none;z-index:2147483644;will-change:transform} .oa-handoff-ripple{position:fixed;border-radius:50%;border:2px solid var(--oa-accent,#6457f0);pointer-events:none;z-index:2147483643;animation:oa-handoff-ripple .6s ease-out forwards} @keyframes oa-handoff-ripple{0%{transform:scale(.5);opacity:.85}100%{transform:scale(2.4);opacity:0}} html.oa-handoff-recording{box-shadow:inset 0 3px 0 0 var(--oa-danger,#b42318)}';
   (document.head||document.documentElement).appendChild(st);
   function mkCursor(){ if(cursor)return; cursor=document.createElement('div'); cursor.id='oa-handoff-cursor'; document.body.appendChild(cursor); }
   function ripple(x,y){ var r=document.createElement('div'); r.className='oa-handoff-ripple'; r.style.left=(x-12)+'px'; r.style.top=(y-12)+'px'; r.style.width='24px'; r.style.height='24px'; document.body.appendChild(r); setTimeout(function(){ if(r.parentNode)r.parentNode.removeChild(r); },650); }
@@ -3050,6 +3058,47 @@ const FRAME_ANCHOR_CSS = `
 /* Comment tool armed (canvas): a Figma-style comment marker replaces the pan
    cursor, its tail as the hotspot so the pin lands where the tip points. */
 html.oa-cm-arming,html.oa-cm-arming *{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='27' height='27' viewBox='-2 -2 28 28'%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23fff' stroke-width='6' stroke-linejoin='round'/%3E%3Cpath d='M4 18V10a8 8 0 0 1 8-8 8 8 0 0 1 8 8 8 8 0 0 1-8 8H4z' fill='%23fff' stroke='%23000' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E") 6 19,crosshair !important}
+`;
+
+// The artifact presents as a sheet on a quiet backdrop inside the frame: the
+// root paints a token-derived backdrop tone and the body carries the artifact
+// as a rounded, hairline-bordered surface inset from the frame viewport. The
+// window stays the scroll container — the handoff record/play shim drives
+// window.scrollTo — so authored position:sticky bars are re-pinned to the
+// sheet's inner top edge by FRAME_SHELL_SCRIPT instead. Canvas-mode artifacts
+// opt out: the frame detects the transformed .oa-plane before first paint (the
+// same signal the comments bridge uses) and stamps data-shell="flat",
+// restoring the full-bleed plane the canvas runtime owns.
+const FRAME_SHELL_CSS = `
+:root{--oa-shell-gap:.75rem;--oa-shell-radius:8px;--oa-shell-backdrop:color-mix(in oklab,var(--oa-surface),var(--oa-fg) 3%)}
+html{background:var(--oa-shell-backdrop)}
+body{margin:var(--oa-shell-gap);background:var(--oa-bg);border:1px solid var(--oa-border);border-radius:var(--oa-shell-radius);min-height:calc(100dvh - 2*var(--oa-shell-gap) - 2px)}
+html[data-shell="flat"]{background:var(--oa-bg)}
+html[data-shell="flat"] body{margin:0;border:0;border-radius:0;min-height:100dvh}
+@media (max-width:52rem){body{margin:.5rem}html[data-shell="flat"] body{margin:0}}
+`;
+
+// Runs before first paint (synchronous, parser-inserted after the content):
+// canvas detection stamps the flat opt-out; otherwise the sticky walk mirrors
+// the host LAYOUT_SCRIPT contract — only authored sticky bars pinned at 0/auto
+// move, an authored top value is respected. React content mounts after this
+// walk, matching the host script's one-shot behavior.
+const FRAME_SHELL_SCRIPT = `
+(function(){
+  var root=document.documentElement;
+  var plane=document.querySelector('.oa-plane');
+  if(plane&&getComputedStyle(plane).transform!=='none'){root.setAttribute('data-shell','flat');return}
+  var stack=[];
+  for(var i=0;i<document.body.children.length;i++)stack.push(document.body.children[i]);
+  while(stack.length){
+    var node=stack.pop();
+    if(node.nodeType!==1)continue;
+    var cs=getComputedStyle(node);
+    if(cs.position==='sticky'&&(cs.top==='0px'||cs.top==='auto'))node.style.top='var(--oa-shell-gap)';
+    var ch=node.children;
+    for(var j=0;j<ch.length;j++)stack.push(ch[j]);
+  }
+})();
 `;
 
 // Frame side, canvas mode: capture a click to drop a pin (world coords, read
@@ -3661,6 +3710,23 @@ const HOST_UI_SCRIPT = `
   // Delete control (the server can't know which delete tokens we hold), and
   // sync the badge to the filtered view this render actually produced.
   renderList();bumpCount();
+
+  // Frame ready transition & global shortcuts
+  function markReady(){frame.setAttribute("data-ready","")}
+  frame.addEventListener("load",markReady);
+  if(frame.contentDocument&&frame.contentDocument.readyState==="complete")markReady();
+  setTimeout(markReady,400);
+
+  document.addEventListener("keydown",function(e){
+    if(e.target&&(/^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName)||e.target.isContentEditable))return;
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    if(e.key==="c"||e.key==="C"){
+      if(toggle){e.preventDefault();toggle.click()}
+    }else if(e.key==="t"||e.key==="T"){
+      var themeBtn=document.getElementById("oa-theme-toggle");
+      if(themeBtn){e.preventDefault();themeBtn.click()}
+    }
+  });
 })();
 `;
 
@@ -3668,18 +3734,18 @@ const CONTENT_SLOT = "__OA_CONTENT_SLOT__";
 
 const UNLOCK_CSS = `
 .oa-unlock{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1.25rem}
-.oa-card{width:100%;max-width:22rem;border:1px solid var(--oa-border);border-radius:12px;padding:2rem;background:var(--oa-surface)}
+.oa-card{width:100%;max-width:22rem;border:1px solid var(--oa-border);border-radius:8px;padding:2rem;background:var(--oa-surface)}
 .oa-card .oa-emoji{font-size:2rem;line-height:1;margin-bottom:.6rem}
-.oa-card h1{font-size:1.1rem;line-height:1.3;margin:0 0 .3rem}
-.oa-card p{margin:0 0 1.35rem;color:var(--oa-muted);font-size:.9rem;line-height:1.55}
-.oa-label{display:block;margin:0 0 .4rem;color:var(--oa-fg);font-size:.875rem;font-weight:600}
-.oa-card input{width:100%;min-height:44px;padding:.6rem .75rem;border:1px solid var(--oa-border);border-radius:8px;background:var(--oa-bg);color:var(--oa-fg);font-size:1rem;transition:border-color .15s,box-shadow .15s}
+.oa-card h1{font-size:1.25rem;line-height:1.3;margin:0 0 .3rem}
+.oa-card p{margin:0 0 1.35rem;color:var(--oa-muted);font-size:.8rem;line-height:1.55}
+.oa-label{display:block;margin:0 0 .4rem;color:var(--oa-fg);font-size:.75rem;font-weight:600}
+.oa-card input{width:100%;min-height:44px;padding:.6rem .75rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-bg);color:var(--oa-fg);font-size:.875rem;transition:border-color .15s,box-shadow .15s}
 .oa-card input:focus-visible{outline:none;border-color:var(--oa-accent);box-shadow:var(--oa-focus-ring)}
-.oa-card button{width:100%;min-height:44px;margin-top:.8rem;padding:.6rem .75rem;border:none;border-radius:8px;background:var(--oa-fg);color:var(--oa-bg);font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
+.oa-card button{width:100%;min-height:44px;margin-top:.8rem;padding:.6rem .75rem;border:none;border-radius:6px;background:var(--oa-fg);color:var(--oa-bg);font-size:.875rem;font-weight:600;cursor:pointer;transition:background .15s,box-shadow .15s,opacity .15s}
 .oa-card button:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 .oa-card button:active:not(:disabled){transform:translateY(1px)}
 .oa-card button:disabled{opacity:.6;cursor:wait}
-.oa-error{color:var(--oa-danger);font-size:.85rem;font-weight:500;min-height:1.2em;margin-top:.7rem}
+.oa-error{color:var(--oa-danger);font-size:.8rem;font-weight:500;min-height:1.2em;margin-top:.7rem}
 @media (hover:hover) and (pointer:fine){.oa-card button:hover:not(:disabled){background:color-mix(in oklab,var(--oa-fg),var(--oa-bg) 14%)}}
 #oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;border:0;display:none}
 `;
@@ -3924,10 +3990,10 @@ ${commentsDataScript(commentsList)}
 const STATUS_CSS = `
 .oa-status{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:2rem;text-align:center}
 .oa-status .oa-mark{width:38px;height:38px;color:var(--oa-accent);margin-bottom:.75rem}
-.oa-status h1{font-size:1.15rem;line-height:1.3;margin:0;color:var(--oa-fg)}
-.oa-status p{margin:0;max-width:28rem;color:var(--oa-muted);font-size:.925rem;line-height:1.6}
+.oa-status h1{font-size:1.25rem;line-height:1.3;margin:0;color:var(--oa-fg)}
+.oa-status p{margin:0;max-width:28rem;color:var(--oa-muted);font-size:.8rem;line-height:1.6}
 .oa-status code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;background:var(--oa-surface);border:1px solid var(--oa-border);border-radius:4px;padding:.05em .3em}
-.oa-status a{margin-top:1rem;color:var(--oa-accent);font-size:.875rem;text-decoration:none}
+.oa-status a{margin-top:1rem;color:var(--oa-accent);font-size:.75rem;text-decoration:none}
 .oa-status a:hover{text-decoration:underline;text-underline-offset:2px}
 .oa-status a:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 `;
@@ -3937,9 +4003,9 @@ const DARK_CONSOLE_STATUS_CSS = `
 .oa-status-branded{position:relative;isolation:isolate;background-color:var(--oa-bg);background-image:radial-gradient(circle,#303030 0.7px,transparent 0.8px);background-size:18px 18px}
 .oa-status-branded::before{position:absolute;inset:0;z-index:-1;background:linear-gradient(to bottom,transparent,rgba(5,5,5,.86) 74%);content:"";pointer-events:none}
 .oa-status-branded .oa-mark{width:32px;height:32px;margin-bottom:1rem}
-.oa-status-branded .oa-status-brand{margin-bottom:.35rem;color:var(--oa-accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.625rem;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase}
+.oa-status-branded .oa-status-brand{margin-bottom:.35rem;color:var(--oa-accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:9px;font-weight:500;letter-spacing:.12em;line-height:1.5;text-transform:uppercase}
 .oa-status-branded h1{font-family:var(--oa-font);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
-.oa-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:3px;background:var(--oa-surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;color:var(--oa-fg)}
+.oa-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;color:var(--oa-fg)}
 .oa-status-branded a:hover{border-color:var(--oa-accent);color:var(--oa-accent);text-decoration:none}
 `;
 
