@@ -22,6 +22,30 @@ Feature: View an artifact
     Then the page responds to prefers-color-scheme
     And a data-theme attribute on the root element overrides the OS scheme
 
+  Scenario: The artifact presents as a sheet on a quiet backdrop
+    Given a published HTML artifact
+    When I GET /a/:id/frame
+    Then the frame root paints a themed backdrop tone derived from the surface token
+    And the body presents the artifact as a rounded, hairline-bordered sheet inset from the frame viewport
+    And the window stays the scroll container so recorded handoff scroll keeps working
+
+  Scenario: Canvas artifacts keep the full-bleed plane
+    Given a published canvas artifact whose plane carries a transform
+    When I GET /a/:id/frame
+    Then the frame detects the canvas mode before first paint
+    And the sheet inset is removed so the plane owns the full frame viewport
+
+  Scenario: Authored sticky headers pin inside the sheet edge
+    Given a published HTML artifact whose own CSS pins a sticky header at the viewport top
+    When I GET /a/:id/frame
+    Then the frame re-pins the sticky header below the sheet's top inset
+
+  Scenario: The host page itself stays full-bleed behind the frame
+    Given a published HTML artifact
+    When I GET /a/:id
+    Then the host page carries no sheet presentation of its own
+    And the artifact frame keeps its fixed full-bleed positioning below the header
+
   Scenario: Service header chrome is isolated from author CSS
     Given a published HTML artifact whose own CSS styles the ".oa-title" class
     When I GET /a/:id
