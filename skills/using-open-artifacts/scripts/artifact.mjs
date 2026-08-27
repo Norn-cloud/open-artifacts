@@ -17,6 +17,7 @@ import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
+import { runArtifactQualitySmoke } from "./artifact-quality-smoke.mjs";
 import {
   buildArtifactRecipe,
   recipeBuildSummary,
@@ -1085,6 +1086,28 @@ function commandBuild(recipePath, flags) {
   );
 }
 
+async function commandSmoke(recipePath) {
+  const result = buildArtifactRecipe(
+    resolve(PROJECT_ROOT, requireRecipePath(recipePath)),
+    { projectRoot: PROJECT_ROOT },
+  );
+  const artifact = result.loaded.recipe.artifact;
+  if (artifact.format !== "html") {
+    fail(
+      "smoke requires an HTML Recipe; Markdown has viewer-owned rendering and React has no authored CSS fragments",
+    );
+  }
+  if (artifact.canvas) {
+    fail(
+      "smoke is for scrolling HTML artifacts; Canvas has its own runtime and ship gate in references/canvas.md",
+    );
+  }
+  const qualitySmoke = await runArtifactQualitySmoke(result.publishContent);
+  console.log(
+    JSON.stringify({ ...recipeBuildSummary(result), qualitySmoke }, null, 2),
+  );
+}
+
 function migrationSlug(id, title) {
   const base = (title ?? "artifact")
     .toLowerCase()
@@ -1858,6 +1881,7 @@ const HELP = `usage: artifact.mjs <command> [options]
 commands:
   validate <recipe>    validate and compose a Recipe without writing output
   build <recipe>       write an explicit preview/export (requires --output)
+  smoke <recipe>       render a scrolling HTML artifact at 320/375/414/768px
   create <recipe>      build in memory and publish exactly once
   update <id> [recipe] build in memory and redeploy at the same URL; defaults
                        to the Recipe recorded in Manifest v2; --live replaces
@@ -1896,6 +1920,7 @@ commands:
 options:
   --output <path>      (build) explicit preview/export output path
   --standalone         (build) wrap HTML for direct file:// preview
+                       (smoke starts its own local HTTP preview)
   --label <l>          (create/update) version label (max 60 bytes; note: CJK chars are 3 bytes each, so keep labels terse)
   --password <p>       encrypt client-side; server only stores ciphertext
   --api <url>          instance URL (default: OPEN_ARTIFACTS_URL or config)
@@ -1968,6 +1993,10 @@ async function main() {
     case "build":
       if (!rest[0]) fail("build requires a Recipe JSON path");
       commandBuild(rest[0], flags);
+      break;
+    case "smoke":
+      if (!rest[0]) fail("smoke requires a Recipe JSON path");
+      await commandSmoke(rest[0]);
       break;
     case "create":
       if (!rest[0]) fail("create requires a Recipe JSON path");

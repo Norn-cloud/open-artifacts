@@ -280,9 +280,12 @@ const TOAST_CSS = `
 @keyframes oa-toast-in{from{opacity:0;transform:translateX(100%)}}
 @keyframes oa-toast-out{to{opacity:0;transform:translateX(100%)}}
 @media (prefers-reduced-motion:reduce){.oa-toast{animation:none}.oa-toast[data-removing]{opacity:.5}}
-.oa-toast-undo{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer}
+.oa-toast-undo{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer;position:relative;overflow:hidden}
 .oa-toast-undo-btn{flex-shrink:0;border:0;background:none;color:var(--oa-accent);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer;padding:0;border-radius:4px}
 .oa-toast-undo-btn:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-toast-undo-bar{position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--oa-accent);border-radius:0 0 8px 8px;animation:oa-toast-undo-bar 5s linear forwards}
+@keyframes oa-toast-undo-bar{to{width:0%}}
+@media (prefers-reduced-motion:reduce){.oa-toast-undo-bar{animation:none;width:100%}}
 .oa-shortcut-sheet{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:color-mix(in oklab,var(--oa-fg),transparent 70%);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);font-family:var(--oa-font);outline:none}
 .oa-shortcut-sheet[hidden]{display:none}
 .oa-shortcut-sheet-inner{max-width:20rem;width:calc(100vw - 2rem);padding:1.25rem 1.5rem;border-radius:8px;background:var(--oa-bg);border:1px solid var(--oa-border);box-shadow:0 8px 32px -4px color-mix(in oklab,var(--oa-fg),transparent 78%)}
@@ -291,6 +294,18 @@ const TOAST_CSS = `
 .oa-shortcut-list dt{margin:0}
 .oa-shortcut-list dd{margin:0;font-size:.8rem;color:var(--oa-fg);display:flex;align-items:center}
 .oa-shortcut-list kbd{display:inline-flex;align-items:center;justify-content:center;min-width:1.5rem;height:1.5rem;padding:0 .35rem;border:1px solid var(--oa-border);border-radius:4px;background:var(--oa-surface);color:var(--oa-fg);font-family:var(--oa-font-mono,ui-monospace,monospace);font-size:.72rem;font-weight:600;line-height:1}
+.oa-shortcut-list kbd:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+/* Touch: coarse pointers get WCAG-friendly targets for all header ghost
+   icon buttons. LAYOUT_SCRIPT measures the header's actual height into
+   --oa-header-h, so a 44px toggle just grows the header a little on touch. */
+@media (pointer:coarse){
+  .oa-header #oa-theme-toggle,.oa-header-more,.oa-header .oa-cm-toggle,.oa-header [aria-keyshortcuts="h"]{width:44px;height:44px}
+}
+/* Phones (coarse + narrow): restore full-width panel rows at 44px height so
+   the coarse-pointer square doesn't collapse the More panel layout. */
+@media (pointer:coarse) and (max-width:52rem){
+  .oa-header-panel .oa-cm-toggle,.oa-header-panel #oa-theme-toggle,.oa-header-panel [aria-keyshortcuts="h"],.oa-header-panel [data-oa-header-secondary]{width:100%;height:44px}
+}
 `;
 
 const MARKDOWN_CSS = `
@@ -316,6 +331,7 @@ const COMMENTS_CSS = `
 .oa-cm-toggle[data-count] .oa-cm-count{display:block}
 .oa-cm-drawer{position:fixed;top:var(--oa-header-h);right:0;height:calc(100dvh - var(--oa-header-h));width:100%;max-width:23rem;transform:translateX(100%);transition:transform .18s ease;display:flex;flex-direction:column;background:var(--oa-bg);border-left:1px solid color-mix(in oklab,var(--oa-border),var(--oa-fg) 6%);z-index:2147483645;font-family:var(--oa-font)}
 .oa-cm-drawer[data-open]{transform:translateX(0)}
+@media (prefers-reduced-motion:reduce){.oa-cm-drawer{transition:none}}
 /* Right inset matches .oa-header padding (1rem) so the close control lines up
    with the theme toggle above it, and the list card shares the same edge. */
 .oa-cm-drawer .oa-cm-head{display:flex;align-items:center;gap:.6rem;min-height:2.75rem;padding:.375rem 1rem;border-bottom:1px solid var(--oa-border);flex-shrink:0}
@@ -625,7 +641,7 @@ function commentsDrawerHtml(
           return `<div class="oa-cm-item"${done} data-id="${escapeHtml(c.id)}"><div class="oa-cm-avatar" aria-hidden="true">${initial}</div><div class="oa-cm-stack"><div class="oa-cm-top"><div class="oa-cm-title">${escapeHtml(c.body)}</div><span class="oa-cm-trail"><button class="oa-cm-more" type="button" aria-label="More actions" aria-expanded="false" aria-haspopup="menu" hidden>${MORE_DOTS_SVG}</button><button class="oa-cm-done" type="button" aria-pressed="${pressed}" aria-label="${c.done ? "Mark not done" : "Mark done"}">${DONE_CHECK_SVG}</button></span></div><div class="oa-cm-byline">${who} · <span class="oa-cm-time">${escapeHtml(c.createdAt)}</span></div></div></div>`;
         })
         .join("")
-    : '<p class="oa-cm-empty">No comments yet.</p>';
+    : '<p class="oa-cm-empty">No comments yet. Click on the artifact to leave a comment, or type below.</p>';
   const count = openCommentsCount(comments);
   return `<aside class="oa-cm-drawer" id="oa-cm-drawer" aria-label="Comments" aria-hidden="true" data-artifact-id="${escapeHtml(artifactId)}">
   <div class="oa-cm-head">
@@ -713,14 +729,18 @@ const VISIBILITY_SCRIPT = `
     yes.addEventListener('click',function(e){e.stopPropagation();clearConfirm();applyChange(next)});
     no.addEventListener('click',function(e){e.stopPropagation();clearConfirm();sel.value=prev;sel.focus()});
     confirmPop.appendChild(yes);confirmPop.appendChild(no);
-    // Position below the select.
+    // Position below the select, clamped to the viewport.
     var rect=sel.getBoundingClientRect();
+    var popWidth=224; // min-width:14rem
     confirmPop.style.position='fixed';
     confirmPop.style.top=(rect.bottom+4)+'px';
-    confirmPop.style.left=rect.left+'px';
+    confirmPop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-popWidth-8))+'px';
     confirmPop.style.zIndex='2147483646';
     document.body.appendChild(confirmPop);
     document.addEventListener('mousedown',outsideClick,true);
+    confirmPop.addEventListener('keydown',function(e){if(e.key==='Escape'){e.preventDefault();clearConfirm();sel.value=prev;sel.focus()}});
+    // Close on resize — position is captured at open time.
+    window.addEventListener('resize',function rs(){clearConfirm();sel.value=prev;window.removeEventListener('resize',rs)});
     yes.focus();
   }
   function applyChange(next){
@@ -1030,6 +1050,12 @@ const LIVE_CSS = `
 const HOST_FRAME_CSS = `
 #oa-frame{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;width:100%;height:calc(100dvh - var(--oa-header-h));border:0;opacity:0;transition:opacity .15s ease}
 #oa-frame[data-ready]{opacity:1}
+#oa-frame[data-ready]~#oa-loading{display:none}
+.oa-loading{position:fixed;top:var(--oa-header-h);inset-inline:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0}
+.oa-loading-spin{width:20px;height:20px;border:2px solid color-mix(in oklab,var(--oa-fg),transparent 85%);border-top-color:var(--oa-accent);border-radius:50%;animation:oa-loading-spin .8s linear infinite}
+@keyframes oa-loading-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.oa-loading-spin{animation:none;border-top-color:var(--oa-muted)}}
+.oa-live-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 `;
 
 // Account chip in the coda0 service header: provider avatar (with a name-initial
@@ -1759,6 +1785,19 @@ const LIVE_SCRIPT = `
   // pending event is leased to the agent) = accent dot pulses, tooltip says
   // the agent is working; off = amber dot pulses with the watcher tooltip.
   var agentTimer=null;
+  // aria-live region for presence announcements — the visual dot is invisible
+  // to screen readers; this gives AT users the same state information.
+  var agentLive=document.createElement('div');
+  agentLive.setAttribute('aria-live','polite');
+  agentLive.setAttribute('aria-atomic','true');
+  agentLive.className='oa-live-sr';
+  document.body.appendChild(agentLive);
+  var lastAgentText='';
+  function announceAgent(text){
+    if(text===lastAgentText)return;
+    lastAgentText=text;
+    agentLive.textContent=text;
+  }
   function paintAgent(on, busy){
     // The PICKING status text mentions presence — refresh it only when the
     // flag actually flips (a full renderBar would rebuild the compose row and
@@ -1770,6 +1809,8 @@ const LIVE_SCRIPT = `
     if(connection)connection.hidden=!on;
     liveToggle.setAttribute('aria-label', on?'Open live editor — agent connected':'Open live editor — live agent not connected');
     liveToggle.title=on?(busy?'Agent is working on an edit':'Live — agent connected'):'Live agent not connected - run the watcher to connect';
+    // Announce presence state changes to assistive technology.
+    if(changed)announceAgent(on?(busy?'Live agent is working on an edit':'Live agent connected'):'Live agent not connected');
     if(on)hideGuide();
     if(changed)renderStatus();
   }
@@ -2439,6 +2480,7 @@ export function hostShell(options: HostShellOptions): string {
 <body>
 <div class="oa-toast-container" id="oa-toast-container" role="status" aria-live="polite" aria-atomic="false"></div>
 ${headerHtml(favicon, title, brand, branded, brandUrl, versions, currentVersion, url, artifactId, openCommentsCount(commentsList), canManage, visibility, liveEnabled, handoffEnabled)}
+<div class="oa-loading" id="oa-loading" aria-label="Loading artifact" role="status"><div class="oa-loading-spin"></div></div>
 <iframe id="oa-frame" src="${escapeHtml(frameSrc)}" sandbox="allow-scripts allow-modals allow-forms allow-popups" title="${escapeHtml(title)}"></iframe>
 ${drawer}
 ${liveEnabled ? liveChromeHtml(liveWsUrl ?? "", artifactId, canManage) : ""}
@@ -2585,7 +2627,7 @@ const FRAME_LIVE_PICKER_SCRIPT = `
     if(!highlight){
       highlight=document.createElement('div');
       highlight.id=PREFIX+'-highlight';
-      highlight.style.cssText='position:fixed;pointer-events:none;z-index:100001;border:2px solid var(--oa-accent,#6457f0);background:rgba(100,87,240,0.08);transition:opacity .1s';
+      highlight.style.cssText='position:fixed;pointer-events:none;z-index:100001;border:2px solid var(--oa-accent);background:color-mix(in oklab,var(--oa-accent),transparent 92%);transition:opacity .1s';
       document.body.appendChild(highlight);
     }
     var r=el.getBoundingClientRect();
@@ -2697,8 +2739,8 @@ const FRAME_LIVE_PICKER_SCRIPT = `
   function onAnnotMove(e){ if(!drawing||!curStroke)return; var p=localCoords(e); curStroke.points.push(p); redrawStrokes(); }
   function onAnnotUp(e){ if(drawing&&curStroke){ annotState.strokes.push(curStroke); drawing=false; curStroke=null; } }
   function dropPin(p){ var id='pin_'+Date.now(); annotState.comments.push({x:p[0],y:p[1],text:''}); redrawPins(); }
-  function redrawStrokes(){ if(!annotSvg)return; var ns='http://www.w3.org/2000/svg'; while(annotSvg.firstChild)annotSvg.removeChild(annotSvg.firstChild); annotState.strokes.concat(curStroke?[curStroke]:[]).forEach(function(s){ var p=document.createElementNS(ns,'path'); var d=s.points.map(function(pt,i){return (i?'L':'M')+pt[0]+' '+pt[1];}).join(' '); p.setAttribute('d',d); p.setAttribute('stroke','#6457f0'); p.setAttribute('stroke-width','3'); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); annotSvg.appendChild(p); }); }
-  function redrawPins(){ if(!annotPins)return; annotPins.innerHTML=''; annotState.comments.forEach(function(c){ var d=document.createElement('div'); d.style.cssText='position:absolute;left:'+(c.x-9)+'px;top:'+(c.y-9)+'px;width:18px;height:18px;border-radius:50% 50% 50% 2px;background:#6457f0;'; annotPins.appendChild(d); }); }
+  function redrawStrokes(){ if(!annotSvg)return; var ns='http://www.w3.org/2000/svg'; while(annotSvg.firstChild)annotSvg.removeChild(annotSvg.firstChild); annotState.strokes.concat(curStroke?[curStroke]:[]).forEach(function(s){ var p=document.createElementNS(ns,'path'); var d=s.points.map(function(pt,i){return (i?'L':'M')+pt[0]+' '+pt[1];}).join(' '); p.setAttribute('d',d); p.style.stroke='var(--oa-accent)'; p.setAttribute('stroke-width','3'); p.setAttribute('fill','none'); p.setAttribute('stroke-linecap','round'); annotSvg.appendChild(p); }); }
+  function redrawPins(){ if(!annotPins)return; annotPins.innerHTML=''; annotState.comments.forEach(function(c){ var d=document.createElement('div'); d.style.cssText='position:absolute;left:'+(c.x-9)+'px;top:'+(c.y-9)+'px;width:18px;height:18px;border-radius:50% 50% 50% 2px;background:var(--oa-accent);'; annotPins.appendChild(d); }); }
   // --- annotation collection (host asks on submit) ---
   function sendAnnots(req){
     // Include the in-progress stroke: redrawStrokes renders it live, so a
@@ -3693,7 +3735,7 @@ const HOST_UI_SCRIPT = `
     var rows=visible();
     if(!rows.length){
       var p=document.createElement("p");p.className="oa-cm-empty";
-      p.textContent=!state.length?"No comments yet.":(filter==="done"?"No done comments.":"No open comments.");
+      p.textContent=!state.length?"No comments yet. Click on the artifact to leave a comment, or type below.":(filter==="done"?"No done comments.":"No open comments.");
       list.appendChild(p);return;
     }
     rows.forEach(function(cm){list.appendChild(itemEl(cm))});
@@ -3744,7 +3786,7 @@ const HOST_UI_SCRIPT = `
     var tc=document.getElementById('oa-toast-container');
     var toast=null;
     if(tc){
-      toast=document.createElement('div');toast.className='oa-toast oa-toast-undo';
+      toast=document.createElement('div');toast.className='oa-toast oa-toast-undo';toast.setAttribute('role','status');
       var msg=document.createElement('span');msg.textContent='Comment deleted';
       var undoBtn=document.createElement('button');undoBtn.type='button';undoBtn.className='oa-toast-undo-btn';undoBtn.textContent='Undo';
       undoBtn.addEventListener('click',function(e){
@@ -3753,6 +3795,8 @@ const HOST_UI_SCRIPT = `
         if(toast){toast.setAttribute('data-removing','');setTimeout(function(){toast.remove()},200)}
       });
       toast.appendChild(msg);toast.appendChild(undoBtn);
+      var bar=document.createElement('div');bar.className='oa-toast-undo-bar';
+      toast.appendChild(bar);
       tc.appendChild(toast);
       toast.addEventListener('click',function(e){if(e.target===toast){undoBtn.click()}});
     }
@@ -3825,25 +3869,45 @@ const HOST_UI_SCRIPT = `
 
   // Shortcut sheet overlay — ? to toggle, Escape to close.
   var sheet=document.createElement("div");
-  sheet.className="oa-shortcut-sheet";sheet.setAttribute("hidden","");
+  sheet.className="oa-shortcut-sheet";sheet.setAttribute("hidden","");sheet.setAttribute("tabindex","-1");
   sheet.setAttribute("role","dialog");sheet.setAttribute("aria-label","Keyboard shortcuts");
   sheet.innerHTML='<div class="oa-shortcut-sheet-inner">'+
     '<h2 class="oa-shortcut-sheet-title">Keyboard shortcuts</h2>'+
     '<dl class="oa-shortcut-list">'+
-    '<dt><kbd>C</kbd></dt><dd>Toggle comments</dd>'+
-    '<dt><kbd>T</kbd></dt><dd>Toggle theme</dd>'+
-    '<dt><kbd>L</kbd></dt><dd>Toggle live editor</dd>'+
-    '<dt><kbd>H</kbd></dt><dd>Toggle handoff recording</dd>'+
-    '<dt><kbd>?</kbd></dt><dd>Show this sheet</dd>'+
-    '<dt><kbd>Esc</kbd></dt><dd>Close sheet / drawer / dock</dd>'+
+    '<dt><kbd tabindex="0">C</kbd></dt><dd>Toggle comments</dd>'+
+    '<dt><kbd tabindex="0">T</kbd></dt><dd>Toggle theme</dd>'+
+    '<dt><kbd tabindex="0">L</kbd></dt><dd>Toggle live editor</dd>'+
+    '<dt><kbd tabindex="0">H</kbd></dt><dd>Toggle handoff recording</dd>'+
+    '<dt><kbd tabindex="0">?</kbd></dt><dd>Show this sheet</dd>'+
+    '<dt><kbd tabindex="0">Esc</kbd></dt><dd>Close sheet / drawer / dock</dd>'+
     '</dl></div>';
   document.body.appendChild(sheet);
-  function toggleShortcutSheet(){
-    if(sheet.hasAttribute("hidden")){sheet.removeAttribute("hidden");sheet.focus()}
-    else{sheet.setAttribute("hidden","")}
+  var sheetPrevFocus=null;
+  function openSheet(){
+    sheetPrevFocus=document.activeElement;
+    sheet.removeAttribute("hidden");
+    var first=sheet.querySelector("kbd");
+    if(first)first.focus();else sheet.focus();
   }
-  sheet.addEventListener("keydown",function(e){if(e.key==="Escape"||e.key==="?"||e.key==="/"){e.preventDefault();sheet.setAttribute("hidden","")}});
-  sheet.addEventListener("mousedown",function(e){if(e.target===sheet){sheet.setAttribute("hidden","")}});
+  function closeSheet(){
+    sheet.setAttribute("hidden","");
+    if(sheetPrevFocus&&sheetPrevFocus.focus)sheetPrevFocus.focus();
+  }
+  function toggleShortcutSheet(){
+    if(sheet.hasAttribute("hidden"))openSheet();else closeSheet();
+  }
+  sheet.addEventListener("keydown",function(e){
+    if(e.key==="Escape"||e.key==="?"||e.key==="/"){e.preventDefault();closeSheet();return}
+    // Focus trap: keep Tab within the sheet.
+    if(e.key==="Tab"){
+      var kbd=sheet.querySelectorAll("kbd");
+      if(kbd.length===0)return;
+      var first=kbd[0],last=kbd[kbd.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+    }
+  });
+  sheet.addEventListener("mousedown",function(e){if(e.target===sheet)closeSheet()});
 })();
 `;
 
@@ -4039,9 +4103,11 @@ form.addEventListener("submit",async function(event){
     frame.style.display="block";
     document.querySelector(".oa-unlock").style.display="none";
   }catch(e){
-    error.textContent="Password incorrect. Check it and try again.";
+    error.textContent="That password didn\u2019t work \u2014 try again.";
     button.disabled=false;
     button.textContent="Unlock";
+    input.focus();
+    input.select();
   }
 });
 input.focus();
@@ -4113,6 +4179,11 @@ const STATUS_CSS = `
 .oa-status a{margin-top:1rem;color:var(--oa-accent);font-size:.75rem;text-decoration:none}
 .oa-status a:hover{text-decoration:underline;text-underline-offset:2px}
 .oa-status a:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
+.oa-status-guidance{margin:.5rem 0 0;max-width:28rem;color:var(--oa-muted);font-size:.75rem;line-height:1.5}
+.oa-status-actions{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+.oa-status-copy{min-height:28px;padding:0 .75rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);color:var(--oa-fg);font:inherit;font-size:.75rem;cursor:pointer;transition:border-color .15s,color .15s}
+.oa-status-copy:hover{border-color:var(--oa-accent);color:var(--oa-accent)}
+.oa-status-copy:focus-visible{outline:none;box-shadow:var(--oa-focus-ring)}
 `;
 
 const DARK_CONSOLE_STATUS_CSS = `
@@ -4124,6 +4195,9 @@ const DARK_CONSOLE_STATUS_CSS = `
 .oa-status-branded h1{font-family:var(--oa-font);font-size:1.25rem;font-weight:600;letter-spacing:-.02em}
 .oa-status-branded a{min-height:44px;display:inline-flex;align-items:center;margin-top:1.35rem;padding:0 .875rem;border:1px solid var(--oa-border);border-radius:6px;background:var(--oa-surface);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.75rem;color:var(--oa-fg)}
 .oa-status-branded a:hover{border-color:var(--oa-accent);color:var(--oa-accent);text-decoration:none}
+.oa-status-branded .oa-status-copy{border-color:var(--oa-border);background:var(--oa-surface);color:var(--oa-fg)}
+.oa-status-branded .oa-status-copy:hover{border-color:var(--oa-accent);color:var(--oa-accent)}
+.oa-status-branded .oa-status-guidance{color:var(--oa-muted)}
 `;
 
 // Minimal, on-brand page for the states that don't render an artifact
@@ -4134,6 +4208,7 @@ function statusPage(options: {
   title: string;
   heading: string;
   body: string;
+  guidance?: string;
   brand: Brand;
   statusTheme?: StatusTheme;
   linkHref?: string;
@@ -4143,6 +4218,9 @@ function statusPage(options: {
   const linkHref = options.linkHref ?? "/";
   const linkText = options.linkText ?? `Go to ${brand.name}`;
   const branded = options.statusTheme === "dark-console";
+  const guidance = options.guidance
+    ? `<p class="oa-status-guidance">${options.guidance}</p>`
+    : "";
   return `<!doctype html>
 <html lang="en"${branded ? ' data-status-theme="dark-console"' : ""}>
 <head>
@@ -4157,8 +4235,13 @@ function statusPage(options: {
 ${branded ? `<p class="oa-status-brand">${escapeHtml(brand.wordmark)} / artifact status</p>` : ""}
 <h1>${options.heading}</h1>
 <p>${options.body}</p>
+${guidance}
+<div class="oa-status-actions">
 <a href="${escapeHtml(linkHref)}">${escapeHtml(linkText)}</a>
+<button type="button" class="oa-status-copy" id="oa-status-copy">Copy link</button>
+</div>
 </main>
+<script>(function(){var b=document.getElementById("oa-status-copy");if(!b)return;b.addEventListener("click",function(){var t=b.textContent;try{navigator.clipboard.writeText(location.href).then(function(){b.textContent="Copied";setTimeout(function(){b.textContent=t},2000)}).catch(function(){b.textContent="Copy failed";setTimeout(function(){b.textContent=t},2000)})}catch(e){b.textContent="Copy failed";setTimeout(function(){b.textContent=t},2000)}})})();</script>
 </body>
 </html>
 `;
@@ -4169,6 +4252,8 @@ export function notFoundPage(brand: Brand, statusTheme?: StatusTheme): string {
     title: "Artifact not found",
     heading: "Artifact not found",
     body: "This link does not exist, or the artifact it pointed to was deleted.",
+    guidance:
+      "If this link was shared with you, ask the owner to re-share it. If this is your artifact, it may have been deleted.",
     brand,
     statusTheme,
   });
@@ -4182,6 +4267,8 @@ export function badVersionPage(
     title: "Invalid version",
     heading: "Invalid version",
     body: "The <code>?v=</code> parameter must be a positive integer version number.",
+    guidance:
+      "Try removing <code>?v=</code> from the URL to view the latest version, or check the number is correct.",
     brand,
     statusTheme,
   });

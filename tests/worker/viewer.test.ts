@@ -575,7 +575,7 @@ describe("GET /a/:id (encrypted)", () => {
     expect(html).toContain('aria-describedby="oa-help oa-error"');
     expect(html).toContain("min-height:44px");
     expect(html).toContain("color:var(--oa-danger)");
-    expect(html).toContain("Password incorrect. Check it and try again.");
+    expect(html).toContain("That password didn\u2019t work \u2014 try again.");
   });
 
   it("the frame sub-route refuses to serve an encrypted artifact as plaintext", async () => {

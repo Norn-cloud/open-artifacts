@@ -78,7 +78,7 @@ export function render(svgs: HandoffSvgs): string {
       discardArmed=true;discard.classList.add('oa-dock-btn--discard-armed');
       discard.querySelector('.oa-dock-label').textContent='Confirm discard';
       discard.title='Click again to discard this recording';
-      discardTimer=setTimeout(function(){disarmDiscard()},3000);
+      discardTimer=setTimeout(function(){disarmDiscard()},4000);
     }
     function disarmDiscard(){
       discardArmed=false;discard.classList.remove('oa-dock-btn--discard-armed');
