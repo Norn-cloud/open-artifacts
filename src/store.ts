@@ -37,6 +37,11 @@ export interface ArtifactListOptions {
   channelHash?: string;
 }
 
+export interface VersionListOptions {
+  /** Maximum number of rows to read, taken from the newest versions. */
+  limit?: number;
+}
+
 export interface ArtifactStore {
   create(
     id: string,
@@ -48,7 +53,12 @@ export interface ArtifactStore {
   get(id: string): Promise<ArtifactRecord | null>;
   list(options?: ArtifactListOptions): Promise<ArtifactRecord[]>;
   findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
-  listVersions(id: string): Promise<VersionMeta[]>;
+  listVersions(
+    id: string,
+    options?: VersionListOptions,
+  ): Promise<VersionMeta[]>;
+  countVersions(id: string): Promise<number>;
+  getVersion(id: string, version: number): Promise<VersionMeta | null>;
   getContent(id: string, version: number): Promise<StoredContent | null>;
   // Authoritative per-version encrypted flag without reading the ≤4 MiB body.
   // The versions-table flag can be stale on legacy mixed-encryption artifacts
@@ -571,14 +581,22 @@ export class D1R2Store implements ArtifactStore {
     return row ? toRecord(row) : null;
   }
 
-  async listVersions(id: string): Promise<VersionMeta[]> {
+  async listVersions(
+    id: string,
+    options: VersionListOptions = {},
+  ): Promise<VersionMeta[]> {
     await ensureSchema(this.db);
+    const limit =
+      options.limit === undefined
+        ? null
+        : Math.min(Math.max(Math.trunc(options.limit), 1), 101);
+    const limitSql = limit === null ? "" : " LIMIT ?";
     const { results } = await this.db
       .prepare(
         `SELECT version, label, title, description, favicon, format, encrypted, size, created_at
-         FROM versions WHERE artifact_id = ? ORDER BY version ASC`,
+         FROM versions WHERE artifact_id = ? ORDER BY version DESC${limitSql}`,
       )
-      .bind(id)
+      .bind(...(limit === null ? [id] : [id, limit]))
       .all<{
         version: number;
         label: string | null;
@@ -590,7 +608,9 @@ export class D1R2Store implements ArtifactStore {
         size: number;
         created_at: string;
       }>();
-    return results.map((row) => ({
+    // The MCP surface asks for the newest bounded page, but callers expect
+    // history in its established oldest-to-newest order.
+    return results.reverse().map((row) => ({
       version: row.version,
       label: row.label,
       title: row.title,
@@ -601,6 +621,48 @@ export class D1R2Store implements ArtifactStore {
       size: row.size,
       createdAt: row.created_at,
     }));
+  }
+
+  async countVersions(id: string): Promise<number> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM versions WHERE artifact_id = ?")
+      .bind(id)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
+  async getVersion(id: string, version: number): Promise<VersionMeta | null> {
+    await ensureSchema(this.db);
+    const row = await this.db
+      .prepare(
+        `SELECT version, label, title, description, favicon, format, encrypted, size, created_at
+         FROM versions WHERE artifact_id = ? AND version = ?`,
+      )
+      .bind(id, version)
+      .first<{
+        version: number;
+        label: string | null;
+        title: string;
+        description: string;
+        favicon: string;
+        format: string;
+        encrypted: number;
+        size: number;
+        created_at: string;
+      }>();
+    if (row === null) return null;
+    return {
+      version: row.version,
+      label: row.label,
+      title: row.title,
+      description: row.description,
+      favicon: row.favicon,
+      format: row.format as ArtifactFormat,
+      encrypted: row.encrypted === 1,
+      size: row.size,
+      createdAt: row.created_at,
+    };
   }
 
   async getContent(id: string, version: number): Promise<StoredContent | null> {

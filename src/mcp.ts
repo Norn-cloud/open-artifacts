@@ -36,6 +36,7 @@ const MAX_QUERY_LENGTH = 200;
 const DEFAULT_CONTENT_LIMIT = 64 * 1024;
 const MAX_CONTENT_LIMIT = 128 * 1024;
 const MAX_VERSION_HISTORY = 100;
+const VERSION_READ_LIMIT = MAX_VERSION_HISTORY + 1;
 const TRUNCATION_MARKER = "…";
 const MCP_NAMESPACE = "open-artifacts:project-channel:v1:";
 
@@ -138,6 +139,7 @@ function boundedVersionHistory(
   request: Request,
   id: string,
   versions: VersionMeta[],
+  versionCount = versions.length,
 ): {
   versions: Array<PublicVersion & { url: string }>;
   versionCount: number;
@@ -149,8 +151,8 @@ function boundedVersionHistory(
       : versions;
   return {
     versions: publicVersions(env, request, id, visible),
-    versionCount: versions.length,
-    versionsTruncated: visible.length !== versions.length,
+    versionCount,
+    versionsTruncated: versionCount > visible.length,
   };
 }
 
@@ -243,13 +245,14 @@ function projectMetadata(
   project: ProjectSlug,
   record: ArtifactRecord | null,
   versions: VersionMeta[],
+  versionCount: number,
 ) {
   return {
     project,
     artifact: record === null ? null : publicArtifact(env, request, record),
     ...(record === null
       ? { versions: [], versionCount: 0, versionsTruncated: false }
-      : boundedVersionHistory(env, request, record.id, versions)),
+      : boundedVersionHistory(env, request, record.id, versions, versionCount)),
   };
 }
 
@@ -268,8 +271,16 @@ async function readProject(
   const record = await store.findByChannel(
     await projectChannelHash(project, secret),
   );
-  const versions = record === null ? [] : await store.listVersions(record.id);
-  return jsonResult(projectMetadata(env, request, project, record, versions));
+  const [versions, versionCount] =
+    record === null
+      ? [[], 0]
+      : await Promise.all([
+          store.listVersions(record.id, { limit: VERSION_READ_LIMIT }),
+          store.countVersions(record.id),
+        ]);
+  return jsonResult(
+    projectMetadata(env, request, project, record, versions, versionCount),
+  );
 }
 
 async function publishProject(
@@ -434,10 +445,18 @@ function createServer(env: Bindings, request: Request): McpServer {
       const store = new D1R2Store(env.DB, env.CONTENT);
       const record = await store.get(args.id);
       if (record === null) return errorResult("artifact not found");
-      const versions = await store.listVersions(record.id);
+      const [versions, versionCount] = await Promise.all([
+        store.listVersions(record.id, { limit: VERSION_READ_LIMIT }),
+        store.countVersions(record.id),
+      ]);
       const versionNumber = args.version ?? record.currentVersion;
-      const version = versions.find((item) => item.version === versionNumber);
+      const version =
+        versions.find((item) => item.version === versionNumber) ??
+        (args.version === undefined
+          ? null
+          : await store.getVersion(record.id, versionNumber));
       if (version === undefined) return errorResult("version not found");
+      if (version === null) return errorResult("version not found");
 
       const result: Record<string, unknown> = {
         artifact: publicArtifact(env, request, record),
@@ -445,7 +464,13 @@ function createServer(env: Bindings, request: Request): McpServer {
           ...version,
           url: publicVersionUrl(env, request, record.id, version.version),
         },
-        ...boundedVersionHistory(env, request, record.id, versions),
+        ...boundedVersionHistory(
+          env,
+          request,
+          record.id,
+          versions,
+          versionCount,
+        ),
       };
       if (args.includeContent === true) {
         if (version.encrypted) {
