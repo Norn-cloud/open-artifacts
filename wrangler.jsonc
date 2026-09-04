@@ -3,6 +3,7 @@
   "name": "open-artifacts",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-03",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "assets": {
     "directory": "./public",
