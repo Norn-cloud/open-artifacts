@@ -23,6 +23,11 @@ import { generateNonce, userContentHeaders } from "./wrap";
 
 export type Bindings = Env & {
   CREATE_TOKEN?: string;
+  // Native stateless MCP surface. Both secrets are required: MCP_TOKEN gates
+  // requests and MCP_CHANNEL_SECRET derives the fixed project channel hashes.
+  // Neither secret is ever returned by the MCP tools.
+  MCP_TOKEN?: string;
+  MCP_CHANNEL_SECRET?: string;
   BRAND_URL?: string;
   BRAND_NAME?: string;
   BRAND_WORDMARK?: string;

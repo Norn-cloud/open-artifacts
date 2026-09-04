@@ -28,6 +28,15 @@ export interface StoredContent {
   encrypted: EncryptionParams | null;
 }
 
+export interface ArtifactListOptions {
+  /** Maximum number of metadata rows to return. The store caps this at 100. */
+  limit?: number;
+  /** Case-insensitive substring match over id, title, and description. */
+  query?: string;
+  /** Restrict the result to one stable channel hash. */
+  channelHash?: string;
+}
+
 export interface ArtifactStore {
   create(
     id: string,
@@ -37,6 +46,7 @@ export interface ArtifactStore {
     ownership?: OwnershipGrant | null,
   ): Promise<ArtifactRecord>;
   get(id: string): Promise<ArtifactRecord | null>;
+  list(options?: ArtifactListOptions): Promise<ArtifactRecord[]>;
   findByChannel(channelHash: string): Promise<ArtifactRecord | null>;
   listVersions(id: string): Promise<VersionMeta[]>;
   getContent(id: string, version: number): Promise<StoredContent | null>;
@@ -509,6 +519,42 @@ export class D1R2Store implements ArtifactStore {
       .bind(id)
       .first<ArtifactRow>();
     return row ? toRecord(row) : null;
+  }
+
+  async list(options: ArtifactListOptions = {}): Promise<ArtifactRecord[]> {
+    await ensureSchema(this.db);
+
+    // Keep this API deliberately bounded: it is used by the MCP read surface,
+    // and an unbounded D1 query could turn a harmless discovery request into a
+    // response/memory amplification path. Invalid limits fail closed to the
+    // conservative default instead of accidentally becoming LIMIT 0.
+    const requestedLimit = options.limit ?? 50;
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 100)
+      : 50;
+    const query = options.query?.trim() ?? "";
+    const clauses: string[] = [];
+    const bindings: string[] = [];
+    if (query !== "") {
+      const pattern = `%${query.toLowerCase()}%`;
+      clauses.push(
+        "(LOWER(id) LIKE ? OR LOWER(title) LIKE ? OR LOWER(description) LIKE ?)",
+      );
+      bindings.push(pattern, pattern, pattern);
+    }
+    if (options.channelHash !== undefined) {
+      clauses.push("channel_hash = ?");
+      bindings.push(options.channelHash);
+    }
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
+    const rows = await this.db
+      .prepare(
+        `SELECT * FROM artifacts${where}
+         ORDER BY updated_at DESC, id DESC LIMIT ?`,
+      )
+      .bind(...bindings, limit)
+      .all<ArtifactRow>();
+    return rows.results.map(toRecord);
   }
 
   async findByChannel(channelHash: string): Promise<ArtifactRecord | null> {
