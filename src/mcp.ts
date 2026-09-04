@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
 import type { Bindings } from "./api";
-import { resolveMaxContentBytes } from "./api";
+import { bodyCapFor, resolveMaxContentBytes } from "./api";
 import type { ArtifactFormat, UpdateInput, VersionMeta } from "./domain";
 import { validateCreate } from "./domain";
 import { type ArtifactRecord, D1R2Store } from "./store";
@@ -37,8 +37,23 @@ const DEFAULT_CONTENT_LIMIT = 64 * 1024;
 const MAX_CONTENT_LIMIT = 128 * 1024;
 const MAX_VERSION_HISTORY = 100;
 const VERSION_READ_LIMIT = MAX_VERSION_HISTORY + 1;
+const MCP_SECRET_MIN_LENGTH = 32;
+const MCP_REQUEST_OVERHEAD_BYTES = 64 * 1024;
+const MAX_FAVICON_LENGTH = 64;
 const TRUNCATION_MARKER = "…";
 const MCP_NAMESPACE = "open-artifacts:project-channel:v1:";
+
+/**
+ * The request cap is measured in encoded bytes and enforced before the MCP
+ * SDK sees the body. bodyCapFor leaves room for ordinary JSON escaping around
+ * the configured artifact-byte limit; this additional 64 KiB covers the
+ * JSON-RPC envelope and tool arguments. It scales with MAX_CONTENT_MIB so a
+ * normal max-sized artifact still fits without allowing an unbounded parser
+ * input.
+ */
+export function mcpRequestBodyLimit(env: Bindings): number {
+  return bodyCapFor(resolveMaxContentBytes(env)) + MCP_REQUEST_OVERHEAD_BYTES;
+}
 
 type PublicArtifact = {
   id: string;
@@ -168,6 +183,59 @@ function boundedContentLimit(value: number | undefined): number {
     return DEFAULT_CONTENT_LIMIT;
   }
   return Math.min(Math.max(value, 1), MAX_CONTENT_LIMIT);
+}
+
+function tooLargeResponse(): Response {
+  return new Response("Request body too large", {
+    status: 413,
+    headers: { "cache-control": "no-store" },
+  });
+}
+
+/**
+ * Read a request body through a bounded reader, then rebuild the Request so
+ * the downstream MCP parser receives the exact bytes we checked. Relying on
+ * Content-Length alone is insufficient: clients can omit it or lie about it.
+ * A null result means the stream exceeded the cap.
+ */
+async function boundedRequest(
+  request: Request,
+  maxBytes: number,
+): Promise<Request | null> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && /^\d+$/.test(declared.trim())) {
+    const declaredBytes = Number(declared);
+    if (declaredBytes > maxBytes) {
+      return null;
+    }
+  }
+
+  if (request.body === null) return request;
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const headers = new Headers(request.headers);
+  headers.set("content-length", String(total));
+  return new Request(request, { body: bytes, headers });
 }
 
 function truncateUtf8(
@@ -301,13 +369,20 @@ async function publishProject(
     return errorResult("project channel registry is unavailable");
   }
 
+  const channelHash = await projectChannelHash(args.project, channelSecret);
+  const store = new D1R2Store(env.DB, env.CONTENT);
+  let record = await store.findByChannel(channelHash);
+
   // Keep this path on the same validation function and cap configuration as
   // REST publishing. This preserves byte limits, title extraction, emoji
   // validation, formats, labels, and future domain changes in one place.
-  const parsed = validateCreate(
+  let parsed = validateCreate(
     {
       content: args.content,
-      format: args.format,
+      // A project channel is format-stable unless the caller explicitly
+      // selects a new format. This keeps an omitted format from silently
+      // converting an existing markdown/react artifact to HTML.
+      format: args.format ?? record?.format,
       title: args.title,
       description: args.description,
       favicon: args.favicon,
@@ -322,10 +397,7 @@ async function publishProject(
   // Recipes are client-side zero-knowledge artifacts and cannot be usefully
   // inspected by the project registry; omitting `encrypted` also means the
   // tool can never accidentally return a ciphertext envelope as plaintext.
-  const input = parsed.value;
-  const channelHash = await projectChannelHash(args.project, channelSecret);
-  const store = new D1R2Store(env.DB, env.CONTENT);
-  let record = await store.findByChannel(channelHash);
+  let input = parsed.value;
   let createdByRequest = false;
 
   if (record === null) {
@@ -345,6 +417,27 @@ async function publishProject(
       if (!channelBindingConflict(error)) throw error;
       record = await store.findByChannel(channelHash);
       if (record === null) throw error;
+
+      // The losing first-publish request may have validated with the default
+      // HTML format before the winner committed a markdown/react artifact.
+      // Re-validate against the winner's format before updating it.
+      if (args.format === undefined && record.format !== input.format) {
+        parsed = validateCreate(
+          {
+            content: args.content,
+            format: record.format,
+            title: args.title,
+            description: args.description,
+            favicon: args.favicon,
+            label: args.label,
+          },
+          resolveMaxContentBytes(env),
+        );
+        if (!parsed.ok) {
+          return errorResult(`${parsed.status}: ${parsed.error}`);
+        }
+        input = parsed.value;
+      }
     }
 
     if (createdByRequest) {
@@ -394,6 +487,7 @@ async function publishProject(
 }
 
 function createServer(env: Bindings, request: Request): McpServer {
+  const maxContentBytes = resolveMaxContentBytes(env);
   const server = new McpServer({
     name: "Open Artifacts Project Registry",
     version: "1.0.0",
@@ -416,6 +510,7 @@ function createServer(env: Bindings, request: Request): McpServer {
       const artifacts = await store.list({
         limit: boundedLimit(args.limit),
         query,
+        visibility: "public",
       });
       return jsonResult({
         artifacts: artifacts.map((artifact) =>
@@ -445,6 +540,8 @@ function createServer(env: Bindings, request: Request): McpServer {
       const store = new D1R2Store(env.DB, env.CONTENT);
       const record = await store.get(args.id);
       if (record === null) return errorResult("artifact not found");
+      if (record.visibility !== "public")
+        return errorResult("artifact not found");
       const [versions, versionCount] = await Promise.all([
         store.listVersions(record.id, { limit: VERSION_READ_LIMIT }),
         store.countVersions(record.id),
@@ -473,13 +570,27 @@ function createServer(env: Bindings, request: Request): McpServer {
         ),
       };
       if (args.includeContent === true) {
-        if (version.encrypted) {
+        const contentMeta = await store.getContentMeta(
+          record.id,
+          version.version,
+        );
+        if (contentMeta === null) return errorResult("content not found");
+        if (contentMeta.encrypted) {
           result.content = null;
           result.contentAvailable = false;
           result.contentReason = "encrypted artifact content is not exposed";
         } else {
           const content = await store.getContent(record.id, version.version);
           if (content === null) return errorResult("content not found");
+          // Re-check the parsed object metadata as a defense against a
+          // metadata/body race. Never return ciphertext based on the stale D1
+          // versions.encrypted flag.
+          if (content.encrypted !== null) {
+            result.content = null;
+            result.contentAvailable = false;
+            result.contentReason = "encrypted artifact content is not exposed";
+            return jsonResult(result);
+          }
           const bounded = truncateUtf8(
             content.body,
             boundedContentLimit(args.contentLimit),
@@ -513,11 +624,11 @@ function createServer(env: Bindings, request: Request): McpServer {
         "Create or version the stable artifact for a fixed project. Publishing is plaintext and domain-validated.",
       inputSchema: z.object({
         project: PROJECT_SLUG_SCHEMA,
-        content: z.string().min(1),
+        content: z.string().min(1).max(maxContentBytes),
         format: z.enum(["html", "markdown", "react"]).optional(),
         title: z.string().min(1).max(200).optional(),
         description: z.string().max(1000).optional(),
-        favicon: z.string().min(1).optional(),
+        favicon: z.string().min(1).max(MAX_FAVICON_LENGTH).optional(),
         label: z.string().max(60).optional(),
       }),
     },
@@ -573,22 +684,35 @@ export async function handleMcp(
   if (
     token === undefined ||
     token === "" ||
+    token.length < MCP_SECRET_MIN_LENGTH ||
     channelSecret === undefined ||
-    channelSecret === ""
+    channelSecret === "" ||
+    channelSecret.length < MCP_SECRET_MIN_LENGTH
   ) {
     return unavailableResponse();
   }
   if (!(await constantTimeBearerMatches(request, token))) {
     return unauthorizedResponse();
   }
-  const handler = createMcpHandler(() => createServer(env, request), {
+  let bounded: Request | null;
+  try {
+    bounded = await boundedRequest(request, mcpRequestBodyLimit(env));
+  } catch {
+    return new Response("Bad Request", {
+      status: 400,
+      headers: { "cache-control": "no-store" },
+    });
+  }
+  if (bounded === null) return tooLargeResponse();
+
+  const handler = createMcpHandler(() => createServer(env, bounded), {
     route: "/mcp",
     // The endpoint is fronted by Agent Gateway. Keep the Cloudflare handler
     // strict about Host/Origin defaults while allowing non-browser clients;
     // no wildcard Origin override is needed for Codex/Claude.
     legacy: "stateless",
   });
-  return handler(request, env, ctx);
+  return handler(bounded, env, ctx);
 }
 
 export function isKnownProjectSlug(value: string): value is ProjectSlug {

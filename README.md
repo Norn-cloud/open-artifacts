@@ -92,7 +92,7 @@ The Norn deployment also exposes a native, stateless Streamable HTTP MCP
 endpoint at `https://artifacts.norn.cloud/mcp`. It is intended to be reached
 through the central Agent Gateway, which supplies the client-facing OAuth
 boundary and forwards a dedicated Worker bearer token. The Worker returns 404
-until both `MCP_TOKEN` and `MCP_CHANNEL_SECRET` are configured, and returns 401
+until both secrets are configured with at least 32 characters, and returns 401
 for a missing or invalid bearer token.
 
 The MCP server exposes four bounded tools:
@@ -114,6 +114,15 @@ should use Wrangler secrets (and their secret manager of record):
 npx wrangler secret put MCP_TOKEN -c wrangler.norn.jsonc
 npx wrangler secret put MCP_CHANNEL_SECRET -c wrangler.norn.jsonc
 ```
+
+`MCP_CHANNEL_SECRET` is the registry root for the deterministic project
+channels, so treat it as non-rotating. Rotation requires an explicit artifact
+rebind/migration; removing or rolling back the secret is the break-glass way to
+hide the endpoint, but the derived channel hash has no REST-token preimage.
+Authenticated MCP request bodies are streamed through a hard byte cap before
+SDK JSON parsing: `bodyCapFor(MAX_CONTENT_MIB) + 64 KiB` (about 6.1 MiB at the
+default 4 MiB artifact cap). The cap applies even when `Content-Length` is
+absent or inaccurate and returns `413` with `Cache-Control: no-store`.
 
 No Durable Object or SSE session is needed for this MCP surface. Each request
 gets an isolated server instance and uses the existing D1/R2 artifact store.

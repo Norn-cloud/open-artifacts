@@ -35,6 +35,8 @@ export interface ArtifactListOptions {
   query?: string;
   /** Restrict the result to one stable channel hash. */
   channelHash?: string;
+  /** Restrict the result to one visibility class before applying the limit. */
+  visibility?: Visibility;
 }
 
 export interface VersionListOptions {
@@ -555,6 +557,10 @@ export class D1R2Store implements ArtifactStore {
     if (options.channelHash !== undefined) {
       clauses.push("channel_hash = ?");
       bindings.push(options.channelHash);
+    }
+    if (options.visibility !== undefined) {
+      clauses.push("visibility = ?");
+      bindings.push(options.visibility);
     }
     const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
     const rows = await this.db

@@ -40,8 +40,13 @@ pnpm exec wrangler secret put MCP_TOKEN -c wrangler.norn.jsonc
 pnpm exec wrangler secret put MCP_CHANNEL_SECRET -c wrangler.norn.jsonc
 ```
 
-The endpoint deliberately returns 404 if either secret is absent. The gateway
-stores only `MCP_TOKEN` as its backend bearer; `MCP_CHANNEL_SECRET` remains a
-Worker secret used to derive the fixed project channel hashes. MCP tools expose
-only bounded artifact metadata/content and never return write, channel, or
-global MCP credentials.
+The endpoint deliberately returns 404 if either secret is absent or shorter
+than 32 characters. The gateway stores only `MCP_TOKEN` as its backend bearer;
+`MCP_CHANNEL_SECRET` remains a Worker secret used to derive the fixed project
+channel hashes. Treat the channel secret as a non-rotating registry root:
+rotation needs an explicit artifact rebind/migration, while removing it is the
+break-glass endpoint shutdown. MCP tools expose only bounded artifact
+metadata/content and never return write, channel, or global MCP credentials.
+Authenticated bodies are streamed through a pre-parser cap of
+`bodyCapFor(MAX_CONTENT_MIB) + 64 KiB`, including requests with absent or
+misleading `Content-Length`; overflow returns non-cacheable 413.

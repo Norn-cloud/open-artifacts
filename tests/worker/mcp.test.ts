@@ -6,10 +6,11 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Bindings } from "../../src/api";
 import app from "../../src/index";
+import { mcpRequestBodyLimit } from "../../src/mcp";
 
 const BASE = "http://artifacts.test";
-const MCP_TOKEN = "mcp-test-token";
-const MCP_CHANNEL_SECRET = "mcp-test-channel-secret";
+const MCP_TOKEN = "mcp-test-token-0123456789abcdef0";
+const MCP_CHANNEL_SECRET = "mcp-channel-secret-0123456789abcdef";
 const MCP_ENV = {
   ...env,
   MCP_TOKEN,
@@ -60,6 +61,25 @@ async function fetchMcp(
   };
 }
 
+async function fetchRawMcp(
+  input: Request,
+  mcpEnv: Bindings = MCP_ENV,
+): Promise<Response> {
+  const ctx = createExecutionContext();
+  const response = await app.fetch(input, mcpEnv, ctx);
+  await waitOnExecutionContext(ctx);
+  return response;
+}
+
+function byteStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+}
+
 async function initialize() {
   return fetchMcp({
     jsonrpc: "2.0",
@@ -85,7 +105,7 @@ function textResult(
 }
 
 describe("authenticated stateless MCP endpoint", () => {
-  it("is hidden when either MCP secret is not configured", async () => {
+  it("is hidden when either MCP secret is absent or too short", async () => {
     const noToken = await fetchMcp(
       { jsonrpc: "2.0", id: 1, method: "ping" },
       {},
@@ -101,6 +121,22 @@ describe("authenticated stateless MCP endpoint", () => {
       { ...env, MCP_TOKEN } as Bindings,
     );
     expect(noChannelSecret.response.status).toBe(404);
+
+    const shortToken = await fetchMcp(
+      { jsonrpc: "2.0", id: 1, method: "ping" },
+      {},
+      MCP_TOKEN,
+      { ...env, MCP_TOKEN: "too-short", MCP_CHANNEL_SECRET } as Bindings,
+    );
+    expect(shortToken.response.status).toBe(404);
+
+    const shortChannelSecret = await fetchMcp(
+      { jsonrpc: "2.0", id: 1, method: "ping" },
+      {},
+      MCP_TOKEN,
+      { ...env, MCP_TOKEN, MCP_CHANNEL_SECRET: "too-short" } as Bindings,
+    );
+    expect(shortChannelSecret.response.status).toBe(404);
   });
 
   it("requires a bearer token", async () => {
@@ -117,6 +153,33 @@ describe("authenticated stateless MCP endpoint", () => {
       "wrong-token",
     );
     expect(invalid.response.status).toBe(401);
+  });
+
+  it("caps streamed bodies before SDK parsing even with absent or lying Content-Length", async () => {
+    const oversized = new Uint8Array(mcpRequestBodyLimit(MCP_ENV) + 1);
+    for (const contentLength of [undefined, "1"]) {
+      const headers = new Headers({
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${MCP_TOKEN}`,
+        "content-type": "application/json",
+        "mcp-protocol-version": "2025-06-18",
+      });
+      if (contentLength !== undefined) {
+        headers.set("content-length", contentLength);
+      }
+      const response = await fetchRawMcp(
+        new Request(`${BASE}/mcp`, {
+          method: "POST",
+          headers,
+          body: byteStream(oversized),
+        }),
+      );
+      expect(
+        response.status,
+        `content-length=${contentLength ?? "absent"}`,
+      ).toBe(413);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
   });
 
   it("initializes and exposes only the project-registry tools", async () => {
@@ -202,6 +265,122 @@ describe("authenticated stateless MCP endpoint", () => {
     );
   });
 
+  it("filters private and org artifacts before applying list limits and denies direct reads", async () => {
+    const title = "MCP visibility filtering fixture";
+    const create = async () => {
+      const response = await app.fetch(
+        new Request(`${BASE}/api/artifacts`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            content: `<h1>${title}</h1>`,
+            favicon: "🔐",
+            title,
+          }),
+        }),
+        MCP_ENV,
+        createExecutionContext(),
+      );
+      expect(response.status).toBe(201);
+      return (await response.json()) as { id: string };
+    };
+    const privateArtifact = await create();
+    const orgArtifact = await create();
+    const publicArtifact = await create();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE artifacts SET visibility = ? WHERE id = ?").bind(
+        "private",
+        privateArtifact.id,
+      ),
+      env.DB.prepare("UPDATE artifacts SET visibility = ? WHERE id = ?").bind(
+        "org",
+        orgArtifact.id,
+      ),
+    ]);
+
+    const listed = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: {
+        name: "list_artifacts",
+        arguments: { limit: 1, query: title },
+      },
+    });
+    const listedBody = textResult(listed.value);
+    expect(listedBody.count).toBe(1);
+    expect((listedBody.artifacts as Array<{ id: string }>)[0]?.id).toBe(
+      publicArtifact.id,
+    );
+
+    for (const id of [privateArtifact.id, orgArtifact.id]) {
+      const denied = await fetchMcp({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: {
+          name: "get_artifact",
+          arguments: { id },
+        },
+      });
+      expect(denied.value?.result).toEqual(
+        expect.objectContaining({ isError: true }),
+      );
+      expect(JSON.stringify(denied.value)).not.toContain(title);
+    }
+  });
+
+  it("uses authoritative R2 encryption metadata when the D1 version flag is stale", async () => {
+    const created = await app.fetch(
+      new Request(`${BASE}/api/artifacts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: "plain placeholder",
+          favicon: "🛡️",
+          title: "MCP stale encryption fixture",
+        }),
+      }),
+      MCP_ENV,
+      createExecutionContext(),
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const ciphertext = "ciphertext-must-not-escape";
+    await env.CONTENT.put(
+      `content/${id}/1`,
+      JSON.stringify({
+        v: 1,
+        alg: "AES-GCM",
+        kdf: "PBKDF2-SHA256",
+        iterations: 5000,
+        salt: "c2FsdA==",
+        iv: "aXY=",
+        ciphertext,
+      }),
+      { customMetadata: { encrypted: "1" } },
+    );
+    await env.DB.prepare(
+      "UPDATE versions SET encrypted = 0 WHERE artifact_id = ? AND version = 1",
+    )
+      .bind(id)
+      .run();
+
+    const read = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: {
+        name: "get_artifact",
+        arguments: { id, includeContent: true },
+      },
+    });
+    const readBody = textResult(read.value);
+    expect(readBody.content).toBeNull();
+    expect(readBody.contentAvailable).toBe(false);
+    expect(JSON.stringify(read.value)).not.toContain(ciphertext);
+  });
+
   it("publishes stable project channels and increments versions without tokens", async () => {
     const first = await fetchMcp({
       jsonrpc: "2.0",
@@ -268,6 +447,61 @@ describe("authenticated stateless MCP endpoint", () => {
     );
   });
 
+  it("preserves an existing project format when a republish omits format", async () => {
+    const first = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 12,
+      method: "tools/call",
+      params: {
+        name: "publish_project_artifact",
+        arguments: {
+          content: "# Zen registry\n\nMarkdown v1.",
+          favicon: "🧘",
+          format: "markdown",
+          project: "zen",
+          title: "Zen registry",
+        },
+      },
+    });
+    const firstBody = textResult(first.value);
+    const firstArtifact = firstBody.artifact as { id: string; format: string };
+    expect(firstArtifact.format).toBe("markdown");
+
+    const second = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 13,
+      method: "tools/call",
+      params: {
+        name: "publish_project_artifact",
+        arguments: {
+          content: "# Zen registry\n\nMarkdown v2.",
+          favicon: "🧘",
+          project: "zen",
+          title: "Zen registry v2",
+        },
+      },
+    });
+    const secondBody = textResult(second.value);
+    expect((secondBody.artifact as { format: string }).format).toBe("markdown");
+    expect(secondBody.version).toBe(2);
+
+    const project = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 14,
+      method: "tools/call",
+      params: {
+        name: "list_project_artifacts",
+        arguments: { project: "zen" },
+      },
+    });
+    const projectBody = textResult(project.value);
+    expect(
+      (projectBody.versions as Array<{ format: string }>).map(
+        (version) => version.format,
+      ),
+    ).toEqual(["markdown", "markdown"]);
+  });
+
   it("uses the existing domain byte limit and rejects oversized content", async () => {
     const result = await fetchMcp({
       jsonrpc: "2.0",
@@ -291,6 +525,6 @@ describe("authenticated stateless MCP endpoint", () => {
       | { content: Array<{ text: string }> }
       | undefined;
     const text = resultBody?.content[0]?.text;
-    expect(text).toMatch(/413: content exceeds/);
+    expect(text).toMatch(/content: Too big.*4194304/);
   });
 });
