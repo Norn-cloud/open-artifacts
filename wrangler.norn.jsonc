@@ -3,6 +3,7 @@
   "name": "norn-open-artifacts",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-03",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "routes": [
     {
@@ -13,7 +14,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
+    "run_worker_first": ["/", "/mcp", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
   },
   "vars": {},
   "d1_databases": [

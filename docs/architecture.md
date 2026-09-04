@@ -35,6 +35,31 @@ describe evolves.
 └──────────────────────────────────────────────┘
 ```
 
+### MCP project registry
+
+The Worker includes a stateless Streamable HTTP MCP route at `/mcp`, intended
+to sit behind Agent Gateway. The route is fail-closed unless both
+`MCP_TOKEN` (a dedicated backend bearer) and `MCP_CHANNEL_SECRET` (the HMAC
+key for the fixed project namespace) are present and at least 32 characters
+long. Authentication hashes the presented and configured bearer values before
+a timing-safe comparison.
+
+The four tools expose bounded metadata/content reads and a closed set of
+project channels: `norn`, `soliman`, `zen`, `core-kit`, `atlas`, `mesh-vms`,
+`mailcore`, `notifycore`, and `registry`. A project's channel hash is
+`HMAC-SHA-256(MCP_CHANNEL_SECRET, "open-artifacts:project-channel:v1:" + slug)`;
+the hash, write token, and channel token are never returned to the MCP caller.
+Project publishes reuse `validateCreate`, the configured content-byte cap, and
+the existing D1/R2 compare-and-swap update path, so the MCP surface cannot
+bypass the REST domain limits or mint an unbounded arbitrary-channel API.
+Authenticated request bodies are bounded by a streamed pre-parser cap of
+`bodyCapFor(MAX_CONTENT_MIB) + 64 KiB`; the cap is enforced without trusting
+`Content-Length` and rejects overflow with a non-cacheable 413. Generic list
+and read tools expose public artifacts only; explicit project-channel lookup is
+the internal registry path. `MCP_CHANNEL_SECRET` is a non-rotating registry
+root—rotation requires an explicit channel rebind/migration, while removing it
+is the break-glass endpoint shutdown.
+
 ## Storage (D1 + R2)
 
 KV was rejected: eventual consistency up to 60 s cross-colo, 1 write/s/key,
