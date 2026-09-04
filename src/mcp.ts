@@ -5,7 +5,7 @@ import type { Bindings } from "./api";
 import { resolveMaxContentBytes } from "./api";
 import type { ArtifactFormat, UpdateInput, VersionMeta } from "./domain";
 import { validateCreate } from "./domain";
-import { D1R2Store, type ArtifactRecord } from "./store";
+import { type ArtifactRecord, D1R2Store } from "./store";
 import {
   generateId,
   generateWriteToken,
@@ -35,6 +35,8 @@ const DEFAULT_LIST_LIMIT = 50;
 const MAX_QUERY_LENGTH = 200;
 const DEFAULT_CONTENT_LIMIT = 64 * 1024;
 const MAX_CONTENT_LIMIT = 128 * 1024;
+const MAX_VERSION_HISTORY = 100;
+const TRUNCATION_MARKER = "…";
 const MCP_NAMESPACE = "open-artifacts:project-channel:v1:";
 
 type PublicArtifact = {
@@ -131,6 +133,27 @@ function publicVersions(
   }));
 }
 
+function boundedVersionHistory(
+  env: Bindings,
+  request: Request,
+  id: string,
+  versions: VersionMeta[],
+): {
+  versions: Array<PublicVersion & { url: string }>;
+  versionCount: number;
+  versionsTruncated: boolean;
+} {
+  const visible =
+    versions.length > MAX_VERSION_HISTORY
+      ? versions.slice(-MAX_VERSION_HISTORY)
+      : versions;
+  return {
+    versions: publicVersions(env, request, id, visible),
+    versionCount: versions.length,
+    versionsTruncated: visible.length !== versions.length,
+  };
+}
+
 function boundedLimit(value: number | undefined): number {
   if (value === undefined || !Number.isInteger(value)) {
     return DEFAULT_LIST_LIMIT;
@@ -145,7 +168,10 @@ function boundedContentLimit(value: number | undefined): number {
   return Math.min(Math.max(value, 1), MAX_CONTENT_LIMIT);
 }
 
-function truncateUtf8(value: string, maxBytes: number): {
+function truncateUtf8(
+  value: string,
+  maxBytes: number,
+): {
   content: string;
   truncated: boolean;
 } {
@@ -153,9 +179,22 @@ function truncateUtf8(value: string, maxBytes: number): {
   if (bytes.byteLength <= maxBytes) {
     return { content: value, truncated: false };
   }
-  // TextDecoder replaces a cut multi-byte sequence instead of returning
-  // malformed UTF-8. The marker makes the bounded response explicit.
-  const content = `${new TextDecoder().decode(bytes.slice(0, maxBytes))}…`;
+  // Build by code point so the response is valid UTF-8 and reserve room for
+  // the marker. In particular, never append a 3-byte marker after slicing a
+  // full maxBytes prefix: MCP callers rely on contentLimit being a hard cap.
+  const markerBytes = new TextEncoder().encode(TRUNCATION_MARKER).byteLength;
+  const prefixBudget =
+    maxBytes >= markerBytes ? maxBytes - markerBytes : maxBytes;
+  let prefix = "";
+  let prefixBytes = 0;
+  for (const codePoint of value) {
+    const codePointBytes = new TextEncoder().encode(codePoint).byteLength;
+    if (prefixBytes + codePointBytes > prefixBudget) break;
+    prefix += codePoint;
+    prefixBytes += codePointBytes;
+  }
+  const content =
+    maxBytes >= markerBytes ? `${prefix}${TRUNCATION_MARKER}` : prefix;
   return { content, truncated: true };
 }
 
@@ -208,10 +247,9 @@ function projectMetadata(
   return {
     project,
     artifact: record === null ? null : publicArtifact(env, request, record),
-    versions:
-      record === null
-        ? []
-        : publicVersions(env, request, record.id, versions),
+    ...(record === null
+      ? { versions: [], versionCount: 0, versionsTruncated: false }
+      : boundedVersionHistory(env, request, record.id, versions)),
   };
 }
 
@@ -277,6 +315,7 @@ async function publishProject(
   const channelHash = await projectChannelHash(args.project, channelSecret);
   const store = new D1R2Store(env.DB, env.CONTENT);
   let record = await store.findByChannel(channelHash);
+  let createdByRequest = false;
 
   if (record === null) {
     const writeTokenHash = await sha256Hex(generateWriteToken());
@@ -287,6 +326,7 @@ async function publishProject(
         input,
         channelHash,
       );
+      createdByRequest = true;
     } catch (error) {
       // Concurrent first publishes to the same fixed project channel race on
       // the existing unique index. Re-read the winner and continue as a
@@ -296,7 +336,7 @@ async function publishProject(
       if (record === null) throw error;
     }
 
-    if (record.currentVersion === 1) {
+    if (createdByRequest) {
       return jsonResult({
         project: args.project,
         artifact: publicArtifact(env, request, record),
@@ -405,7 +445,7 @@ function createServer(env: Bindings, request: Request): McpServer {
           ...version,
           url: publicVersionUrl(env, request, record.id, version.version),
         },
-        versions: publicVersions(env, request, record.id, versions),
+        ...boundedVersionHistory(env, request, record.id, versions),
       };
       if (args.includeContent === true) {
         if (version.encrypted) {
@@ -516,16 +556,13 @@ export async function handleMcp(
   if (!(await constantTimeBearerMatches(request, token))) {
     return unauthorizedResponse();
   }
-  const handler = createMcpHandler(
-    () => createServer(env, request),
-    {
-      route: "/mcp",
-      // The endpoint is fronted by Agent Gateway. Keep the Cloudflare handler
-      // strict about Host/Origin defaults while allowing non-browser clients;
-      // no wildcard Origin override is needed for Codex/Claude.
-      legacy: "stateless",
-    },
-  );
+  const handler = createMcpHandler(() => createServer(env, request), {
+    route: "/mcp",
+    // The endpoint is fronted by Agent Gateway. Keep the Cloudflare handler
+    // strict about Host/Origin defaults while allowing non-browser clients;
+    // no wildcard Origin override is needed for Codex/Claude.
+    legacy: "stateless",
+  });
   return handler(request, env, ctx);
 }
 

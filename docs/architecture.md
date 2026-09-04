@@ -35,6 +35,23 @@ describe evolves.
 └──────────────────────────────────────────────┘
 ```
 
+### MCP project registry
+
+The Worker includes a stateless Streamable HTTP MCP route at `/mcp`, intended
+to sit behind Agent Gateway. The route is fail-closed unless both
+`MCP_TOKEN` (a dedicated backend bearer) and `MCP_CHANNEL_SECRET` (the HMAC
+key for the fixed project namespace) are present. Authentication hashes the
+presented and configured bearer values before a timing-safe comparison.
+
+The four tools expose bounded metadata/content reads and a closed set of
+project channels: `norn`, `soliman`, `zen`, `core-kit`, `atlas`, `mesh-vms`,
+`mailcore`, `notifycore`, and `registry`. A project's channel hash is
+`HMAC-SHA-256(MCP_CHANNEL_SECRET, "open-artifacts:project-channel:v1:" + slug)`;
+the hash, write token, and channel token are never returned to the MCP caller.
+Project publishes reuse `validateCreate`, the configured content-byte cap, and
+the existing D1/R2 compare-and-swap update path, so the MCP surface cannot
+bypass the REST domain limits or mint an unbounded arbitrary-channel API.
+
 ## Storage (D1 + R2)
 
 KV was rejected: eventual consistency up to 60 s cross-colo, 1 write/s/key,

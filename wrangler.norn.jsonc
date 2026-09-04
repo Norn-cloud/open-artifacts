@@ -13,7 +13,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
+    "run_worker_first": ["/", "/mcp", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
   },
   "vars": {},
   "d1_databases": [

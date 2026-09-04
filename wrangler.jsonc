@@ -7,7 +7,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
+    "run_worker_first": ["/", "/mcp", "/api/*", "/a/*", "/og/*", "/fonts/*", "/vendor/*"]
   },
   // "1" opts this deploy into the web-font surface: the /fonts proxy,
   // allowlisted font CDNs, and an allow-same-origin sandbox so the browser can

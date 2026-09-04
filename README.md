@@ -86,6 +86,38 @@ For a responsive scrolling HTML artifact, `smoke` renders the composed output
 at 320, 375, 414, and 768px with `agent-browser` before publishing; it detects
 horizontal scrolling and heading overflow without writing project state.
 
+### Agent Gateway MCP
+
+The Norn deployment also exposes a native, stateless Streamable HTTP MCP
+endpoint at `https://artifacts.norn.cloud/mcp`. It is intended to be reached
+through the central Agent Gateway, which supplies the client-facing OAuth
+boundary and forwards a dedicated Worker bearer token. The Worker returns 404
+until both `MCP_TOKEN` and `MCP_CHANNEL_SECRET` are configured, and returns 401
+for a missing or invalid bearer token.
+
+The MCP server exposes four bounded tools:
+
+- `list_artifacts` searches bounded metadata by id, title, or description.
+- `get_artifact` reads metadata/version history and can return bounded plaintext
+  content; encrypted bodies and all credential fields stay hidden.
+- `list_project_artifacts` resolves one of the fixed project slugs (`norn`,
+  `soliman`, `zen`, `core-kit`, `atlas`, `mesh-vms`, `mailcore`, `notifycore`,
+  or `registry`) to its stable channel.
+- `publish_project_artifact` creates or versions that project's stable channel
+  after the same domain validation and content-byte limit used by REST. It
+  never returns write, channel, or global MCP tokens.
+
+Local development may set both secrets in `.dev.vars`; production operators
+should use Wrangler secrets (and their secret manager of record):
+
+```sh
+npx wrangler secret put MCP_TOKEN -c wrangler.norn.jsonc
+npx wrangler secret put MCP_CHANNEL_SECRET -c wrangler.norn.jsonc
+```
+
+No Durable Object or SSE session is needed for this MCP surface. Each request
+gets an isolated server instance and uses the existing D1/R2 artifact store.
+
 ## Deploy your own instance
 
 ```sh
@@ -134,6 +166,7 @@ GET    /api/artifacts/:id       metadata + version history
 GET    /api/artifacts/:id/raw   stored content (?v=N)
 DELETE /api/artifacts/:id       (Bearer writeToken)
 GET    /a/:id                   rendered page (?v=N)
+POST   /mcp                     stateless Streamable HTTP MCP (Agent Gateway bearer)
 ```
 
 `encrypted` is `{ salt, iv, iterations }` (all base64/int) with base64
