@@ -35,6 +35,20 @@ function request(
   });
 }
 
+function modernRequest(body: unknown): Request {
+  const method =
+    typeof body === "object" &&
+    body !== null &&
+    "method" in body &&
+    typeof body.method === "string"
+      ? body.method
+      : "";
+  return request(body, {
+    "mcp-method": method,
+    "mcp-protocol-version": "2026-07-28",
+  });
+}
+
 async function fetchMcp(
   body: unknown,
   headers: Record<string, string> = {},
@@ -197,7 +211,16 @@ describe("authenticated stateless MCP endpoint", () => {
     });
     expect(tools.response.status).toBe(200);
     const listed = tools.value?.result as {
-      tools: Array<{ name: string; inputSchema: Record<string, unknown> }>;
+      tools: Array<{
+        name: string;
+        inputSchema: Record<string, unknown>;
+        annotations?: {
+          readOnlyHint?: boolean;
+          destructiveHint?: boolean;
+          idempotentHint?: boolean;
+          openWorldHint?: boolean;
+        };
+      }>;
     };
     expect(listed.tools.map((tool) => tool.name)).toEqual([
       "list_artifacts",
@@ -208,6 +231,91 @@ describe("authenticated stateless MCP endpoint", () => {
     expect(JSON.stringify(tools.value)).not.toMatch(
       /(?:wt_|ch_|tokenHash|channelHash)/,
     );
+
+    const annotations = new Map(
+      listed.tools.map((tool) => [tool.name, tool.annotations]),
+    );
+    expect(annotations.get("list_artifacts")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("get_artifact")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("list_project_artifacts")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("publish_project_artifact")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+  });
+
+  it("exposes the same tool annotations on modern MCP 2026-07-28 tools/list", async () => {
+    const modern = await fetchRawMcp(
+      modernRequest({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "tools/list",
+        params: {
+          _meta: {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+          },
+        },
+      }),
+    );
+    expect(modern.status).toBe(200);
+    const body = (await modern.json()) as {
+      result?: {
+        tools?: Array<{
+          name: string;
+          annotations?: {
+            readOnlyHint?: boolean;
+            destructiveHint?: boolean;
+            idempotentHint?: boolean;
+            openWorldHint?: boolean;
+          };
+        }>;
+      };
+    };
+    const annotations = new Map(
+      (body.result?.tools ?? []).map((tool) => [tool.name, tool.annotations]),
+    );
+    expect(annotations.get("list_artifacts")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("get_artifact")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("list_project_artifacts")).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+    expect(annotations.get("publish_project_artifact")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
   });
 
   it("lists and reads bounded metadata/content without credential fields", async () => {

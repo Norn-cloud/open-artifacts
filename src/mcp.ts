@@ -499,6 +499,12 @@ function createServer(env: Bindings, request: Request): McpServer {
       title: "List artifacts",
       description:
         "List bounded public artifact metadata. Optionally search id, title, or description.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         query: z.string().max(MAX_QUERY_LENGTH).optional(),
         limit: z.number().int().min(1).max(MAX_LIST_LIMIT).optional(),
@@ -529,6 +535,12 @@ function createServer(env: Bindings, request: Request): McpServer {
       title: "Get artifact",
       description:
         "Read artifact metadata and version history, with optional bounded plaintext content.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         id: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{12}$/),
         version: z.number().int().min(1).optional(),
@@ -611,6 +623,12 @@ function createServer(env: Bindings, request: Request): McpServer {
       title: "List project artifacts",
       description:
         "Resolve one of the fixed project channels and return its artifact metadata and versions.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       inputSchema: z.object({ project: PROJECT_SLUG_SCHEMA }),
     },
     async ({ project }) => readProject(env, request, project),
@@ -622,6 +640,12 @@ function createServer(env: Bindings, request: Request): McpServer {
       title: "Publish project artifact",
       description:
         "Create or version the stable artifact for a fixed project. Publishing is plaintext and domain-validated.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
       inputSchema: z.object({
         project: PROJECT_SLUG_SCHEMA,
         content: z.string().min(1).max(maxContentBytes),
