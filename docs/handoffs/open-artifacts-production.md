@@ -10,7 +10,7 @@ credentials.
 
 The validated fragment is published through the MCP `registry` project at
 [`https://artifacts.norn.cloud/a/FB3xTZcpBXoS`](https://artifacts.norn.cloud/a/FB3xTZcpBXoS)
-(version 2, label `production handoff v2`). The evidence packet covers:
+(version 3, label `production handoff v3`). The evidence packet covers:
 
 - merged Open Artifacts PRs #5/#6 (`335a971d…` and `aef5490…`);
 - merged Soliman federation PR #1792 (`43055087…`);
