@@ -503,6 +503,7 @@ function createServer(env: Bindings, request: Request): McpServer {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
+        openWorldHint: false,
       },
       inputSchema: z.object({
         query: z.string().max(MAX_QUERY_LENGTH).optional(),
@@ -538,6 +539,7 @@ function createServer(env: Bindings, request: Request): McpServer {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
+        openWorldHint: false,
       },
       inputSchema: z.object({
         id: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{12}$/),
@@ -625,6 +627,7 @@ function createServer(env: Bindings, request: Request): McpServer {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
+        openWorldHint: false,
       },
       inputSchema: z.object({ project: PROJECT_SLUG_SCHEMA }),
     },
@@ -639,8 +642,9 @@ function createServer(env: Bindings, request: Request): McpServer {
         "Create or version the stable artifact for a fixed project. Publishing is plaintext and domain-validated.",
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: false,
+        openWorldHint: false,
       },
       inputSchema: z.object({
         project: PROJECT_SLUG_SCHEMA,

@@ -218,6 +218,7 @@ describe("authenticated stateless MCP endpoint", () => {
           readOnlyHint?: boolean;
           destructiveHint?: boolean;
           idempotentHint?: boolean;
+          openWorldHint?: boolean;
         };
       }>;
     };
@@ -238,21 +239,25 @@ describe("authenticated stateless MCP endpoint", () => {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("get_artifact")).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("list_project_artifacts")).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("publish_project_artifact")).toEqual({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: false,
     });
   });
 
@@ -279,6 +284,7 @@ describe("authenticated stateless MCP endpoint", () => {
             readOnlyHint?: boolean;
             destructiveHint?: boolean;
             idempotentHint?: boolean;
+            openWorldHint?: boolean;
           };
         }>;
       };
@@ -290,21 +296,25 @@ describe("authenticated stateless MCP endpoint", () => {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("get_artifact")).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("list_project_artifacts")).toEqual({
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: false,
     });
     expect(annotations.get("publish_project_artifact")).toEqual({
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
+      openWorldHint: false,
     });
   });
 
