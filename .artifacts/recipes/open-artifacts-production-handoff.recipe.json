@@ -1,0 +1,36 @@
+{
+  "$schema": "../../skills/using-open-artifacts/references/recipe.schema.json",
+  "version": 1,
+  "artifact": {
+    "title": "Open Artifacts production handoff",
+    "description": "Secret-free evidence for the merged, deployed, and Soliman-wired Open Artifacts registry.",
+    "favicon": "🧭",
+    "format": "markdown",
+    "level": 1,
+    "canvas": false,
+    "channel": "open-artifacts-production-handoff",
+    "scope": "Open Artifacts production deployment and Soliman Agent Gateway wiring",
+    "watch": [
+      "src/mcp.ts",
+      "tests/worker/mcp.test.ts",
+      "README.md",
+      "docs/norn-deployment.md",
+      "wrangler.norn.jsonc"
+    ],
+    "local": false,
+    "autoUpdate": false
+  },
+  "document": {
+    "language": "en",
+    "fragments": {
+      "body": ["../fragments/open-artifacts-production-handoff/body.md"]
+    }
+  },
+  "security": {
+    "encrypted": false,
+    "passwordCredential": null
+  },
+  "build": {
+    "strategy": "auto"
+  }
+}
