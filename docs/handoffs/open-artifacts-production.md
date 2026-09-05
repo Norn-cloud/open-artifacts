@@ -8,9 +8,9 @@ and is built by
 The shared Markdown Recipe uses a repo-relative body path and contains no
 credentials.
 
-Read the live handoff at
-[`https://artifacts.norn.cloud/a/KNTxNHCsw7AH`](https://artifacts.norn.cloud/a/KNTxNHCsw7AH)
-for the evidence packet covering:
+The validated fragment is published through the MCP `registry` project at
+[`https://artifacts.norn.cloud/a/FB3xTZcpBXoS`](https://artifacts.norn.cloud/a/FB3xTZcpBXoS)
+(version 2, label `production handoff v2`). The evidence packet covers:
 
 - merged Open Artifacts PRs #5/#6 (`335a971d…` and `aef5490…`);
 - merged Soliman federation PR #1792 (`43055087…`);

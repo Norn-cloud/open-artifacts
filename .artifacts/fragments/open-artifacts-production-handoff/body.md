@@ -95,6 +95,28 @@ The source-level stack test is
 production Worker host, backend bearer expression, builder read-only policy,
 and the absence of `publish_project_artifact` in that builder policy.
 
+## Agent client registrations
+
+The normal shared route is the central Agent Gateway. A direct Worker MCP
+registration is also installed as a temporary break-glass path while the
+Better Auth issuer cutover is pending; it loads the bearer at process start
+from Infisical and does not write the value into an agent configuration file.
+
+- Mac Codex: `~/.codex/config.toml` contains `agentgateway` and
+  `open-artifacts-soliman`.
+- Mac Claude: `~/.claude.json` contains `agentgateway` and
+  `open-artifacts-soliman`.
+- Mac direct launcher:
+  `~/.codex/mcp/run-open-artifacts-soliman-mcp.sh`.
+- Coder `norn-dev` `/home/node`: `.codex/config.toml` and `.claude.json`
+  contain `open-artifacts-soliman`; the launcher is
+  `.codex/mcp/run-open-artifacts-soliman-mcp.sh` and uses
+  `.codex/mcp/open-artifacts-infisical-bootstrap.py`.
+
+Clients already running before these registrations were added must be
+restarted or reload their MCP configuration. The direct registration is a
+safety net, not a replacement for the gateway's identity and tool policy.
+
 ## Secret and configuration inventory
 
 Names and locations only:
