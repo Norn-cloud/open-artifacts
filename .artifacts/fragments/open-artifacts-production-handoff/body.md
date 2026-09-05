@@ -112,6 +112,16 @@ from Infisical and does not write the value into an agent configuration file.
   contain `open-artifacts-soliman`; the launcher is
   `.codex/mcp/run-open-artifacts-soliman-mcp.sh` and uses
   `.codex/mcp/open-artifacts-infisical-bootstrap.py`.
+- Coder `norn-dev` `/root`: `.codex/config.toml` and `.claude.json` now contain
+  the same direct registration and launcher/bootstrap pattern. The prior files
+  were backed up under `.codex/backups/open-artifacts-20260905T161151Z/` before
+  the additive change.
+
+The `/root` canary initialized protocol `2025-06-18`, listed all four tools,
+resolved `soliman` to `KNTxNHCsw7AH` with two versions, and resolved `registry`
+to this handoff's `FB3xTZcpBXoS` with two versions. An earlier report of zero
+Soliman artifacts was a client-side parsing mistake: the response contains one
+singular `artifact` object plus a `versions` array, not an `artifacts` array.
 
 Clients already running before these registrations were added must be
 restarted or reload their MCP configuration. The direct registration is a
