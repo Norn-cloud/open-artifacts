@@ -95,7 +95,7 @@ boundary and forwards a dedicated Worker bearer token. The Worker returns 404
 until both secrets are configured with at least 32 characters, and returns 401
 for a missing or invalid bearer token.
 
-The MCP server exposes four bounded tools:
+The MCP server exposes five bounded tools:
 
 - `list_artifacts` searches bounded metadata by id, title, or description.
 - `get_artifact` reads metadata/version history and can return bounded plaintext
@@ -106,6 +106,10 @@ The MCP server exposes four bounded tools:
 - `publish_project_artifact` creates or versions that project's stable channel
   after the same domain validation and content-byte limit used by REST. It
   never returns write, channel, or global MCP tokens.
+- `publish_artifact` creates or versions an independent artifact for a fixed
+  project and lowercase-kebab slug (at most 80 characters). Its public result
+  includes the project and slug, never opaque channel identities or tokens;
+  publishing a named artifact does not replace that project's stable hub.
 
 Local development may set both secrets in `.dev.vars`; production operators
 should use Wrangler secrets (and their secret manager of record):
@@ -115,10 +119,11 @@ npx wrangler secret put MCP_TOKEN -c wrangler.norn.jsonc
 npx wrangler secret put MCP_CHANNEL_SECRET -c wrangler.norn.jsonc
 ```
 
-`MCP_CHANNEL_SECRET` is the registry root for the deterministic project
-channels, so treat it as non-rotating. Rotation requires an explicit artifact
-rebind/migration; removing or rolling back the secret is the break-glass way to
-hide the endpoint, but the derived channel hash has no REST-token preimage.
+`MCP_CHANNEL_SECRET` is the registry root for deterministic project and named
+artifact channels, so treat it as non-rotating. Rotation requires an explicit
+artifact rebind/migration; removing or rolling back the secret is the
+break-glass way to hide the endpoint, but derived channel hashes have no
+REST-token preimage.
 Authenticated MCP request bodies are streamed through a hard byte cap before
 SDK JSON parsing: `bodyCapFor(MAX_CONTENT_MIB) + 64 KiB` (about 6.1 MiB at the
 default 4 MiB artifact cap). The cap applies even when `Content-Length` is

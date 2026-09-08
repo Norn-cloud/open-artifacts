@@ -13,8 +13,8 @@ import {
   timingSafeEqual,
 } from "./tokens";
 
-/** The project namespace is deliberately closed: arbitrary channel names
- * would let a caller use the MCP surface as a second, unbounded publish API. */
+/** Projects remain allowlisted. Named artifacts are attributed to a project
+ * and use a validated slug rather than caller-supplied opaque channels. */
 export const PROJECT_SLUGS = [
   "norn",
   "soliman",
@@ -42,6 +42,17 @@ const MCP_REQUEST_OVERHEAD_BYTES = 64 * 1024;
 const MAX_FAVICON_LENGTH = 64;
 const TRUNCATION_MARKER = "…";
 const MCP_NAMESPACE = "open-artifacts:project-channel:v1:";
+const MCP_ARTIFACT_NAMESPACE = "open-artifacts:project-artifact-channel:v1:";
+const MAX_ARTIFACT_SLUG_LENGTH = 80;
+const ARTIFACT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ARTIFACT_SLUG_SCHEMA = z
+  .string()
+  .min(1)
+  .max(MAX_ARTIFACT_SLUG_LENGTH)
+  .regex(ARTIFACT_SLUG_PATTERN)
+  .describe(
+    "A lowercase kebab-case name (up to 80 characters) that keeps this project's artifact URL stable across versions.",
+  );
 
 /**
  * The request cap is measured in encoded bytes and enforced before the MCP
@@ -278,8 +289,9 @@ function isProjectSlug(value: string): value is ProjectSlug {
  * leaves the Worker; a deployment can therefore expose stable project URLs
  * without returning `ch_`/write tokens to agents.
  */
-export async function projectChannelHash(
-  project: ProjectSlug,
+async function mcpChannelHash(
+  namespace: string,
+  identity: string,
   secret: string,
 ): Promise<string> {
   const key = await crypto.subtle.importKey(
@@ -292,11 +304,32 @@ export async function projectChannelHash(
   const digest = await crypto.subtle.sign(
     "HMAC",
     key,
-    new TextEncoder().encode(`${MCP_NAMESPACE}${project}`),
+    new TextEncoder().encode(`${namespace}${identity}`),
   );
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export async function projectChannelHash(
+  project: ProjectSlug,
+  secret: string,
+): Promise<string> {
+  return mcpChannelHash(MCP_NAMESPACE, project, secret);
+}
+
+/**
+ * A deliberately separate HMAC namespace prevents named artifact publishing
+ * from ever adopting a legacy project's stable hub channel. The project is a
+ * closed enum and the slug is validated; callers cannot choose an opaque
+ * channel key.
+ */
+export async function projectArtifactChannelHash(
+  project: ProjectSlug,
+  slug: string,
+  secret: string,
+): Promise<string> {
+  return mcpChannelHash(MCP_ARTIFACT_NAMESPACE, `${project}:${slug}`, secret);
 }
 
 function channelBindingConflict(error: unknown): boolean {
@@ -314,9 +347,11 @@ function projectMetadata(
   record: ArtifactRecord | null,
   versions: VersionMeta[],
   versionCount: number,
+  slug?: string,
 ) {
   return {
     project,
+    ...(slug === undefined ? {} : { slug }),
     artifact: record === null ? null : publicArtifact(env, request, record),
     ...(record === null
       ? { versions: [], versionCount: 0, versionsTruncated: false }
@@ -328,6 +363,7 @@ async function readProject(
   env: Bindings,
   request: Request,
   project: ProjectSlug,
+  slug?: string,
 ): Promise<McpResult> {
   const secret = env.MCP_CHANNEL_SECRET;
   if (secret === undefined || secret === "") {
@@ -337,7 +373,9 @@ async function readProject(
   }
   const store = new D1R2Store(env.DB, env.CONTENT);
   const record = await store.findByChannel(
-    await projectChannelHash(project, secret),
+    slug === undefined
+      ? await projectChannelHash(project, secret)
+      : await projectArtifactChannelHash(project, slug, secret),
   );
   const [versions, versionCount] =
     record === null
@@ -347,29 +385,63 @@ async function readProject(
           store.countVersions(record.id),
         ]);
   return jsonResult(
-    projectMetadata(env, request, project, record, versions, versionCount),
+    projectMetadata(
+      env,
+      request,
+      project,
+      record,
+      versions,
+      versionCount,
+      slug,
+    ),
   );
 }
 
-async function publishProject(
+type PublishChannelArgs = {
+  project: ProjectSlug;
+  content: string;
+  format?: ArtifactFormat;
+  title?: string;
+  description?: string;
+  favicon?: string;
+  label?: string;
+};
+
+type PublishChannelTarget = {
+  project: ProjectSlug;
+  slug?: string;
+};
+
+function publishedChannelMetadata(
   env: Bindings,
   request: Request,
-  args: {
-    project: ProjectSlug;
-    content: string;
-    format?: ArtifactFormat;
-    title?: string;
-    description?: string;
-    favicon?: string;
-    label?: string;
-  },
-): Promise<McpResult> {
-  const channelSecret = env.MCP_CHANNEL_SECRET;
-  if (channelSecret === undefined || channelSecret === "") {
-    return errorResult("project channel registry is unavailable");
-  }
+  target: PublishChannelTarget,
+  record: ArtifactRecord,
+  version: number,
+  created: boolean,
+) {
+  return {
+    project: target.project,
+    ...(target.slug === undefined ? {} : { slug: target.slug }),
+    artifact: publicArtifact(env, request, record),
+    version,
+    created,
+  };
+}
 
-  const channelHash = await projectChannelHash(args.project, channelSecret);
+/**
+ * Shared fixed-channel publisher for the legacy project hubs and named
+ * project artifacts. It deliberately owns the existing validation, first
+ * create race recovery, and CAS versioning path so neither MCP route can
+ * bypass REST's domain or byte-limit rules.
+ */
+async function publishChannel(
+  env: Bindings,
+  request: Request,
+  args: PublishChannelArgs,
+  channelHash: string,
+  target: PublishChannelTarget,
+): Promise<McpResult> {
   const store = new D1R2Store(env.DB, env.CONTENT);
   let record = await store.findByChannel(channelHash);
 
@@ -441,12 +513,9 @@ async function publishProject(
     }
 
     if (createdByRequest) {
-      return jsonResult({
-        project: args.project,
-        artifact: publicArtifact(env, request, record),
-        version: 1,
-        created: true,
-      });
+      return jsonResult(
+        publishedChannelMetadata(env, request, target, record, 1, true),
+      );
     }
   }
 
@@ -470,12 +539,16 @@ async function publishProject(
     version = await store.update(current, update);
     if (typeof version === "number") {
       const updated = await store.get(current.id);
-      return jsonResult({
-        project: args.project,
-        artifact: publicArtifact(env, request, updated ?? current),
-        version,
-        created: false,
-      });
+      return jsonResult(
+        publishedChannelMetadata(
+          env,
+          request,
+          target,
+          updated ?? current,
+          version,
+          false,
+        ),
+      );
     }
     const fresh = await store.get(current.id);
     if (fresh === null) return errorResult("project artifact disappeared");
@@ -483,6 +556,42 @@ async function publishProject(
   }
   return errorResult(
     `409: version conflict at ${"currentVersion" in version ? version.currentVersion : current.currentVersion}`,
+  );
+}
+
+async function publishProject(
+  env: Bindings,
+  request: Request,
+  args: PublishChannelArgs,
+): Promise<McpResult> {
+  const channelSecret = env.MCP_CHANNEL_SECRET;
+  if (channelSecret === undefined || channelSecret === "") {
+    return errorResult("project channel registry is unavailable");
+  }
+  return publishChannel(
+    env,
+    request,
+    args,
+    await projectChannelHash(args.project, channelSecret),
+    { project: args.project },
+  );
+}
+
+async function publishArtifact(
+  env: Bindings,
+  request: Request,
+  args: PublishChannelArgs & { slug: string },
+): Promise<McpResult> {
+  const channelSecret = env.MCP_CHANNEL_SECRET;
+  if (channelSecret === undefined || channelSecret === "") {
+    return errorResult("project channel registry is unavailable");
+  }
+  return publishChannel(
+    env,
+    request,
+    args,
+    await projectArtifactChannelHash(args.project, args.slug, channelSecret),
+    { project: args.project, slug: args.slug },
   );
 }
 
@@ -622,16 +731,19 @@ function createServer(env: Bindings, request: Request): McpServer {
     {
       title: "List project artifacts",
       description:
-        "Resolve one of the fixed project channels and return its artifact metadata and versions.",
+        "Resolve a project's shared hub, or a named artifact when slug is supplied, and return public metadata and versions.",
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
       },
-      inputSchema: z.object({ project: PROJECT_SLUG_SCHEMA }),
+      inputSchema: z.object({
+        project: PROJECT_SLUG_SCHEMA,
+        slug: ARTIFACT_SLUG_SCHEMA.optional(),
+      }),
     },
-    async ({ project }) => readProject(env, request, project),
+    async ({ project, slug }) => readProject(env, request, project, slug),
   );
 
   server.registerTool(
@@ -639,24 +751,54 @@ function createServer(env: Bindings, request: Request): McpServer {
     {
       title: "Publish project artifact",
       description:
-        "Create or version the stable artifact for a fixed project. Publishing is plaintext and domain-validated.",
+        "Create or version this project's single shared hub. For independent demos use publish_artifact instead. Content is publicly readable with no password protection; never include secrets.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
         idempotentHint: false,
         openWorldHint: false,
       },
-      inputSchema: z.object({
-        project: PROJECT_SLUG_SCHEMA,
-        content: z.string().min(1).max(maxContentBytes),
-        format: z.enum(["html", "markdown", "react"]).optional(),
-        title: z.string().min(1).max(200).optional(),
-        description: z.string().max(1000).optional(),
-        favicon: z.string().min(1).max(MAX_FAVICON_LENGTH).optional(),
-        label: z.string().max(60).optional(),
-      }),
+      inputSchema: z
+        .object({
+          project: PROJECT_SLUG_SCHEMA,
+          content: z.string().min(1).max(maxContentBytes),
+          format: z.enum(["html", "markdown", "react"]).optional(),
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
+          favicon: z.string().min(1).max(MAX_FAVICON_LENGTH).optional(),
+          label: z.string().max(60).optional(),
+        })
+        .strict(),
     },
     async (args) => publishProject(env, request, args),
+  );
+
+  server.registerTool(
+    "publish_artifact",
+    {
+      title: "Publish named artifact",
+      description:
+        "Each project and slug gets its own stable public URL; repeated publishes add versions and leave the project's hub untouched. Content is publicly readable with no password protection; never include secrets.",
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      inputSchema: z
+        .object({
+          project: PROJECT_SLUG_SCHEMA,
+          slug: ARTIFACT_SLUG_SCHEMA,
+          content: z.string().min(1).max(maxContentBytes),
+          format: z.enum(["html", "markdown", "react"]).optional(),
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
+          favicon: z.string().min(1).max(MAX_FAVICON_LENGTH).optional(),
+          label: z.string().max(60).optional(),
+        })
+        .strict(),
+    },
+    async (args) => publishArtifact(env, request, args),
   );
 
   return server;

@@ -6,7 +6,11 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Bindings } from "../../src/api";
 import app from "../../src/index";
-import { mcpRequestBodyLimit } from "../../src/mcp";
+import {
+  mcpRequestBodyLimit,
+  projectArtifactChannelHash,
+  projectChannelHash,
+} from "../../src/mcp";
 
 const BASE = "http://artifacts.test";
 const MCP_TOKEN = "mcp-test-token-0123456789abcdef0";
@@ -119,6 +123,17 @@ function textResult(
 }
 
 describe("authenticated stateless MCP endpoint", () => {
+  it("keeps the legacy project channel identity stable and domain-separates artifact channels", async () => {
+    await expect(projectChannelHash("norn", MCP_CHANNEL_SECRET)).resolves.toBe(
+      "e77a25c54bd35acfd8112f19ec09d700d30d78d9eb3b8d9480c167ff66b33f4b",
+    );
+    await expect(
+      projectArtifactChannelHash("norn", "norn", MCP_CHANNEL_SECRET),
+    ).resolves.not.toBe(
+      "e77a25c54bd35acfd8112f19ec09d700d30d78d9eb3b8d9480c167ff66b33f4b",
+    );
+  });
+
   it("is hidden when either MCP secret is absent or too short", async () => {
     const noToken = await fetchMcp(
       { jsonrpc: "2.0", id: 1, method: "ping" },
@@ -227,6 +242,7 @@ describe("authenticated stateless MCP endpoint", () => {
       "get_artifact",
       "list_project_artifacts",
       "publish_project_artifact",
+      "publish_artifact",
     ]);
     expect(JSON.stringify(tools.value)).not.toMatch(
       /(?:wt_|ch_|tokenHash|channelHash)/,
@@ -259,6 +275,26 @@ describe("authenticated stateless MCP endpoint", () => {
       idempotentHint: false,
       openWorldHint: false,
     });
+    expect(annotations.get("publish_artifact")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    const artifactPublisher = listed.tools.find(
+      (tool) => tool.name === "publish_artifact",
+    );
+    expect(artifactPublisher?.inputSchema).toMatchObject({
+      properties: expect.objectContaining({
+        project: expect.any(Object),
+        slug: expect.objectContaining({ maxLength: 80 }),
+        content: expect.any(Object),
+      }),
+      required: expect.arrayContaining(["project", "slug", "content"]),
+    });
+    expect(JSON.stringify(artifactPublisher?.inputSchema)).not.toMatch(
+      /(?:channel|token|artifactId|writeToken)/i,
+    );
   });
 
   it("exposes the same tool annotations on modern MCP 2026-07-28 tools/list", async () => {
@@ -311,6 +347,12 @@ describe("authenticated stateless MCP endpoint", () => {
       openWorldHint: false,
     });
     expect(annotations.get("publish_project_artifact")).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    });
+    expect(annotations.get("publish_artifact")).toEqual({
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
@@ -553,6 +595,259 @@ describe("authenticated stateless MCP endpoint", () => {
     expect(JSON.stringify(project.value)).not.toMatch(
       /(?:wt_|ch_|channelHash)/,
     );
+  });
+
+  it("publishes independently addressable project artifacts without changing the project hub", async () => {
+    const publish = async (project: string, slug: string, content: string) => {
+      const response = await fetchMcp({
+        jsonrpc: "2.0",
+        id: 30,
+        method: "tools/call",
+        params: {
+          name: "publish_artifact",
+          arguments: {
+            project,
+            slug,
+            content,
+            favicon: "🧪",
+            format: "markdown",
+            title: `${project} ${slug}`,
+          },
+        },
+      });
+      expect(response.response.status).toBe(200);
+      return textResult(response.value);
+    };
+
+    const hub = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 31,
+      method: "tools/call",
+      params: {
+        name: "publish_project_artifact",
+        arguments: {
+          project: "atlas",
+          content: "# Atlas hub",
+          favicon: "🧭",
+          format: "markdown",
+          title: "Atlas hub",
+        },
+      },
+    });
+    const hubBody = textResult(hub.value);
+    const first = await publish(
+      "atlas",
+      "release-notes",
+      "# Atlas release one",
+    );
+    const second = await publish(
+      "atlas",
+      "migration-plan",
+      "# Atlas migration",
+    );
+    const namedAsProject = await publish(
+      "atlas",
+      "atlas",
+      "# Named Atlas demo",
+    );
+    const sameSlug = await publish(
+      "atlas",
+      "release-notes",
+      "# Atlas release two",
+    );
+    const otherProject = await publish(
+      "mesh-vms",
+      "release-notes",
+      "# Mesh release one",
+    );
+
+    expect(first).toMatchObject({
+      project: "atlas",
+      slug: "release-notes",
+      created: true,
+      version: 1,
+    });
+    expect(second).toMatchObject({
+      project: "atlas",
+      slug: "migration-plan",
+      created: true,
+      version: 1,
+    });
+    expect(sameSlug).toMatchObject({
+      project: "atlas",
+      slug: "release-notes",
+      created: false,
+      version: 2,
+    });
+    expect(otherProject).toMatchObject({
+      project: "mesh-vms",
+      slug: "release-notes",
+      created: true,
+      version: 1,
+    });
+    expect((first.artifact as { id: string }).id).toBe(
+      (sameSlug.artifact as { id: string }).id,
+    );
+    expect((first.artifact as { id: string }).id).not.toBe(
+      (second.artifact as { id: string }).id,
+    );
+    expect((first.artifact as { id: string }).id).not.toBe(
+      (otherProject.artifact as { id: string }).id,
+    );
+    expect((hubBody.artifact as { id: string }).id).not.toBe(
+      (first.artifact as { id: string }).id,
+    );
+    expect((hubBody.artifact as { id: string }).id).not.toBe(
+      (namedAsProject.artifact as { id: string }).id,
+    );
+
+    const namedRead = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 32,
+      method: "tools/call",
+      params: {
+        name: "list_project_artifacts",
+        arguments: { project: "atlas", slug: "release-notes" },
+      },
+    });
+    const namedBody = textResult(namedRead.value);
+    expect(namedBody).toMatchObject({
+      project: "atlas",
+      slug: "release-notes",
+    });
+    expect((namedBody.artifact as { id: string }).id).toBe(
+      (first.artifact as { id: string }).id,
+    );
+
+    const hubRead = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 33,
+      method: "tools/call",
+      params: {
+        name: "list_project_artifacts",
+        arguments: { project: "atlas" },
+      },
+    });
+    const unchangedHub = textResult(hubRead.value).artifact as {
+      id: string;
+      title: string;
+      currentVersion: number;
+    };
+    expect(unchangedHub).toMatchObject({
+      id: (hubBody.artifact as { id: string }).id,
+      title: "Atlas hub",
+      currentVersion: 1,
+    });
+    const hubRaw = await app.fetch(
+      new Request(`${BASE}/api/artifacts/${unchangedHub.id}/raw`),
+      MCP_ENV,
+      createExecutionContext(),
+    );
+    expect(await hubRaw.text()).toBe("# Atlas hub");
+    expect(
+      JSON.stringify([first, second, namedAsProject, sameSlug, otherProject]),
+    ).not.toMatch(/(?:wt_|ch_|MCP_CHANNEL_SECRET|channelHash|tokenHash)/);
+  });
+
+  it("rejects invalid artifact publisher slugs", async () => {
+    for (const slug of [
+      "",
+      "Release-notes",
+      "release/notes",
+      "release--notes",
+      "a".repeat(81),
+    ]) {
+      const result = await fetchMcp({
+        jsonrpc: "2.0",
+        id: 33,
+        method: "tools/call",
+        params: {
+          name: "publish_artifact",
+          arguments: {
+            project: "norn",
+            slug,
+            content: "# Invalid slug",
+            favicon: "⚠️",
+            format: "markdown",
+            title: "Invalid slug",
+          },
+        },
+      });
+      expect(result.value?.result).toEqual(
+        expect.objectContaining({ isError: true }),
+      );
+    }
+
+    const oversized = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 35,
+      method: "tools/call",
+      params: {
+        name: "publish_artifact",
+        arguments: {
+          project: "norn",
+          slug: "oversized-demo",
+          content: "x".repeat(4 * 1024 * 1024 + 1),
+          favicon: "⚠️",
+          format: "markdown",
+          title: "Oversized artifact",
+        },
+      },
+    });
+    expect(oversized.value?.result).toEqual(
+      expect.objectContaining({ isError: true }),
+    );
+
+    const unsupportedInput = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 36,
+      method: "tools/call",
+      params: {
+        name: "publish_artifact",
+        arguments: {
+          project: "norn",
+          slug: "no-external-id",
+          content: "# Strict schema",
+          favicon: "⚠️",
+          format: "markdown",
+          title: "Strict schema",
+          artifactId: "caller-supplied-id",
+        },
+      },
+    });
+    expect(unsupportedInput.value?.result).toEqual(
+      expect.objectContaining({ isError: true }),
+    );
+
+    const legacyWithSlug = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 37,
+      method: "tools/call",
+      params: {
+        name: "publish_project_artifact",
+        arguments: {
+          project: "notifycore",
+          slug: "must-not-replace-hub",
+          content: "# Strict legacy schema",
+          favicon: "⚠️",
+          format: "markdown",
+          title: "Strict legacy schema",
+        },
+      },
+    });
+    expect(legacyWithSlug.value?.result).toEqual(
+      expect.objectContaining({ isError: true }),
+    );
+    const untouchedHub = await fetchMcp({
+      jsonrpc: "2.0",
+      id: 38,
+      method: "tools/call",
+      params: {
+        name: "list_project_artifacts",
+        arguments: { project: "notifycore" },
+      },
+    });
+    expect(textResult(untouchedHub.value).artifact).toBeNull();
   });
 
   it("preserves an existing project format when a republish omits format", async () => {
