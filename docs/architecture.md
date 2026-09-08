@@ -44,14 +44,21 @@ key for the fixed project namespace) are present and at least 32 characters
 long. Authentication hashes the presented and configured bearer values before
 a timing-safe comparison.
 
-The four tools expose bounded metadata/content reads and a closed set of
+The five tools expose bounded metadata/content reads and a closed set of
 project channels: `norn`, `soliman`, `zen`, `core-kit`, `atlas`, `mesh-vms`,
-`mailcore`, `notifycore`, and `registry`. A project's channel hash is
+`mailcore`, `notifycore`, and `registry`. A project's legacy hub channel hash is
 `HMAC-SHA-256(MCP_CHANNEL_SECRET, "open-artifacts:project-channel:v1:" + slug)`;
-the hash, write token, and channel token are never returned to the MCP caller.
-Project publishes reuse `validateCreate`, the configured content-byte cap, and
-the existing D1/R2 compare-and-swap update path, so the MCP surface cannot
-bypass the REST domain limits or mint an unbounded arbitrary-channel API.
+named artifact hashes use the distinct
+`"open-artifacts:project-artifact-channel:v1:" + project + ":" + slug`
+namespace. The `publish_artifact` tool accepts only an allowed project plus a
+lowercase-kebab slug of at most 80 characters, so it cannot adopt or overwrite
+a project's legacy hub. The hash, write token, and channel token are never
+returned to the MCP caller. Both publish tools reuse `validateCreate`, the
+configured content-byte cap, and the existing D1/R2 compare-and-swap update
+path. Projects remain allowlisted, while named identities are constrained to a
+validated project/slug pair; callers cannot provide artifact IDs, raw channel
+hashes, or tokens. Named artifacts version on repeated project/slug calls;
+they are not idempotent writes.
 Authenticated request bodies are bounded by a streamed pre-parser cap of
 `bodyCapFor(MAX_CONTENT_MIB) + 64 KiB`; the cap is enforced without trusting
 `Content-Length` and rejects overflow with a non-cacheable 413. Generic list
